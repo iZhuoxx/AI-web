@@ -1,68 +1,77 @@
+# api/app.py
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
-import api
-from model import Message, MessageTurbo
+from .routes import responses as responses_router
 
-app = FastAPI()
+SERVE_SPA = os.getenv("SERVE_SPA", "false").lower() == "true"  # dev=false, prod=true
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DIST_DIR = os.path.join(BASE_DIR, 'dist')
-ASSETS_DIR = os.path.join(DIST_DIR, 'assets')
-app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
-templates = Jinja2Templates(directory=DIST_DIR)
+app = FastAPI(
+    title="AI Web API",
+    docs_url="/docs",
+    redoc_url=None,
+)
 
-
+# ---- Error -> JSON ----
+@app.middleware("http")
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as exc:
-        return JSONResponse(content={"code": 500, "error": {"message": f"{type(exc)} {exc}"}})
+        return JSONResponse(
+            status_code=500,
+            content={"code": 500, "error": {"message": f"{type(exc).__name__}: {exc}"}},
+        )
 
+# ---- No-cache for API & HTML (good for dev and streaming) ----
+@app.middleware("http")
+async def no_cache_middleware(request: Request, call_next):
+    resp: Response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/api/"):
+        resp.headers.setdefault("Cache-Control", "no-store")
+    if SERVE_SPA and (path == "/" or path.endswith(".html")):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
 
-app.middleware('http')(catch_exceptions_middleware)
-
+# ---- CORS (allow Vite dev origin) ----
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        # add more if needed
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ---- APIs under /api (your router has /responses inside) ----
+app.include_router(responses_router.router, prefix="/api")
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return templates.TemplateResponse("index.html", {"request": {}})
+# ---- Serve SPA only in production (optional) ----
+if SERVE_SPA:
+    FRONTEND_DIST = (Path(__file__).resolve().parent.parent / "web" / "dist").resolve()
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="spa")
+else:
+    # In dev, do NOT serve the SPA. Provide a tiny root for sanity.
+    @app.get("/")
+    async def root():
+        return {"status": "ok", "message": "API only (dev). Frontend runs on Vite :5173."}
 
+# ---- Health ----
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
-@app.post("/completions")
-async def completions(request: Request, message: Message):
-    api_key = request.headers.get('api_key')
-    res = await api.completions(message, api_key=api_key)
-    return res
-
-
-@app.post("/completions_turbo")
-async def completions(request: Request, message: MessageTurbo):
-    api_key = request.headers.get('api_key')
-    res = await api.completions_turbo(message, api_key=api_key)
-    return res
-
-
-@app.get("/credit_summary")
-async def credit_summary(request: Request):
-    api_key = request.headers.get('api_key')
-    res = await api.credit_summary(api_key=api_key)
-    return res
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run("app:app", host="0.0.0.0", port=8000)
+    uvicorn.run("api.app:app", host="0.0.0.0", port=8000, reload=True)
