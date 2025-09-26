@@ -33,7 +33,7 @@ pnpm run dev
 
 ```bash
 # 启动后端
-python3 -m uvicorn api.app:app --reload --host 0.0.0.0 --port 800
+python3 -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 

@@ -3,7 +3,7 @@ import useSetting from '@/composables/setting'
 import { SettingOutlined } from '@ant-design/icons-vue'
 
 const setting = useSetting()
-const models = ref(['gpt-4'])
+const models = ref(['gpt-4.1', 'gpt-4o-mini'])
 
 const props = defineProps<{
   visible: boolean

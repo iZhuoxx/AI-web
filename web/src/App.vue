@@ -7,6 +7,31 @@ import SettingModal from './components/setting.vue'
 import useSetting from '@/composables/setting'
 import useMessages from '@/composables/messages'
 import { useResponsesStream } from '@/composables/useResponsesStream'
+import { ref, onMounted, nextTick } from 'vue'
+
+
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+
+const autoResize = () => {
+  const el = textareaRef.value
+  if (!el) return
+  const MAX = 240 // 你当前设置的最大高度（px），可按需调整
+
+  // 先归零再测量，避免只增不减
+  el.style.height = '0px'
+  const h = Math.min(el.scrollHeight, MAX)
+  el.style.height = h + 'px'
+
+  // 高度未到上限 -> 隐藏滚动条；到上限 -> 显示滚动条
+  if (el.scrollHeight > MAX) {
+    el.style.overflowY = 'auto'
+  } else {
+    el.style.overflowY = 'hidden'
+  }
+}
+
+onMounted(() => nextTick(autoResize))
 
 const setting = useSetting()
 const messages = useMessages()
@@ -50,25 +75,68 @@ const sendMessage = async (event: { preventDefault: () => void }) => {
 
   state.loadding = true
 
-  // 1) push user message
+  // 把用户消息入列（以便后面取历史）
   messages.addMessage({ username: 'user', msg: content, type: 1 })
 
-  // 2) prompt
-  const question = setting.value.continuously
-    ? buildMessage()
-    : `User:\n${content}\n\nAI:\n`
+  // 读取设置
+  const s = setting.value
+  const useHistory      = !!s.continuously
+  const selectedModel   = s.model || 'gpt-4o-mini'
+  const systemPrompt    = (s as any).systemPrompt || ''
+  const temperature     = typeof (s as any).temperature === 'number' ? (s as any).temperature : 0.7
+  const maxOutputTokens = typeof (s as any).maxTokens === 'number' ? (s as any).maxTokens : undefined
 
-  // 3) clear input + push assistant placeholder
+  // 组装 inputs（Responses API）
+  const inputs: any[] = []
+
+  if (systemPrompt) {
+    // system 用 input_text
+    inputs.push({
+      role: 'system',
+      content: [{ type: 'input_text', text: systemPrompt }],
+    })
+  }
+
+  if (useHistory) {
+    const last = messages.getLastMessages(10)
+    for (const m of last) {
+      const role = m.type === 1 ? 'user' : 'assistant'
+      const text = (m.msg ?? '').trim()
+      if (!text) continue // 过滤占位的空 assistant
+
+      inputs.push({
+        role,
+        content: [{
+          //用户/系统用 input_text；助手历史用 output_text
+          type: role === 'assistant' ? 'output_text' : 'input_text',
+          text,
+        }],
+      })
+    }
+  } else {
+    inputs.push({
+      role: 'user',
+      content: [{ type: 'input_text', text: content }],
+    })
+  }
+
+  // 清空输入并收缩文本域，然后占位一条 assistant
   state.message = ''
+  await nextTick()
+  autoResize()
   messages.addMessage({ username: 'chatGPT', msg: '', type: 0 })
 
-  // 4) stream
+  // 开始流式
   controller?.abort()
   controller = new AbortController()
 
-  const body = {
-    model: 'gpt-4o-mini',
-    input: [{ role: 'user', content: [{ type: 'input_text', text: question }] }]
+  const body: Record<string, any> = {
+    model: String(selectedModel),
+    input: inputs,
+    temperature: Number(temperature),
+  }
+  if (typeof maxOutputTokens === 'number') {
+    body.max_output_tokens = maxOutputTokens
   }
 
   try {
@@ -90,6 +158,7 @@ const sendMessage = async (event: { preventDefault: () => void }) => {
   }
 }
 
+
 function stopStreaming() {
   controller?.abort()
   controller = null
@@ -103,7 +172,7 @@ const clearMessages = () => {
 
 <template>
   <div id="layout">
-    <!-- 顶部栏（改为全宽靠左，不再居中） -->
+    <!-- 顶部栏 -->
     <header id="header" class="bg-white/80 backdrop-blur text-gray-900 h-12 flex items-center shadow-sm">
       <div class="header-container">
         <div class="header-inner">
@@ -113,9 +182,9 @@ const clearMessages = () => {
             <a-tooltip>
               <template #title>Clear local chat history</template>
               <a-popconfirm
-                title="Are you sure to clear all local messages?"
-                ok-text="Yes"
-                cancel-text="Cancel"
+                title="你确定要清空消息记录吗?"
+                ok-text="是的"
+                cancel-text="取消"
                 @confirm="clearMessages"
               >
                 <ClearOutlined class="icon" />
@@ -154,21 +223,30 @@ const clearMessages = () => {
     </div>
 
     <!-- 底部输入区（新增 composer-inner，使输入框更窄更精致） -->
-    <footer id="footer">
-      <div class="container">
-        <div class="composer">
-          <div class="composer-inner">
-            <a-textarea
-              v-model:value="state.message"
-              :auto-size="{ minRows: 3, maxRows: 5 }"
-              placeholder="Type your message..."
-              @pressEnter="sendMessage($event)"
-              class="composer-input"
-            />
-            <div class="composer-actions">
-              <a-button shape="round" @click="stopStreaming" :disabled="!state.loadding">Stop</a-button>
-              <a-button shape="round" type="primary" @click="sendMessage($event)">Send</a-button>
-            </div>
+    <footer id="footer" class="chat-footer">
+      <div class="composer">
+        <div class="composer-inner">
+          <textarea
+            ref="textareaRef"
+            v-model="state.message"
+            placeholder="发消息..."
+            @input="autoResize"
+            @keydown.enter.exact.prevent="sendMessage($event)"
+            @keydown.enter.shift.exact.stop
+            class="composer-input"
+            rows="1"
+          ></textarea>
+
+          <div class="composer-actions">
+            <button
+              class="action-btn stop"
+              @click="stopStreaming"
+              :disabled="!state.loadding"
+            >停止</button>
+            <button
+              class="action-btn send"
+              @click="sendMessage($event)"
+            >发送</button>
           </div>
         </div>
       </div>
@@ -238,29 +316,32 @@ const clearMessages = () => {
   transform: translateY(-1px);
 }
 
-/* 聊天区（保持中列居中） */
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.meta {
-  text-align: center;
-  color: #9ca3af; /* gray-400 */
-  font-size: 12px;
-  margin: 8px 0 12px;
-}
-.meta-line { margin: 2px 0; }
+.container { max-width: 900px; } 
 
-/* 让 Message 组件在中间列里左右对齐，而不是全屏贴边 */
-.replay {
-  align-self: flex-start;   /* AI 消息靠左 */
-  max-width: 90%;
+
+/* 统一居中容器：主列 */
+.container{
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+  padding-inline: 16px;     /* 两侧基础留白 */
+  box-sizing: border-box;
 }
-.send {
-  align-self: flex-end;     /* 用户消息靠右 */
-  max-width: 90%;
+
+/* 给聊天列一个“左侧内边距”，看起来整体更靠右 */
+.chat-container{
+  padding-left: var(--chat-offset);
 }
+
+
+#header .header-container{ padding-inline: 16px; }
+#footer .composer{ padding-inline: 16px; }
+.composer-inner{ max-width: 640px; margin-inline: auto; }
+
+html, body, #layout-body{ scrollbar-gutter: stable both-edges; }
+
+.message-row{ padding-inline: 8px; } 
+
 
 /* 底部输入区 */
 #footer {

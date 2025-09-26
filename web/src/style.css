@@ -11,6 +11,7 @@
   --code-bg: #f6f8fa;
   --blockquote-fg: #475569;
   --border-muted: #e5e7eb;
+  --chat-offset: 72px;
 }
 
 html, body, #app {
@@ -104,3 +105,52 @@ body {
   place-items: center;
 }
 
+.chat-footer { /* 也可继续保留你对 #footer 的样式 */
+border-top: 1px solid #e5e7eb;
+background: #fff;
+}
+
+
+.composer { position: relative; padding: 12px 0; }
+
+
+.composer-inner {
+max-width: 640px; /* 调整输入区宽度，视觉更像 ChatGPT */
+margin: 0 auto;
+display: flex;
+align-items: flex-end;
+gap: 10px;
+}
+
+
+.composer-input {
+flex: 1 1 auto;
+background: #fff;
+border: 1px solid #e5e7eb;
+border-radius: 16px;
+padding: 10px 14px;
+font-size: 14px;
+line-height: 20px;
+resize: none;
+outline: none;
+box-shadow: 0 2px 8px rgba(0,0,0,.03);
+transition: border-color .15s ease, box-shadow .15s ease;
+overflow: hidden; /* 隐藏滚动条，由 autoResize 控制高度 */
+}
+.composer-input:focus {
+border-color: #93c5fd; /* blue-300 */
+box-shadow: 0 0 0 3px rgba(147,197,253,.35);
+}
+
+
+.composer-actions { display: flex; gap: 8px; }
+
+
+.action-btn { border: none; border-radius: 10px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+.action-btn.stop { background: #f3f4f6; color: #374151; }
+.action-btn.stop:disabled { opacity: .5; cursor: not-allowed; }
+.action-btn.send { background: #159ae7; color: #fff; }
+.action-btn.send:hover { filter: brightness(0.95); }
+
+.replay { align-self: flex-start; max-width: 96%; }
+.send   { align-self: flex-end;   max-width: 96%; }
