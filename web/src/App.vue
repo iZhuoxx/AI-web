@@ -1,186 +1,128 @@
+<!-- src/App.vue -->
 <script setup lang="ts">
 import dayjs from 'dayjs'
-import { ClearOutlined, LoadingOutlined, SettingOutlined } from '@ant-design/icons-vue'
+import {
+  ClearOutlined, LoadingOutlined, SettingOutlined,
+  PictureOutlined, CloseOutlined, PaperClipOutlined
+} from '@ant-design/icons-vue'
+
 import Message from './components/message.vue'
 import SettingModal from './components/setting.vue'
 
-import useSetting from '@/composables/setting'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import useMessages from '@/composables/messages'
-import { useResponsesStream } from '@/composables/useResponsesStream'
-import { ref, onMounted, nextTick } from 'vue'
+import { useChat } from '@/composables/useChat'
+import { useUploads } from '@/composables/useUploads'
 
-
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-
-
-const autoResize = () => {
-  const el = textareaRef.value
-  if (!el) return
-  const MAX = 240 // 你当前设置的最大高度（px），可按需调整
-
-  // 先归零再测量，避免只增不减
-  el.style.height = '0px'
-  const h = Math.min(el.scrollHeight, MAX)
-  el.style.height = h + 'px'
-
-  // 高度未到上限 -> 隐藏滚动条；到上限 -> 显示滚动条
-  if (el.scrollHeight > MAX) {
-    el.style.overflowY = 'auto'
-  } else {
-    el.style.overflowY = 'hidden'
-  }
-}
-
-onMounted(() => nextTick(autoResize))
-
-const setting = useSetting()
 const messages = useMessages()
+const { loadding, send, stop } = useChat()
 
-const state = reactive({
-  message: '',
-  loadding: false,
-  visible: false,
-})
+const {
+  imageFiles, imagePreviews, genericFiles, dragOver,
+  onPickImages, addGenericFiles, removeGenericFile,
+  onPaste, onDragOver, onDragLeave, onDrop,
+  ensureUploads, fileToDataURL, removeImage, resetAll,
+  filesForChat,
+  addImages,                 // ✅ 全局拖拽会用到
+} = useUploads()
 
+const state = reactive({ message: '', visible: false })
 const createdAt = dayjs().format('YYYY-MM-DD HH:mm:ss')
 
-// Abort controller to cancel streaming
-let controller: AbortController | null = null
-
-// Build conversation context
-const buildMessage = () => {
-  const _messages: string[] = []
-  const lastMessages = messages.getLastMessages(10)
-  for (let i = 0; i < lastMessages.length; i++) {
-    const element = lastMessages[i]
-    _messages.push(`${element.type === 0 ? 'AI' : 'User'}:\n${element.msg}`)
-  }
-  return _messages.join('\n\n') + '\nAI:\n'
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const MAX_TEXTAREA_H = 240
+const autoResize = () => {
+  const el = textareaRef.value; if (!el) return
+  el.style.height = '0px'
+  const h = Math.min(el.scrollHeight, MAX_TEXTAREA_H)
+  el.style.height = h + 'px'
+  el.style.overflowY = el.scrollHeight > MAX_TEXTAREA_H ? 'auto' : 'hidden'
 }
 
-function parseTextDelta(line: string): string | null {
-  try {
-    const evt = JSON.parse(line)
-    if (evt?.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
-      return evt.delta
-    }
-  } catch {}
-  return null
+/** 仅当拖拽内容包含文件时返回 true */
+function isFileDrag(e: DragEvent) {
+  const types = e.dataTransfer?.types
+  return !!types && Array.from(types).includes('Files')
 }
 
-const sendMessage = async (event: { preventDefault: () => void }) => {
-  event.preventDefault()
-  const content = state.message.trim()
-  if (!content) return
-
-  state.loadding = true
-
-  // 把用户消息入列（以便后面取历史）
-  messages.addMessage({ username: 'user', msg: content, type: 1 })
-
-  // 读取设置
-  const s = setting.value
-  const useHistory      = !!s.continuously
-  const selectedModel   = s.model || 'gpt-4o-mini'
-  const systemPrompt    = (s as any).systemPrompt || ''
-  const temperature     = typeof (s as any).temperature === 'number' ? (s as any).temperature : 0.7
-  const maxOutputTokens = typeof (s as any).maxTokens === 'number' ? (s as any).maxTokens : undefined
-
-  // 组装 inputs（Responses API）
-  const inputs: any[] = []
-
-  if (systemPrompt) {
-    // system 用 input_text
-    inputs.push({
-      role: 'system',
-      content: [{ type: 'input_text', text: systemPrompt }],
-    })
-  }
-
-  if (useHistory) {
-    const last = messages.getLastMessages(10)
-    for (const m of last) {
-      const role = m.type === 1 ? 'user' : 'assistant'
-      const text = (m.msg ?? '').trim()
-      if (!text) continue // 过滤占位的空 assistant
-
-      inputs.push({
-        role,
-        content: [{
-          //用户/系统用 input_text；助手历史用 output_text
-          type: role === 'assistant' ? 'output_text' : 'input_text',
-          text,
-        }],
-      })
-    }
-  } else {
-    inputs.push({
-      role: 'user',
-      content: [{ type: 'input_text', text: content }],
-    })
-  }
-
-  // 清空输入并收缩文本域，然后占位一条 assistant
-  state.message = ''
-  await nextTick()
-  autoResize()
-  messages.addMessage({ username: 'chatGPT', msg: '', type: 0 })
-
-  // 开始流式
-  controller?.abort()
-  controller = new AbortController()
-
-  const body: Record<string, any> = {
-    model: String(selectedModel),
-    input: inputs,
-    temperature: Number(temperature),
-  }
-  if (typeof maxOutputTokens === 'number') {
-    body.max_output_tokens = maxOutputTokens
-  }
-
-  try {
-    for await (const line of useResponsesStream(body, { signal: controller.signal })) {
-      const delta = parseTextDelta(line)
-      if (!delta) continue
-      const list = messages.messages.value
-      if (!list.length) break
-      list[list.length - 1].msg += delta
-    }
-  } catch (e: any) {
-    if (e?.name !== 'AbortError') {
-      const list = messages.messages.value
-      if (list.length) list[list.length - 1].msg += `\n[error] ${e?.message ?? e}`
-    }
-  } finally {
-    controller = null
-    state.loadding = false
-  }
+/** 这些函数要有稳定引用，方便 removeEventListener */
+function globalDragOver(e: DragEvent) {
+  if (!isFileDrag(e)) return
+  e.preventDefault()
 }
 
+function globalDrop(e: DragEvent) {
+  if (!isFileDrag(e)) return
+  e.preventDefault()
 
-function stopStreaming() {
-  controller?.abort()
-  controller = null
-  state.loadding = false
+  // 如果在输入区域(composer)里放下，就让本地 @drop 处理，避免重复
+  const target = e.target as HTMLElement | null
+  if (target && target.closest?.('.composer')) return
+
+  const files = Array.from(e.dataTransfer?.files || [])
+  const imgs = files.filter(f => /^image\//.test(f.type))
+  const others = files.filter(f => !/^image\//.test(f.type))
+  if (imgs.length) addImages(imgs)
+  if (others.length) addGenericFiles(others)
 }
 
-const clearMessages = () => {
+onMounted(() => {
+  nextTick(autoResize)
+  window.addEventListener('paste', onPaste)
+
+  // ✅ 全屏拖拽，仅对“文件”生效；具名函数，便于移除
+  window.addEventListener('dragover', globalDragOver)
+  window.addEventListener('drop', globalDrop)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('paste', onPaste)
+  window.removeEventListener('dragover', globalDragOver)
+  window.removeEventListener('drop', globalDrop)
+})
+
+function clearMessages() {
   messages.clearMessages()
+}
+
+async function onSend(ev: { preventDefault: () => void }) {
+  ev.preventDefault()
+  const text = state.message.trim()
+  if (!text && !imageFiles.value.length && !genericFiles.value.length) return
+
+  // 1) 先确保文本文件上传，拿到提取结果
+  await ensureUploads()
+
+  // 2) 图片转 dataURL（仅前端展示 & 传给视觉模型）
+  const imagesDataUrls: string[] = []
+  for (const f of imageFiles.value) {
+    imagesDataUrls.push(await fileToDataURL(f))
+  }
+
+  // 3) 生成聊天用文件对象（包含提取后的文本）
+  const files = filesForChat()
+
+  // 4) 立即清空输入与选择
+  state.message = ''
+  resetAll()
+  await nextTick(); autoResize()
+
+  // 5) 发送
+  await send({ text, imagesDataUrls, files })
 }
 </script>
 
+
 <template>
   <div id="layout">
-    <!-- 顶部栏 -->
     <header id="header" class="bg-white/80 backdrop-blur text-gray-900 h-12 flex items-center shadow-sm">
       <div class="header-container">
         <div class="header-inner">
           <div class="left">
-            <LoadingOutlined v-if="state.loadding" class="mr-2" />
-            <span class="title">Hybrid GPT</span>
+            <LoadingOutlined v-if="loadding" class="mr-2" />
+            <span class="title">极客AI工具箱</span>
+
             <a-tooltip>
-              <template #title>Clear local chat history</template>
               <a-popconfirm
                 title="你确定要清空消息记录吗?"
                 ok-text="是的"
@@ -200,7 +142,6 @@ const clearMessages = () => {
       </div>
     </header>
 
-    <!-- 中间内容 -->
     <div id="layout-body">
       <main id="main">
         <div class="container">
@@ -210,7 +151,6 @@ const clearMessages = () => {
               <div class="meta-line">{{ createdAt }}</div>
             </div>
 
-            <!-- 消息列表 -->
             <Message
               v-for="(msg, idx) in messages.messages.value"
               :key="idx"
@@ -222,31 +162,56 @@ const clearMessages = () => {
       </main>
     </div>
 
-    <!-- 底部输入区（新增 composer-inner，使输入框更窄更精致） -->
     <footer id="footer" class="chat-footer">
-      <div class="composer">
+      <div class="composer" :class="{ 'drag-over': dragOver }" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
         <div class="composer-inner">
           <textarea
             ref="textareaRef"
             v-model="state.message"
             placeholder="发消息..."
             @input="autoResize"
-            @keydown.enter.exact.prevent="sendMessage($event)"
+            @keydown.enter.exact.prevent="onSend($event)"
             @keydown.enter.shift.exact.stop
             class="composer-input"
             rows="1"
-          ></textarea>
-
+          />
           <div class="composer-actions">
-            <button
-              class="action-btn stop"
-              @click="stopStreaming"
-              :disabled="!state.loadding"
-            >停止</button>
-            <button
-              class="action-btn send"
-              @click="sendMessage($event)"
-            >发送</button>
+            <label class="action-btn upload" title="选择图片">
+              <input type="file" accept="image/*" multiple style="display:none" @change="onPickImages" />
+              <PictureOutlined />
+            </label>
+            <label class="action-btn upload" title="选择文本类文件或 PDF">
+              <input
+                type="file"
+                multiple
+                accept="text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf"
+                style="display:none"
+                @change="(e:any)=>addGenericFiles(Array.from(e.target.files||[]))"
+              />
+              <PaperClipOutlined />
+            </label>
+            <button class="action-btn stop" @click="stop" :disabled="!loadding">停止</button>
+            <button class="action-btn send" @click="onSend($event)">发送</button>
+          </div>
+        </div>
+
+        <!-- 图片预览 -->
+        <div v-if="imagePreviews.length" class="preview-bar">
+          <div v-for="(src,i) in imagePreviews" :key="'img-'+i" class="preview-item">
+            <img :src="src" alt="preview" />
+            <button class="preview-remove" @click="removeImage(i)"><CloseOutlined /></button>
+          </div>
+        </div>
+
+        <!-- 文件胶囊 -->
+        <div v-if="genericFiles.length" class="file-list">
+          <div v-for="(f, i) in genericFiles" :key="'file-'+i" class="file-pill" :class="f.status">
+            <span class="name">{{ f.name }}</span>
+            <span class="meta">{{ (f.size/1024/1024).toFixed(2) }}MB</span>
+            <span class="status" v-if="f.status==='pending'">上传中…</span>
+            <span class="status ok" v-else-if="f.status==='ok'">就绪</span>
+            <span class="status error" v-else>失败</span>
+            <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
           </div>
         </div>
       </div>
@@ -258,130 +223,62 @@ const clearMessages = () => {
 
 <style scoped>
 /* ====== 布局基础 ====== */
-#layout {
-  display: flex;
-  flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-  background: #f7f7f8; /* ChatGPT 类似的浅灰背景 */
-}
+#layout { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #f7f7f8; }
+#layout-body { flex: 1 1 0%; overflow-y: auto; display: flex; flex-direction: column; }
+#main { flex: 1 1 0%; padding: 24px 0; }
+.container { max-width: 900px; margin: 0 auto; padding: 0 16px; }
 
-#layout-body {
-  flex: 1 1 0%;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
+/* 顶部栏 */
+#header { position: sticky; top: 0; z-index: 10; }
+.header-container { width: 100%; padding: 0 16px; }
+#header .header-inner { display: flex; align-items: center; justify-content: space-between; height: 48px; }
+#header .title { font-weight: 600; }
+#header .icon { margin-left: 12px; cursor: pointer; color: #6b7280; transition: color .15s ease, transform .15s ease; }
+#header .icon:hover { color: #111827; transform: translateY(-1px); }
 
-#main {
-  flex: 1 1 0%;
-  padding: 24px 0;
-}
-
-/* 居中容器：用于中部和底部主列（保留） */
-.container {
-  max-width: 780px;
-  margin: 0 auto;
-  padding: 0 16px; /* 小屏左右留点空 */
-}
-
-/* 顶部栏：改为全宽靠左 */
-#header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.header-container {
-  width: 100%;
-  padding: 0 16px;
-}
-#header .header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 48px;
-  /* 不使用 .container 的 max-width 约束，保持全宽 */
-}
-#header .title {
-  font-weight: 600;
-}
-#header .icon {
-  margin-left: 12px;
-  cursor: pointer;
-  color: #6b7280; /* gray-500 */
-  transition: color .15s ease, transform .15s ease;
-}
-#header .icon:hover {
-  color: #111827; /* gray-900 */
-  transform: translateY(-1px);
-}
-
-.container { max-width: 900px; } 
-
-
-/* 统一居中容器：主列 */
-.container{
-  width: 100%;
-  max-width: 900px;
-  margin-inline: auto;
-  padding-inline: 16px;     /* 两侧基础留白 */
-  box-sizing: border-box;
-}
-
-/* 给聊天列一个“左侧内边距”，看起来整体更靠右 */
-.chat-container{
-  padding-left: var(--chat-offset);
-}
-
-
-#header .header-container{ padding-inline: 16px; }
-#footer .composer{ padding-inline: 16px; }
-.composer-inner{ max-width: 640px; margin-inline: auto; }
-
-html, body, #layout-body{ scrollbar-gutter: stable both-edges; }
-
-.message-row{ padding-inline: 8px; } 
-
+/* 聊天容器 */
+.chat-container{ padding-left: var(--chat-offset); }
 
 /* 底部输入区 */
-#footer {
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
+#footer { border-top: 1px solid #e5e7eb; background: #fff; }
+.composer { position: relative; padding: 12px 0; border-radius: 12px; }
+.composer.drag-over { outline: 2px dashed #93c5fd; outline-offset: 4px; background: rgba(147,197,253,.08); }
+.composer-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: stretch; gap: 10px; }
+.composer-input { flex: 1 1 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 10px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.03); transition: border-color .15s ease, box-shadow .15s ease; }
+.composer-input:focus-within { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,.35); }
+.composer-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.action-btn { height: 36px; padding: 0 12px; border: 1px solid #e5e7eb; background: #f3f4f6; color: #111827; border-radius: 10px; display:flex; align-items:center; gap:6px; flex-shrink: 0; min-width: 72px; justify-content: center; white-space: nowrap; appearance: none; -webkit-appearance: none; box-shadow: 0 2px 6px rgba(0,0,0,.04); transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease; }
+.action-btn:hover { background: #eef2f7; border-color: #dde3ea; }
+.action-btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
+.action-btn.upload { width: 36px; justify-content: center; padding: 0; }
+
+/* 预览条 */
+.preview-bar { max-width: 640px; margin: 8px auto 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.preview-item { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb; }
+.preview-item img { width: 100%; height: 100%; object-fit: cover; display:block; }
+.preview-remove { position: absolute; top: 4px; right: 4px; border: none; background: rgba(0,0,0,.45); color: #fff; width: 20px; height: 20px; border-radius: 6px; display:flex; align-items:center; justify-content:center; }
+
+/* 文件胶囊列表 */
+.file-list { max-width: 640px; margin: 8px auto 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.file-pill { position: relative; display:flex; align-items:center; gap:8px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb; }
+.file-pill .name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-pill .meta { color: #6b7280; font-size: 12px; }
+.file-pill .status { font-size: 12px; color: #6b7280; }
+.file-pill.ok { background: #eefdf3; border-color: #b6f0c5; }
+.file-pill.error { background: #fef2f2; border-color: #fecaca; }
+.pill-remove { border:none; background: transparent; color:#6b7280; }
+.pill-remove:hover { color:#111827; }
+.action-btn.send { font-weight: 600; background: #2563eb; color: #fff; border-color: #2563eb; }
+.action-btn.send:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.action-btn.send:disabled { opacity: .6; cursor: not-allowed; }
+.action-btn.stop[disabled] {
+  opacity: .5;
+  cursor: not-allowed;
+  pointer-events: none; /* 视觉与交互双保险 */
 }
 
-/* 原有的 .composer 保留为容器，新增 .composer-inner 控制宽度 */
-.composer {
-  position: relative;
-  padding: 12px 0;
-}
-
-.composer-inner {
-  /* 关键：让输入框更窄更美观 */
-  max-width: 640px;        /* 可根据喜好调成 600~680 */
-  margin: 0 auto;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-}
-
-/* 输入框样式优化 */
-.composer-input {
-  flex: 1 1 auto;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;      /* 比原先超大圆角更稳重 */
-  padding: 10px 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.03);
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-.composer-input:focus-within {
-  border-color: #93c5fd; /* blue-300 */
-  box-shadow: 0 0 0 3px rgba(147,197,253,.35);
-}
-
-/* 操作按钮收紧间距 */
-.composer-actions {
-  display: flex;
-  gap: 8px;
+/* 移动端键盘遮挡与安全区 */
+@supports (padding: env(safe-area-inset-bottom)) {
+  #footer .composer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
 </style>
