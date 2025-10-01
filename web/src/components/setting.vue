@@ -3,7 +3,7 @@ import useSetting from '@/composables/setting'
 import { SettingOutlined } from '@ant-design/icons-vue'
 
 const setting = useSetting()
-const models = ref(['gpt-4.1', 'gpt-4o-mini'])
+const models = ref(['gpt-4.1', 'gpt-4o-mini', 'gpt-5'])
 
 const props = defineProps<{
   visible: boolean
@@ -33,9 +33,9 @@ const handleOk = () => {
       </template>
 
       <a-form :model="setting">
-        <a-form-item label="连续对话">
-          <a-switch v-model:checked="setting.continuously" checked-children="开" un-checked-children="关" />
-        </a-form-item>
+        <!-- <a-form-item label="连续对话">
+          <a-switch v-model:checked="setting.continuously" checked-children="开" un-checked-children="关" /> -->
+        <!-- </a-form-item> -->
         <a-form-item label="对话模型">
           <a-select ref="select" v-model:value="setting.model" style="width: 180px">
             <a-select-option :value="model" v-for="model in models">{{ model }}</a-select-option>
@@ -43,12 +43,7 @@ const handleOk = () => {
         </a-form-item>
       </a-form>
 
-
       <div class="mt-2"></div>
-
-
-
-
 
     </a-modal>
   </div>

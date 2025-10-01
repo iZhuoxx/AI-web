@@ -12,11 +12,6 @@ def _check_auth(request: Request):
     if settings.INTERNAL_TOKEN and request.headers.get("X-API-KEY") != settings.INTERNAL_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-@router.get("/responses/credit_summary")
-async def credit_summary(request: Request):
-    api_key = get_headers()
-    return await openai_client.credit_summary(api_key=api_key)
-
 @router.post("/responses/stream")
 async def responses_stream_route(request: Request):
     _check_auth(request)
@@ -27,10 +22,3 @@ async def responses_stream_route(request: Request):
             yield chunk + "\n"  # newline delimited
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
-
-@router.post("/responses")
-async def responses_once_route(request: Request):
-    _check_auth(request)
-    payload: Dict[str, Any] = await request.json()
-    data = await openai_client.responses_once(payload)
-    return JSONResponse(data)
