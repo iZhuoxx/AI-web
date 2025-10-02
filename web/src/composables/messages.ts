@@ -1,19 +1,8 @@
-// src/composables/messages.ts
 import { useStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
 import type { TMessage, TFileInMessage } from '@/types'
 
-const WELCOME = (): TMessage => ({
-  username: 'chatGPT',
-  msg: "您好，我是ChatGPT，请问有什么能帮您的?",
-  time: dayjs().format('HH:mm'),
-  type: 0,
-  images: [],
-  files: [],
-  meta: {},
-})
-
-const messages = useStorage<TMessage[]>('messages', [WELCOME()])
+const messages = useStorage<TMessage[]>('messages', [])
 
 function normalize(m: Partial<TMessage>): TMessage {
   return {
@@ -75,8 +64,8 @@ function setLastAssistantMeta(patch: Record<string, any>) {
   last.meta = { ...(last.meta || {}), ...patch }
 }
 
-function clearMessages(keepWelcome = true) {
-  messages.value = keepWelcome ? [WELCOME()] : []
+function clearMessages() {
+  messages.value = []
 }
 
 function getLastMessages(num = 10) {

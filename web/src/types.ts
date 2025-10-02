@@ -1,4 +1,3 @@
-// src/types.ts
 export type TFileInMessage = {
   name: string
   type: string
