@@ -10,7 +10,7 @@ const props = defineProps<{ message: TMessage }>()
 function isImageType(t?: string) { return typeof t === 'string' && t.startsWith('image/') }
 function isPdfType(t?: string)   { return t === 'application/pdf' }
 
-/** 图片 Lightbox（只对富文本里的 dataURL 图片生效） */
+/** 图片 Lightbox*/
 const lightboxVisible = ref(false)
 const lightboxSrc = ref<string>('')
 function openLightbox(src: string) { lightboxSrc.value = src; lightboxVisible.value = true }
