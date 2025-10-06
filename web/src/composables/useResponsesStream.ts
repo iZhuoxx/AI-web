@@ -41,6 +41,7 @@ export async function* useResponsesStream(
 
   opts.signal?.addEventListener('abort', onAbort, { once: true })
 
+  const pendingSSE: string[] = []
   const queued: string[] = []
 
   const push = (value: string) => {
@@ -48,73 +49,29 @@ export async function* useResponsesStream(
     if (trimmed) queued.push(trimmed)
   }
 
-  const emitSSEBlock = (block: string) => {
-    const lines = block.split(/\r?\n/)
-    const dataLines: string[] = []
-    for (const raw of lines) {
-      if (!raw || raw.startsWith(':')) continue
-      if (raw.startsWith('data:')) {
-        dataLines.push(raw.slice(5).trim())
-      }
-    }
+  const flushSSE = () => {
+    if (!pendingSSE.length) return
+    for (const entry of pendingSSE) push(entry)
+    pendingSSE.length = 0
+  }
 
-    if (dataLines.length) {
-      for (const payload of dataLines) push(payload)
+  const handleLine = (rawLine: string) => {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+    if (line.length === 0) {
+      flushSSE()
+      return
+    }
+    if (line.startsWith(':')) {
       return
     }
 
-    for (const raw of lines) {
-      if (!raw) continue
-      const trimmed = raw.trim()
-      if (!trimmed) continue
-      if (trimmed.startsWith(':')) continue
-      if (trimmed.startsWith('data:')) {
-        push(trimmed.slice(5).trim())
-      } else {
-        push(trimmed)
-      }
+    if (line.startsWith('data:')) {
+      const payload = line.slice(5).trim()
+      pendingSSE.push(payload)
+      return
     }
-  }
-
-  type SSEBoundary = { index: number; length: number }
-
-  const findSSEBoundary = (source: string): SSEBoundary | null => {
-    const nn = source.indexOf('\n\n')
-    const rr = source.indexOf('\r\n\r\n')
-    if (nn === -1 && rr === -1) return null
-    if (nn === -1) return { index: rr, length: 4 }
-    if (rr === -1) return { index: nn, length: 2 }
-    return rr < nn ? { index: rr, length: 4 } : { index: nn, length: 2 }
-  }
-
-  const processBuffer = (final = false) => {
-    let boundary = findSSEBoundary(buffer)
-    while (boundary) {
-      const block = buffer.slice(0, boundary.index)
-      buffer = buffer.slice(boundary.index + boundary.length)
-      emitSSEBlock(block)
-      boundary = findSSEBoundary(buffer)
-    }
-
-    let newlineIdx: number
-    while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
-      const rawLine = buffer.slice(0, newlineIdx)
-      buffer = buffer.slice(newlineIdx + 1)
-      const trimmed = rawLine.trim()
-      if (!trimmed) continue
-      if (trimmed.startsWith(':')) continue
-      if (trimmed.startsWith('data:')) push(trimmed.slice(5).trim())
-      else push(trimmed)
-    }
-
-    if (final && buffer.length) {
-      const trimmed = buffer.trim()
-      if (trimmed) {
-        if (trimmed.startsWith('data:')) push(trimmed.slice(5).trim())
-        else push(trimmed)
-      }
-      buffer = ''
-    }
+    flushSSE()
+    push(line)
   }
 
   try {
@@ -131,7 +88,12 @@ export async function* useResponsesStream(
 
       buffer += decoder.decode(value, { stream: true })
 
-      processBuffer()
+      let newlineIdx: number
+      while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newlineIdx)
+        buffer = buffer.slice(newlineIdx + 1)
+        handleLine(line)
+      }
 
       if (queued.length) {
         for (const item of queued) {
@@ -142,7 +104,12 @@ export async function* useResponsesStream(
     }
 
     buffer += decoder.decode()
-    processBuffer(true)
+    if (buffer.length) {
+      handleLine(buffer)
+      buffer = ''
+    }
+
+    flushSSE()
 
     if (queued.length) {
       for (const item of queued) {
