@@ -1,4 +1,3 @@
-<!-- src/App.vue -->
 <script setup lang="ts">
 import {
   ClearOutlined, LoadingOutlined, SettingOutlined,
@@ -245,15 +244,8 @@ async function handlePrimaryAction() {
 #layout { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #f7f7f8; }
 #layout-body { flex: 1 1 0%; overflow-y: auto; display: flex; flex-direction: column; }
 #main { flex: 1 1 auto; display: flex; padding: 24px 0 0; }
-.container { flex: 1 1 auto; display: flex; flex-direction: column; max-width: 900px; margin: 0 auto; padding: 0 16px 48px; transition: padding .3s ease; }
-.container--empty {
-  flex: 1 1 auto;
-  justify-content: center;
-  align-items: center;
-  gap: 48px;
-  padding: 0 16px;
-  min-height: calc(100vh - 48px);
-}
+
+
 
 /* 顶部栏 */
 #header { position: sticky; top: 0; z-index: 10; }
@@ -273,16 +265,8 @@ async function handlePrimaryAction() {
   justify-content: flex-end;
   overflow-y: auto;
 }
-.chat-container--empty {
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  gap: 32px;
-  text-align: center;
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-}
+
+
 .chat-container--empty::-webkit-scrollbar {
   display: none;
 }
@@ -295,24 +279,26 @@ async function handlePrimaryAction() {
 }
 
 .composer-stage {
-  padding-left: var(--chat-offset);
-  padding-bottom: 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: padding .3s ease, transform .3s ease, margin .3s ease;
-  margin-top: auto;
-}
-.composer-stage--empty {
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
+  margin-top: auto;
+
+  padding-left: var(--chat-offset, 0);
+  padding-bottom: var(--composer-bottom-padding);
+}
+
+.composer-stage--empty {
+
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  margin-top: 0;
   padding-left: 0;
   padding-bottom: 0;
-  align-items: center;
-  transform: none;
-  margin-top: 0;
+  align-self: center;
 }
+
 
 .composer {
   width: 100%;
@@ -448,7 +434,91 @@ async function handlePrimaryAction() {
 .pill-remove { border:none; background: transparent; color:#6b7280; }
 .pill-remove:hover { color:#111827; }
 
-@supports (padding: env(safe-area-inset-bottom)) {
-  .composer-stage { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+/* ====== 容器基础 ====== */
+.container {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  max-width: 900px;
+  margin: 0 auto;
+
+  /* 这里的底部 padding 会把输入框顶高，聊天态我们改小 */
+  padding: 0 16px 12px; /* ← 原本是 48px，改小让输入框更贴底 */
+  transition: padding .3s ease;
 }
+
+/* 空态：把整列内容居中（注意：头部是 48px，不是 20px） */
+.container--empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* 垂直居中整列 */
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  min-height: calc(100vh - 48px); /* ← 修正你误写的 20px */
+  position: relative;        /* 便于子项 transform 视觉位移 */
+}
+
+/* 聊天区（空态）不要拉伸填满，否则会把输入区“挤低” */
+.chat-container--empty {
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  gap: 16px;
+  text-align: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ====== 输入区：聊天态吸底，空态居中 ====== */
+
+/* 可调参数：空态整体上移 & 聊态底部留白 */
+:global(:root) {
+  --empty-vertical-offset: -10vh;
+  --composer-bottom-padding: 12px;
+}
+/* 聊天态（默认）：吸底 */
+.composer-stage {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+
+  /* 关键：吸底 */
+  margin-top: auto;
+
+  /* 左侧缩进 + 底部留白（变量可调） */
+  padding-left: var(--chat-offset, 0);
+  padding-bottom: var(--composer-bottom-padding);
+}
+
+/* 兼容安全区（手机底部手势条）——只保留这一份，删掉你上面那份固定 20px 的版本 */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .composer-stage {
+    padding-bottom: calc(var(--composer-bottom-padding) + env(safe-area-inset-bottom));
+  }
+}
+
+/* 空态：不要吸底，和欢迎文案一起居中 */
+.composer-stage--empty {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  margin-top: 0;        /* 不吸底 */
+  padding-left: 0;
+  padding-bottom: 0;
+  align-self: center;   /* 水平居中 */
+}
+
+/* 空态：欢迎文案 + 输入区 整体上移一点（看起来更舒服） */
+.container--empty > .chat-container--empty,
+.container--empty > .composer-stage.composer-stage--empty {
+  transform: translateY(var(--empty-vertical-offset));
+}
+
+
+
+
 </style>

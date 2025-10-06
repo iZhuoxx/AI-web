@@ -75,9 +75,82 @@ export function useChat() {
     const signal = controller.signal
 
     // 仅在“上一轮已完成”时带 previous_response_id
-    const body: Record<string, any> = { model: String(selectedModel), input, temperature: Number(temperature) }
+    const normalizedModel = String(selectedModel)
+    const body: Record<string, any> = { model: normalizedModel, input }
+    if (normalizedModel !== 'gpt-5') {
+      body.temperature = Number(temperature)
+    }
     if (typeof maxOutputTokens === 'number') body.max_output_tokens = maxOutputTokens
+    const configuredTools = Array.isArray((s as any).tools) ? (s as any).tools : null
+    body.tools = configuredTools && configuredTools.length
+      ? configuredTools
+      : [{ type: 'image_generation' }]
     if (lastCompletedResponseId) body.previous_response_id = lastCompletedResponseId
+
+    const seenImagePayloads = new Set<string>()
+
+    const extractImagePayloads = (output: any): { base64: string; mimeType?: string }[] => {
+      const results: { base64: string; mimeType?: string }[] = []
+      const visited = new WeakSet<object>()
+
+      const visit = (value: any): void => {
+        if (value == null) return
+        if (typeof value === 'string') return
+        if (Array.isArray(value)) {
+          for (const item of value) visit(item)
+          return
+        }
+        if (typeof value !== 'object') return
+
+        const obj = value as Record<string, any>
+        if (visited.has(obj)) return
+        visited.add(obj)
+
+        const maybeBase64 =
+          typeof obj.image_base64 === 'string'
+            ? obj.image_base64
+            : typeof obj.b64_json === 'string'
+            ? obj.b64_json
+            : typeof obj.base64 === 'string'
+            ? obj.base64
+            : null
+
+        if (obj.type === 'image_generation_call') {
+          if (typeof obj.result === 'string') {
+            results.push({ base64: obj.result, mimeType: obj.mime_type })
+          } else if (obj.result) {
+            visit({ ...obj.result, mime_type: obj.result?.mime_type ?? obj.mime_type })
+          }
+        }
+
+        if (maybeBase64) {
+          results.push({ base64: maybeBase64, mimeType: obj.mime_type ?? obj.mimeType })
+        }
+
+        const nestedKeys = ['result', 'content', 'data', 'image', 'images', 'output', 'outputs', 'parts', 'items', 'value']
+        for (const key of nestedKeys) {
+          if (key in obj) visit(obj[key])
+        }
+      }
+
+      visit(output)
+      return results
+    }
+
+    const pushImagesFromOutput = (output: any) => {
+      const payloads = extractImagePayloads(output)
+      for (const { base64, mimeType } of payloads) {
+        if (typeof base64 !== 'string') continue
+        const clean = base64.replace(/\s+/g, '')
+        if (!clean) continue
+        if (seenImagePayloads.has(clean)) continue
+        seenImagePayloads.add(clean)
+        const prepared = clean.startsWith('data:')
+          ? clean
+          : `data:${mimeType || 'image/png'};base64,${clean}`
+        messages.appendImageToLastAssistant(prepared)
+      }
+    }
 
     try {
       for await (const line of useResponsesStream(body, { signal })) {
@@ -85,7 +158,8 @@ export function useChat() {
 
         if (evt.type === 'response.completed' && evt.response?.id) {
           lastCompletedResponseId = evt.response.id
-          messages.setLastAssistantMeta({ responseId: evt.response.id, completed: true })
+          messages.setLastAssistantMeta({ responseId: evt.response.id, completed: true, loading: false })
+          pushImagesFromOutput(evt.response?.output)
         }
 
         if (evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
@@ -94,16 +168,20 @@ export function useChat() {
         }
 
         if (evt.type === 'response.error' && evt.error) {
-          messages.appendToLastAssistant(`\n[error] ${evt.error?.message || 'unknown error'}`)
+          messages.setLastAssistantText('获取回复失败，请重试')
+          messages.setLastAssistantMeta({ error: true })
         }
+
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        messages.appendToLastAssistant(`\n[error] ${err?.message ?? String(err)}`)
+        messages.setLastAssistantText('获取回复失败，请重试')
+        messages.setLastAssistantMeta({ error: true })
       }
     } finally {
       controller = null
       loadding.value = false
+      messages.setLastAssistantMeta({ loading: false })
     }
   }
 
@@ -113,6 +191,7 @@ export function useChat() {
     controller = null
     loadding.value = false
     lastCompletedResponseId = null
+    messages.setLastAssistantMeta({ loading: false })
   }
 
   return { loadding, send, stop }

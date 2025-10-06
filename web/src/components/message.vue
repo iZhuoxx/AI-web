@@ -51,7 +51,8 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
     <!-- AI 消息 -->
     <template v-else>
       <div class="bubble ai">
-        <div class="md-wrap">
+        <div v-if="props.message.meta?.loading && !props.message.msg" class="ai-status">正在思考…</div>
+        <div v-else class="md-wrap">
           <MarkdownRenderer :source="props.message.msg" />
         </div>
 
@@ -96,6 +97,8 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
 .bubble { width: fit-content; max-width: 90%; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,.04); padding: 10px 12px; font-size: 14px; line-height: 1.6; }
 .bubble.user { background: #e7f3ff; border-color: #d6e8ff; max-width: 60%; }
 .bubble.ai   { background: #fff;    border-color: #e5e7eb; }
+
+.ai-status { color: #64748b; font-size: 13px; }
 
 .text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .md-wrap :deep(.prose) { max-width: none; }

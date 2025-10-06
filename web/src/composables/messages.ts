@@ -44,7 +44,7 @@ function addAssistantPlaceholder() {
     time: dayjs().format('HH:mm'),
     images: [],
     files: [],
-    meta: {},
+    meta: { loading: true },
   })
 }
 
@@ -53,7 +53,25 @@ function appendToLastAssistant(delta: string) {
   if (!list.length) return
   const last = list[list.length - 1]
   if (last.type !== 0) return
+  if (last.meta?.loading) {
+    last.meta = { ...(last.meta || {}), loading: false }
+    last.msg = ''
+  }
   last.msg += delta
+}
+
+function appendImageToLastAssistant(src: string) {
+  const list = messages.value
+  if (!list.length) return
+  const last = list[list.length - 1]
+  if (last.type !== 0) return
+  if (!Array.isArray(last.images)) {
+    last.images = []
+  }
+  last.images.push(src)
+  if (last.meta?.loading) {
+    last.meta = { ...(last.meta || {}), loading: false }
+  }
 }
 
 function setLastAssistantMeta(patch: Record<string, any>) {
@@ -62,6 +80,15 @@ function setLastAssistantMeta(patch: Record<string, any>) {
   const last = list[list.length - 1]
   if (last.type !== 0) return
   last.meta = { ...(last.meta || {}), ...patch }
+}
+
+function setLastAssistantText(text: string) {
+  const list = messages.value
+  if (!list.length) return
+  const last = list[list.length - 1]
+  if (last.type !== 0) return
+  last.meta = { ...(last.meta || {}), loading: false }
+  last.msg = text
 }
 
 function clearMessages() {
@@ -81,6 +108,8 @@ export default function useMessages() {
     addUserMessage,
     addAssistantPlaceholder,
     appendToLastAssistant,
+    appendImageToLastAssistant,
     setLastAssistantMeta,
+    setLastAssistantText,
   }
 }
