@@ -103,8 +103,17 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
 .text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .md-wrap :deep(.prose) { max-width: none; }
 
-.imgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.imgs img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; cursor: zoom-in; }
+.imgs { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.imgs img {
+  width: 240px;
+  max-width: min(320px, 100%);
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+  cursor: zoom-in;
+}
+
 
 .files { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb; color: #111827; font-size: 13px; text-decoration: none; }

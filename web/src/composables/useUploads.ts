@@ -1,6 +1,11 @@
 // src/composables/useUploads.ts
 import { ref } from 'vue'
 import type { TFileInMessage } from '@/types'
+import {
+  DEFAULT_AUDIO_MODEL,
+  TRANSCRIBE_ENDPOINT,
+  isAudioFile,
+} from '@/constants/audio'
 
 export type GenericItem = {
   name: string
@@ -12,8 +17,9 @@ export type GenericItem = {
   truncated?: boolean
   fileId?: string
   purpose?: 'vision' | 'assistants'
-  kind: 'text' | 'file'
+  kind: 'text' | 'file' | 'audio'
   status: 'pending'|'ok'|'error'
+  error?: string
 }
 
 const INTERNAL_TOKEN = import.meta.env.VITE_INTERNAL_TOKEN as string | undefined
@@ -33,7 +39,6 @@ const TEXTUAL_MIME_TYPES = new Set([
 ])
 
 const TEXT_EXTS = new Set(['txt','md','markdown','csv','tsv','json','yaml','yml','xml','html','htm','py','js','ts'])
-
 function isTextLike(file: File): boolean {
   const mime = file.type || ''
   if (TEXTUAL_MIME_PREFIXES.some(prefix => mime.startsWith(prefix))) return true
@@ -79,6 +84,17 @@ export function useUploads() {
   async function addGenericFiles(files: File[]) {
     const others = files.filter(f => !/^image\//.test(f.type))
     for (const f of others) {
+      if (isAudioFile(f)) {
+        genericFiles.value.push({
+          name: f.name,
+          size: f.size,
+          type: f.type || 'audio/mpeg',
+          file: f,
+          status: 'pending',
+          kind: 'audio',
+        })
+        continue
+      }
       const pdf = isPdf(f)
       if (!pdf && !isTextLike(f)) {
         console.warn('忽略不支持的文件', f.name)
@@ -105,6 +121,7 @@ export function useUploads() {
 
   async function ensureUploads() {
     for (const it of genericFiles.value) {
+      if (it.kind === 'audio') continue
       if (it.status !== 'pending' || !it.file) continue
       try {
         const fd = new FormData()
@@ -190,6 +207,57 @@ export function useUploads() {
     genericFiles.value = []
   }
 
+  async function transcribeAudioRequest(file: File): Promise<string> {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('model', DEFAULT_AUDIO_MODEL)
+    fd.append('response_format', 'text')
+
+    const headers: Record<string, string> = {}
+    if (INTERNAL_TOKEN) {
+      headers['X-API-KEY'] = INTERNAL_TOKEN
+    }
+
+    const res = await fetch(TRANSCRIBE_ENDPOINT, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+      headers,
+    })
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      throw new Error(errText || `transcription failed: HTTP ${res.status}`)
+    }
+
+    const data = await res.json().catch(() => ({})) as { text?: string }
+    const text = (data?.text || '').trim()
+    if (!text) {
+      throw new Error('transcription returned empty text')
+    }
+    return text
+  }
+
+  async function ensureAudioTranscriptions() {
+    for (const it of genericFiles.value) {
+      if (it.kind !== 'audio') continue
+      if (it.status === 'ok') continue
+      if (!it.file) continue
+      try {
+        const text = await transcribeAudioRequest(it.file)
+        it.text = text
+        it.truncated = false
+        it.status = 'ok'
+        it.error = undefined
+        it.file = undefined
+      } catch (err: any) {
+        console.error('audio transcription error', err)
+        it.status = 'error'
+        it.error = err?.message || String(err)
+      }
+    }
+  }
+
   /**
    生成消息中可用的文件数组
    * - 附带提取后的纯文本
@@ -216,7 +284,7 @@ export function useUploads() {
     // actions
     onPickImages, addImages, removeImage,
     addGenericFiles, onPaste, onDragOver, onDragLeave, onDrop,
-    removeGenericFile, ensureUploads, fileToDataURL, resetAll,
+    removeGenericFile, ensureUploads, ensureAudioTranscriptions, fileToDataURL, resetAll,
     // for chat
     filesForChat,
   }

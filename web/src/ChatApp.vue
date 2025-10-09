@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import {
-  ClearOutlined, LoadingOutlined, SettingOutlined,
+  ClearOutlined, LoadingOutlined,
   PictureOutlined, CloseOutlined, PaperClipOutlined,
-  SendOutlined, PauseCircleOutlined
+  SendOutlined, PauseCircleOutlined,
+  AudioOutlined, AudioFilled
 } from '@ant-design/icons-vue'
 
 import Message from './components/message.vue'
-import SettingModal from './components/setting.vue'
 
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import useMessages from '@/composables/messages'
 import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
+import { useSpeechToText } from '@/composables/useSpeechToText'
+import useSetting from '@/composables/setting'
+import { MODEL_OPTIONS } from '@/constants/models'
 
 const messages = useMessages()
 const { loadding, send, stop } = useChat()
@@ -20,10 +23,39 @@ const {
   imageFiles, imagePreviews, genericFiles, dragOver,
   onPickImages, addGenericFiles, removeGenericFile,
   onPaste, onDragOver, onDragLeave, onDrop,
-  ensureUploads, fileToDataURL, removeImage, resetAll,
+  ensureUploads, ensureAudioTranscriptions, fileToDataURL, removeImage, resetAll,
   filesForChat,
   addImages,                
 } = useUploads()
+
+const setting = useSetting()
+const speech = useSpeechToText()
+const isAudioRecording = speech.isRecording
+const isAudioTranscribing = speech.isTranscribing
+const canUseMicrophone = speech.canRecord
+const lastTranscript = speech.lastTranscript
+const audioErrorMessage = speech.errorMessage
+const startAudioRecording = speech.startRecording
+const stopRecordingAndTranscribe = speech.stopRecordingAndTranscribe
+const cancelAudioRecording = speech.cancelRecording
+
+const modelOptions = MODEL_OPTIONS
+const selectedModel = computed({
+  get: () => setting.value.model,
+  set: (val: string) => {
+    if (val) {
+      setting.value.model = val
+    }
+  },
+})
+
+const audioStatusMessage = ref('')
+const transcriptPreview = computed(() => {
+  const preview = lastTranscript.value.trim()
+  if (!preview) return ''
+  return preview.length > 160 ? `${preview.slice(0, 160)}…` : preview
+})
+const audioErrorText = computed(() => audioErrorMessage.value || '')
 
 const chatMessages = messages.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
@@ -32,7 +64,7 @@ const handlePaste = (event: ClipboardEvent) => {
   void onPaste(event)
 }
 
-const state = reactive({ message: '', visible: false })
+const state = reactive({ message: '' })
 const hasPayload = computed(
   () => state.message.trim().length > 0 || imageFiles.value.length > 0 || genericFiles.value.length > 0
 )
@@ -45,6 +77,40 @@ const autoResize = () => {
   const h = Math.min(el.scrollHeight, MAX_TEXTAREA_H)
   el.style.height = h + 'px'
   el.style.overflowY = el.scrollHeight > MAX_TEXTAREA_H ? 'auto' : 'hidden'
+}
+
+const setAudioStatus = (message: string) => {
+  audioStatusMessage.value = message
+}
+
+const clearAudioError = () => {
+  audioErrorMessage.value = null
+}
+
+const appendTranscriptToComposer = async (text: string) => {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  if (!state.message) {
+    state.message = trimmed
+  } else {
+    const needsSpace = !state.message.endsWith('\n') && !state.message.endsWith(' ')
+    state.message = `${state.message}${needsSpace ? ' ' : ''}${trimmed}`
+  }
+  await nextTick()
+  autoResize()
+}
+
+const handleTranscript = async (text: string, label?: string) => {
+  const cleaned = text.trim()
+  if (!cleaned) {
+    audioErrorMessage.value = '语音识别结果为空，请重试'
+    setAudioStatus('')
+    return
+  }
+  await appendTranscriptToComposer(cleaned)
+  setAudioStatus('')
+  lastTranscript.value = ''
+  audioErrorMessage.value = null
 }
 
 function isFileDrag(e: DragEvent) {
@@ -71,6 +137,39 @@ function globalDrop(e: DragEvent) {
   if (others.length) addGenericFiles(others)
 }
 
+async function toggleRecording() {
+  if (!canUseMicrophone.value) {
+    audioErrorMessage.value = '当前浏览器暂不支持录音'
+    return
+  }
+  clearAudioError()
+  if (isAudioRecording.value) {
+    setAudioStatus('录音完成，正在转写…')
+    try {
+      const result = await stopRecordingAndTranscribe()
+      await handleTranscript(result.text, '语音录制')
+    } catch (err: any) {
+      audioErrorMessage.value = err?.message || '语音转写失败'
+      setAudioStatus('语音转写失败')
+    }
+    return
+  }
+
+  try {
+    await startAudioRecording()
+    setAudioStatus('录音中，再次点击停止并转写')
+  } catch (err: any) {
+    audioErrorMessage.value = err?.message || '无法开始录音'
+    setAudioStatus('')
+  }
+}
+
+async function cancelRecordingIfNeeded() {
+  if (!isAudioRecording.value) return
+  await cancelAudioRecording()
+  setAudioStatus('录音已取消')
+}
+
 onMounted(() => {
   nextTick(autoResize)
   document.addEventListener('paste', handlePaste)
@@ -95,6 +194,7 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
 
   // 1) 先确保文本文件上传，拿到提取结果
   await ensureUploads()
+  await ensureAudioTranscriptions()
 
   // 2) 图片转 dataURL（仅前端展示 & 传给视觉模型）
   const imagesDataUrls: string[] = []
@@ -108,6 +208,9 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   // 4) 立即清空输入与选择
   state.message = ''
   resetAll()
+  audioStatusMessage.value = ''
+  lastTranscript.value = ''
+  audioErrorMessage.value = null
   await nextTick(); autoResize()
 
   // 5) 发送
@@ -145,10 +248,19 @@ async function handlePrimaryAction() {
               </a-popconfirm>
             </a-tooltip>
 
-            <a-tooltip>
-              <template #title>Settings</template>
-              <SettingOutlined class="icon" @click="state.visible = true" />
-            </a-tooltip>
+            <div class="model-select">
+              <a-select
+                v-model:value="selectedModel"
+                class="model-select__control"
+                size="small"
+                dropdown-class-name="model-select__dropdown"
+                :dropdownMatchSelectWidth="false"   
+              >
+                <a-select-option v-for="model in modelOptions" :key="model" :value="model">
+                  {{ model }}
+                </a-select-option>
+              </a-select>
+            </div>
           </div>
         </div>
       </div>
@@ -159,7 +271,7 @@ async function handlePrimaryAction() {
         <div class="container" :class="{ 'container--empty': !hasMessages }">
           <div class="chat-container" :class="{ 'chat-container--empty': !hasMessages }">
             <div v-if="!hasMessages" class="welcome-placeholder">
-              请问有什么可以帮助您的吗？
+              有什么可以帮您的吗？
             </div>
             <template v-else>
               <Message
@@ -179,16 +291,29 @@ async function handlePrimaryAction() {
                     <input type="file" accept="image/*" multiple style="display:none" @change="onPickImages" />
                     <PictureOutlined />
                   </label>
-                  <label class="icon-btn" title="选择文本类文件或 PDF">
+                  <label class="icon-btn" title="选择文本、PDF 或音频">
                     <input
                       type="file"
                       multiple
-                      accept="text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf"
+                      accept="text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
                       style="display:none"
                       @change="(e:any)=>addGenericFiles(Array.from(e.target.files||[]))"
                     />
                     <PaperClipOutlined />
                   </label>
+                  <button
+                    v-if="canUseMicrophone"
+                    class="icon-btn mic-btn"
+                    :class="{ recording: isAudioRecording }"
+                    type="button"
+                    :disabled="isAudioTranscribing"
+                    @click="toggleRecording"
+                    :title="isAudioRecording ? '停止录音并转写' : '开始录音'"
+                  >
+                    <LoadingOutlined v-if="isAudioTranscribing" />
+                    <AudioFilled v-else-if="isAudioRecording" />
+                    <AudioOutlined v-else />
+                  </button>
                 </div>
                 <textarea
                   ref="textareaRef"
@@ -229,13 +354,39 @@ async function handlePrimaryAction() {
                   <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
                 </div>
               </div>
+
+              <div
+                v-if="isAudioRecording || isAudioTranscribing || audioStatusMessage || audioErrorText || transcriptPreview"
+                class="audio-status"
+              >
+                <div class="audio-status__icon">
+                  <LoadingOutlined v-if="isAudioTranscribing" />
+                  <AudioFilled v-else-if="isAudioRecording" />
+                  <AudioOutlined v-else />
+                </div>
+                <div class="audio-status__body">
+                  <div v-if="audioStatusMessage" class="audio-status__message">{{ audioStatusMessage }}</div>
+                  <div v-if="transcriptPreview && !audioErrorText" class="audio-status__preview">
+                    {{ transcriptPreview }}
+                  </div>
+                  <div v-if="audioErrorText" class="audio-status__error">{{ audioErrorText }}</div>
+                </div>
+                <button
+                  v-if="isAudioRecording"
+                  class="audio-status__action"
+                  type="button"
+                  @click="cancelRecordingIfNeeded"
+                >
+                  取消
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
       </main>
     </div>
 
-    <setting-modal v-model:visible="state.visible" />
   </div>
 </template>
 
@@ -254,6 +405,75 @@ async function handlePrimaryAction() {
 #header .title { font-weight: 600; }
 #header .icon { margin-left: 12px; cursor: pointer; color: #6b7280; transition: color .15s ease, transform .15s ease; }
 #header .icon:hover { color: #111827; transform: translateY(-1px); }
+.model-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.model-select :deep(.ant-select-selector) {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  min-height: 30px !important;
+  padding: 0 4px !important; 
+}
+
+.model-select :deep(.ant-select:not(.ant-select-disabled):hover .ant-select-selector) {
+  border-color: transparent !important;
+}
+.model-select :deep(.ant-select-focused .ant-select-selector) {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.model-select :deep(.ant-select-selection-item),
+.model-select :deep(.ant-select-selection-placeholder) {
+  font-size: 13px;
+  line-height: 30px;            /* 与 min-height 对齐，保证垂直居中 */
+  display: inline-flex;
+  align-items: center;           /* 垂直居中 */
+  justify-content: center;       /* 水平居中（像 ChatGPT 居中展示）*/
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  color: #111827;              
+}
+
+.model-select__control {
+  min-width: auto;               
+}
+
+.model-select :deep(.ant-select-arrow) {
+  color: #6b7280;
+  font-size: 10px;
+  right: 0;                      
+}
+
+.model-select :deep(.ant-select-dropdown) {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);  
+}
+
+.model-select :deep(.ant-select-selector:hover) {
+  background: rgba(0,0,0,0.04);
+  border-radius: 8px;
+}
+
+.model-select__dropdown {
+  width: auto !important;
+  min-width: max-content !important;   /* 让宽度以最长选项为准 */
+  border-radius: 8px;
+}
+
+.model-select__dropdown .ant-select-item,
+.model-select__dropdown .ant-select-item-option-content {
+  white-space: nowrap;
+}
+
+.model-select__dropdown {
+  z-index: 2000;
+}
 
 .chat-container {
   flex: 1 1 auto;
@@ -348,6 +568,17 @@ async function handlePrimaryAction() {
 .icon-btn:active {
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.15);
 }
+.mic-btn.recording {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.16);
+  color: #15803d;
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.25);
+}
+.mic-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .composer-input {
   flex: 1 1 auto;
@@ -384,6 +615,8 @@ async function handlePrimaryAction() {
   box-shadow: 0 20px 32px rgba(37, 99, 235, 0.25);
   transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
 }
+
+
 .primary-action:hover {
   transform: translateY(-1px);
   background: #1d4ed8;
@@ -406,6 +639,57 @@ async function handlePrimaryAction() {
 .primary-action.is-stop:hover {
   background: #0284c7;
   border-color: #0284c7;
+}
+
+.audio-status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+}
+.audio-status__icon {
+  font-size: 16px;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.audio-status__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.audio-status__message {
+  font-size: 13px;
+  color: #1f2937;
+  font-weight: 500;
+}
+.audio-status__preview {
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.4;
+}
+.audio-status__error {
+  font-size: 12px;
+  color: #dc2626;
+}
+.audio-status__action {
+  border: none;
+  background: transparent;
+  color: #dc2626;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background .15s ease;
+}
+.audio-status__action:hover {
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .preview-bar,
