@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import useSetting from '@/composables/setting'
 import { SettingOutlined } from '@ant-design/icons-vue'
+import { MODEL_OPTIONS } from '@/constants/models'
 
 const setting = useSetting()
-const models = ref(['gpt-4.1', 'gpt-4o-mini', "gpt-4.1-mini", 'gpt-5'])
+const models = MODEL_OPTIONS
 
 const props = defineProps<{
   visible: boolean

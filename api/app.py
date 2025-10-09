@@ -1,4 +1,3 @@
-# api/app.py
 import os
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -6,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import HTTPException as StarletteHTTPException
-# 关键：目录名统一为 routers
 from .routes import responses as responses_router
 from .routes import files as files_router
+from .routes import audio as audio_router
 
 SERVE_SPA = os.getenv("SERVE_SPA", "false").lower() == "true"
 
@@ -54,6 +53,7 @@ app.add_middleware(
 # 关键：传入的是“路由对象”，不是模块
 app.include_router(responses_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
+app.include_router(audio_router.router, prefix="/api")
 
 if SERVE_SPA:
     FRONTEND_DIST = (Path(__file__).resolve().parent.parent / "web" / "dist").resolve()
