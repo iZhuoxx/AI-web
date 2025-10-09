@@ -1,4 +1,4 @@
-## AI Toolbox-WEB
+## AI Toolbox
 
 
 ## 快速开始
