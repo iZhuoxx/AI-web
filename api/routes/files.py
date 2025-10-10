@@ -39,7 +39,7 @@ PREFERRED_ENCODINGS = (
     "latin-1",
 )
 
-MAX_FILE_MB = 25
+MAX_FILE_MB = 250
 MAX_TEXT_CHARS = 120_000
 
 def _check_auth(request: Request):

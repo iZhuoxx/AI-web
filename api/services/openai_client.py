@@ -33,7 +33,7 @@ async def create_client(timeout: float = 60.0):
 async def responses_stream(payload: Dict[str, Any]) -> AsyncIterator[str]:
     # data = normalize_responses_payload(payload)
     data = payload
-    print("DEBUG final payload (stream):", data)  # 调试用
+    print("DEBUG final payload (stream):", data)  
     async with create_client() as client:
         async with client.stream(
             "POST",

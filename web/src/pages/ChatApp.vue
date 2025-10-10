@@ -7,7 +7,7 @@ import {
   PlusCircleOutlined
 } from '@ant-design/icons-vue'
 
-import Message from './components/message.vue'
+import Message from '.././components/message.vue'
 
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import useMessages from '@/composables/messages'
