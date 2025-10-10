@@ -7,10 +7,9 @@ export {}
 
 declare module '@vue/runtime-core' {
   export interface GlobalComponents {
-    APopconfirm: typeof import('ant-design-vue/es')['Popconfirm']
+    AppSidebar: typeof import('./src/components/AppSidebar.vue')['default']
     ASelect: typeof import('ant-design-vue/es')['Select']
     ASelectOption: typeof import('ant-design-vue/es')['SelectOption']
-    ATooltip: typeof import('ant-design-vue/es')['Tooltip']
     MarkdownRenderer: typeof import('./src/components/MarkdownRenderer.vue')['default']
     Message: typeof import('./src/components/message.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

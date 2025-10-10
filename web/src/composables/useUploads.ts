@@ -81,18 +81,22 @@ export function useUploads() {
 
   // 通用文件
   const genericFiles = ref<GenericItem[]>([])
+  const audioJobs = new Map<GenericItem, Promise<void>>()
+
   async function addGenericFiles(files: File[]) {
     const others = files.filter(f => !/^image\//.test(f.type))
     for (const f of others) {
       if (isAudioFile(f)) {
-        genericFiles.value.push({
+        const audioItem: GenericItem = {
           name: f.name,
           size: f.size,
           type: f.type || 'audio/mpeg',
           file: f,
           status: 'pending',
           kind: 'audio',
-        })
+        }
+        genericFiles.value.push(audioItem)
+        queueAudioTranscription(audioItem)
         continue
       }
       const pdf = isPdf(f)
@@ -238,24 +242,46 @@ export function useUploads() {
     return text
   }
 
-  async function ensureAudioTranscriptions() {
-    for (const it of genericFiles.value) {
-      if (it.kind !== 'audio') continue
-      if (it.status === 'ok') continue
-      if (!it.file) continue
-      try {
-        const text = await transcribeAudioRequest(it.file)
+  function queueAudioTranscription(it: GenericItem) {
+    if (!it.file || audioJobs.has(it)) return
+    it.status = 'pending'
+    const job = transcribeAudioRequest(it.file)
+      .then(text => {
         it.text = text
         it.truncated = false
         it.status = 'ok'
         it.error = undefined
         it.file = undefined
-      } catch (err: any) {
+        it.kind = 'text'
+      })
+      .catch((err: any) => {
         console.error('audio transcription error', err)
         it.status = 'error'
         it.error = err?.message || String(err)
+      })
+      .finally(() => {
+        audioJobs.delete(it)
+      })
+    audioJobs.set(it, job)
+  }
+
+  function ensureAudioJobs() {
+    for (const it of genericFiles.value) {
+      if (it.kind === 'audio' && it.file) {
+        queueAudioTranscription(it)
       }
     }
+  }
+
+  async function waitForAudioJobs() {
+    if (!audioJobs.size) return
+    const jobs = Array.from(audioJobs.values())
+    await Promise.allSettled(jobs)
+  }
+
+  async function ensureAudioTranscriptions() {
+    ensureAudioJobs()
+    await waitForAudioJobs()
   }
 
   /**

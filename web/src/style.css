@@ -101,13 +101,11 @@ a:hover { color: var(--link-hover); }
 /* 你如果确实要全站居中，打开下面两行；否则删掉更安全 */
 
 body {
-  display: grid;
-  place-items: center;
+  display: block;
 }
 
 .chat-footer { /* 也可继续保留你对 #footer 的样式 */
 border-top: 1px solid #e5e7eb;
 background: #fff;
 }
-
 
