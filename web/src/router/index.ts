@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
-import ChatApp from '@/ChatApp.vue'
+import ChatApp from '@/pages/ChatApp.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
 
 const routes: RouteRecordRaw[] = [

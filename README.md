@@ -34,3 +34,8 @@ pnpm run dev
 python3 -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### 语音转写
+
+- 新增 `POST /api/audio/transcriptions` 接口，支持 mp3、wav、webm 等常见音频，默认使用 `gpt-4o-transcribe` 模型，返回纯文本结果。
+- 前端的附件按钮支持文本、PDF 与音频（mp3、wav 等），音频在选中后将立即后台并行转写，发送前系统会自动等待转写完成并附带识别文本。
+- 麦克风按钮可直接录音：再次点击会触发后台转写并把识别文字填入输入框，可确认或继续编辑后发送。

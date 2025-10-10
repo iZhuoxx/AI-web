@@ -10,7 +10,7 @@ router = APIRouter(prefix="/audio", tags=["audio"])
 
 DEFAULT_AUDIO_MODEL = "gpt-4o-transcribe"
 DEFAULT_RESPONSE_FORMAT = "text"
-MAX_AUDIO_MB = 25
+MAX_AUDIO_MB = 250
 
 
 def _check_auth(request: Request) -> None:
