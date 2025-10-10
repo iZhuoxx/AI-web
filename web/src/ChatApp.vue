@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import {
-  ClearOutlined, LoadingOutlined,
+  LoadingOutlined,
   PictureOutlined, CloseOutlined, PaperClipOutlined,
   SendOutlined, PauseCircleOutlined,
-  AudioOutlined, AudioFilled
+  AudioOutlined, AudioFilled,
+  PlusCircleOutlined
 } from '@ant-design/icons-vue'
 
 import Message from './components/message.vue'
 
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import useMessages from '@/composables/messages'
 import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
@@ -56,6 +57,7 @@ const transcriptPreview = computed(() => {
   return preview.length > 160 ? `${preview.slice(0, 160)}…` : preview
 })
 const audioErrorText = computed(() => audioErrorMessage.value || '')
+const hasPendingUploads = computed(() => genericFiles.value.some(it => it.status === 'pending'))
 
 const chatMessages = messages.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
@@ -65,9 +67,10 @@ const handlePaste = (event: ClipboardEvent) => {
 }
 
 const state = reactive({ message: '' })
-const hasPayload = computed(
-  () => state.message.trim().length > 0 || imageFiles.value.length > 0 || genericFiles.value.length > 0
+const hasPayload = computed(() =>
+  state.message.trim().length > 0 || imageFiles.value.length > 0 || genericFiles.value.length > 0
 )
+const canSend = computed(() => hasPayload.value && !hasPendingUploads.value)
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const MAX_TEXTAREA_H = 240
@@ -99,6 +102,18 @@ const appendTranscriptToComposer = async (text: string) => {
   await nextTick()
   autoResize()
 }
+
+watch(hasPendingUploads, (pending) => {
+  if (pending) {
+    if (!audioStatusMessage.value) {
+      setAudioStatus('音频正在转写中…')
+    }
+  } else if (!isAudioRecording.value && !isAudioTranscribing.value) {
+    if (!audioErrorText.value) {
+      audioStatusMessage.value = ''
+    }
+  }
+})
 
 const handleTranscript = async (text: string, label?: string) => {
   const cleaned = text.trim()
@@ -191,6 +206,13 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   ev?.preventDefault?.()
   const text = state.message.trim()
   if (!text && !imageFiles.value.length && !genericFiles.value.length) return
+  if (hasPendingUploads.value) {
+    await ensureAudioTranscriptions()
+  }
+  if (hasPendingUploads.value) {
+    setAudioStatus('仍有文件处理中，请稍后再试')
+    return
+  }
 
   // 1) 先确保文本文件上传，拿到提取结果
   await ensureUploads()
@@ -222,7 +244,12 @@ async function handlePrimaryAction() {
     stop()
     return
   }
-  if (!hasPayload.value) return
+  if (!canSend.value) {
+    if (hasPendingUploads.value) {
+      setAudioStatus('文件处理中，请稍候')
+    }
+    return
+  }
   await onSend()
 }
 </script>
@@ -230,23 +257,15 @@ async function handlePrimaryAction() {
 
 <template>
   <div id="layout">
-    <header id="header" class="bg-white/80 backdrop-blur text-gray-900 h-12 flex items-center shadow-sm">
+    <header id="header">
       <div class="header-container">
         <div class="header-inner">
           <div class="left">
-            <LoadingOutlined v-if="loadding" class="mr-2" />
-            <span class="title">Kooii AI工具箱</span>
-
-            <a-tooltip>
-              <a-popconfirm
-                title="你确定要清空消息记录吗?"
-                ok-text="是的"
-                cancel-text="取消"
-                @confirm="clearMessages"
-              >
-                <ClearOutlined class="icon" />
-              </a-popconfirm>
-            </a-tooltip>
+            <LoadingOutlined v-if="loadding" class="header-spinner" />
+            <button class="new-convo" type="button" @click="clearMessages">
+              <PlusCircleOutlined class="new-convo__icon" />
+              <span class="new-convo__label">新对话</span>
+            </button>
 
             <div class="model-select">
               <a-select
@@ -254,7 +273,7 @@ async function handlePrimaryAction() {
                 class="model-select__control"
                 size="small"
                 dropdown-class-name="model-select__dropdown"
-                :dropdownMatchSelectWidth="false"   
+                :dropdownMatchSelectWidth="false"
               >
                 <a-select-option v-for="model in modelOptions" :key="model" :value="model">
                   {{ model }}
@@ -328,7 +347,7 @@ async function handlePrimaryAction() {
                 <button
                   class="primary-action"
                   :class="{ 'is-stop': loadding }"
-                  :disabled="!loadding && !hasPayload"
+                  :disabled="!loadding && !canSend"
                   @click="handlePrimaryAction"
                   type="button"
                 >
@@ -392,24 +411,63 @@ async function handlePrimaryAction() {
 
 <style scoped>
 /* ====== 布局基础 ====== */
-#layout { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #f7f7f8; }
+#layout { display: flex; flex-direction: column; width: 100%; height: 100%; background: #f7f7f8; }
 #layout-body { flex: 1 1 0%; overflow-y: auto; display: flex; flex-direction: column; }
 #main { flex: 1 1 auto; display: flex; padding: 24px 0 0; }
 
 
 
 /* 顶部栏 */
-#header { position: sticky; top: 0; z-index: 10; }
-.header-container { width: 100%; padding: 0 16px; }
-#header .header-inner { display: flex; align-items: center; justify-content: space-between; height: 48px; }
-#header .title { font-weight: 600; }
-#header .icon { margin-left: 12px; cursor: pointer; color: #6b7280; transition: color .15s ease, transform .15s ease; }
-#header .icon:hover { color: #111827; transform: translateY(-1px); }
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: transparent;
+  box-shadow: none;
+  padding: 20px 0 12px;
+}
+.header-container { width: 100%; padding: 0 24px; }
+#header .header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#header .left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.header-spinner {
+  color: #2563eb;
+  font-size: 16px;
+}
+.new-convo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: 999px;
+  border: 0px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #161c2f;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease;
+}
+.new-convo:hover {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.45);
+  color: #1e40af;
+}
+.new-convo__icon {
+  font-size: 18px;
+}
 .model-select {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: 12px;
 }
 
 .model-select :deep(.ant-select-selector) {
@@ -430,7 +488,7 @@ async function handlePrimaryAction() {
 
 .model-select :deep(.ant-select-selection-item),
 .model-select :deep(.ant-select-selection-placeholder) {
-  font-size: 13px;
+  font-size: 17px;
   line-height: 30px;            /* 与 min-height 对齐，保证垂直居中 */
   display: inline-flex;
   align-items: center;           /* 垂直居中 */
@@ -456,8 +514,8 @@ async function handlePrimaryAction() {
 }
 
 .model-select :deep(.ant-select-selector:hover) {
-  background: rgba(0,0,0,0.04);
-  border-radius: 8px;
+  background: rgba(0,0,0,0.04) !important;
+  border-radius: 8px !important;
 }
 
 .model-select__dropdown {
