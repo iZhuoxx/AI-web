@@ -1,119 +1,81 @@
 <template>
   <a-card class="transcription-panel" :bordered="false" :body-style="{ padding: '0', height: '100%' }">
-    <!-- Header / Toolbar (sticky) -->
-    <div class="panel-header">
-      <div class="panel-header__actions">
-        <div
-          class="search-pill"
-          :class="{ 'search-pill--active': searchActive }"
-          role="button"
-          tabindex="0"
-          @click.stop="activateSearch"
-          @keydown.enter.prevent="activateSearch"
-          @keydown.space.prevent="activateSearch"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="search-pill__icon">
-            <path
-              d="M21.53 20.47l-3.66-3.66C19.195 15.24 20 13.214 20 11c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9c2.215 0 4.24-.804 5.808-2.13l3.66 3.66c.147.146.34.22.53.22s.385-.073.53-.22c.295-.293.295-.767.002-1.06zM3.5 11c0-4.135 3.365-7.5 7.5-7.5s7.5 3.365 7.5 7.5-3.365 7.5-7.5 7.5-7.5-3.365-7.5-7.5z"
-            />
-          </svg>
-          <template v-if="searchActive">
-            <input
-              ref="inlineSearchInputRef"
-              class="search-pill__input"
-              type="search"
-              :placeholder="placeholderText"
-              v-model="searchValue"
-              @click.stop
-              @input="onUserInput"
-              @keydown.enter="handleSearch"
-              @blur="handleSearchBlur"
-            />
-            <button
-              v-if="searchValue"
-              type="button"
-              class="search-pill__clear"
-              @click.stop="clearSearch"
-              aria-label="清空搜索"
-            >
-              ✕
-            </button>
-          </template>
-          <template v-else>
-            <span class="search-pill__label">搜索</span>
-          </template>
-        </div>
-
-        <div class="action-buttons">
-          <a-tooltip placement="bottom" title="复制全部文字">
-            <a-button
-              size="small"
-              shape="round"
-              @click="copyAll"
-              :disabled="!hasContent"
-              class="action-btn"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
-                  <path
-                    d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v15h13a2 2 0 0 0 2-2V5zm-2 15H8V7h9v13z"
-                  />
-                </svg>
-              </template>
-              复制
-            </a-button>
-          </a-tooltip>
-
-          <a-tooltip placement="bottom" title="下载为文本文件">
-            <a-button
-              size="small"
-              shape="round"
-              @click="downloadTxt"
-              :disabled="!hasContent"
-              class="action-btn"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
-                  <path
-                    d="M12 3v12.586l4.95-4.95 1.414 1.414L12 18.414 5.636 12.05l1.414-1.414L11 15.586V3h2zM5 19h14v2H5v-2z"
-                  />
-                </svg>
-              </template>
-              导出
-            </a-button>
-          </a-tooltip>
-
-          <a-tooltip placement="bottom" title="清空筛选">
-            <a-button
-              size="small"
-              shape="round"
-              class="action-btn"
-              @click="handleClearAction"
-              :disabled="!searchValue && !hasContent"
-            >
-              <template #icon>
-                <svg viewBox="0 0 24 24" aria-hidden="true" class="action-icon">
-                  <path d="M5 5h14v2H5V5zm2 4h10l-1 11H8L7 9zm5-7a3 3 0 0 1 3 3H9a3 3 0 0 1 3-3z" />
-                </svg>
-              </template>
-              清空
-            </a-button>
-          </a-tooltip>
-        </div>
-      </div>
-
-      <div class="toolbar-row">
+    <!-- Body -->
+    <div class="panel-body">
+      <div class="floating-controls">
         <a-segmented
           v-model:value="density"
           :options="densityOptions"
-          class="density"
+          class="density density--floating"
         />
+        <div class="body-actions">
+          <div
+            class="search-pill"
+            :class="{ 'search-pill--active': searchActive }"
+            role="button"
+            tabindex="0"
+            @click.stop="activateSearch"
+            @keydown.enter.prevent="activateSearch"
+            @keydown.space.prevent="activateSearch"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="search-pill__icon">
+              <path
+                d="M21.53 20.47l-3.66-3.66C19.195 15.24 20 13.214 20 11c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9c2.215 0 4.24-.804 5.808-2.13l3.66 3.66c.147.146.34.22.53.22s.385-.073.53-.22c.295-.293.295-.767.002-1.06zM3.5 11c0-4.135 3.365-7.5 7.5-7.5s7.5 3.365 7.5 7.5-3.365 7.5-7.5 7.5-7.5-3.365-7.5-7.5z"
+              />
+            </svg>
+            <template v-if="searchActive">
+              <input
+                ref="inlineSearchInputRef"
+                class="search-pill__input"
+                type="search"
+                :placeholder="placeholderText"
+                v-model="searchValue"
+                @click.stop
+                @input="onUserInput"
+                @keydown.enter="handleSearch"
+                @blur="handleSearchBlur"
+              />
+              <button
+                v-if="searchValue"
+                type="button"
+                class="search-pill__clear"
+                @click.stop="clearSearch"
+                aria-label="清空搜索"
+              >
+                ✕
+              </button>
+            </template>
+          </div>
+          <a-tooltip placement="bottom" title="复制全部文字">
+            <button
+              type="button"
+              class="body-action-btn"
+              @click="copyAll"
+              :disabled="!hasContent"
+              aria-label="复制全部文字"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="body-action-icon">
+                <path
+                  d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v15h13a2 2 0 0 0 2-2V5zm-2 15H8V7h9v13z"
+                />
+              </svg>
+            </button>
+          </a-tooltip>
+          <a-tooltip placement="bottom" title="清空筛选">
+            <button
+              type="button"
+              class="body-action-btn"
+              @click="handleClearAction"
+              :disabled="!searchValue && !hasContent"
+              aria-label="清空筛选"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="body-action-icon">
+                <path d="M5 5h14v2H5V5zm2 4h10l-1 11H8L7 9zm5-7a3 3 0 0 1 3 3H9a3 3 0 0 1 3-3z" />
+              </svg>
+            </button>
+          </a-tooltip>
+        </div>
       </div>
-    </div>
-
-    <!-- Body -->
-    <div class="panel-body">
-
       <div
         class="transcription-list"
         ref="scrollRef"
@@ -354,18 +316,6 @@ const copyAll = async () => {
   }
 }
 
-const downloadTxt = () => {
-  if (!hasContent.value) return
-  const text = exportSegments.value.map(s => `[${s.timestamp}] ${s.text}`).join('\n')
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `transcription-${new Date().toISOString().slice(0, 19)}.txt`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 const handleSearch = async () => {
   await nextTick()
   if (searchValue.value && scrollRef.value) {
@@ -466,84 +416,110 @@ onUnmounted(() => {
   background: #fff;
 }
 
-/* Sticky Header */
-.panel-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 12px 16px 4px;
-  background: var(--panel-bg);
-}
-
-.panel-header__actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-/* 顶部行布局 */
-.toolbar-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .density :deep(.ant-segmented-item) { padding: 2px 8px; }
 
-/* 显示区域 */
 .panel-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   background: #fff;
+  padding: 0;
 }
 
-.action-buttons {
-  display: flex;
+.floating-controls {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  z-index: 2;
+  background: transparent;
+  border-radius: 999px;
+  padding: 0;
+}
+
+.density--floating :deep(.ant-segmented-item) {
+  padding: 1px 7px;
+  font-size: 12px;
+}
+
+.body-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.body-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f172a;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.body-action-btn:hover {
+  background: rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.body-action-btn:active {
+  transform: translateY(0);
+}
+
+.body-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  background: transparent;
+}
+
+.body-action-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
 .search-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  background: #fff;
-  color: #475569;
-  cursor: text;
-  min-height: 32px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  width: 32px;
   height: 32px;
-  width: 100px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, width 0.25s ease;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s ease, width 0.25s ease, padding 0.25s ease;
 }
 
 .search-pill--active {
-  width: min(320px, 100%);
+  cursor: text;
+  width: clamp(190px, 26vw, 320px);
+  padding: 0 12px;
+  gap: 6px;
+  justify-content: flex-start;
   border-color: rgba(37, 99, 235, 0.45);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  background: #fff;
 }
 
 .search-pill__icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
   flex-shrink: 0;
-}
-
-.search-pill__label {
-  font-size: 13px;
-  color: inherit;
-  white-space: nowrap;
 }
 
 .search-pill__input {
@@ -569,47 +545,18 @@ onUnmounted(() => {
   color: #1f2937;
 }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  background: #fff;
-  color: #1f2937;
-  height: 32px;
-  border-radius: 999px;
-  padding: 0 14px;
-  transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.action-btn:not(:disabled):hover {
-  border-color: rgba(37, 99, 235, 0.55);
-  color: #1d4ed8;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
-}
-
-.action-btn:disabled {
-  color: #94a3b8;
-  border-color: rgba(148, 163, 184, 0.25);
-  box-shadow: none;
-}
-
-.action-icon {
-  width: 14px;
-  height: 14px;
-  fill: currentColor;
-}
-
 /* 列表 */
 .transcription-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px 56px;
+  padding: 12px 0 56px;
   background: #fff;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-top: 16px;
+  padding-right: 4px;
 }
 
 .segments-group {

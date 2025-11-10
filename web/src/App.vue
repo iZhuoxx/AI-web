@@ -20,16 +20,17 @@ const toggleSidebar = () => {
 <style scoped>
 .app-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 232px 1fr;
   height: 100vh;
   width: 100vw;
   background: #f7f7f8;
   color: #111827;
-  transition: grid-template-columns 0.25s ease;
+  transition: grid-template-columns 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: visible;
 }
 
 .app-shell.is-collapsed {
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 72px 1fr;
 }
 
 .app-main {
@@ -43,11 +44,11 @@ const toggleSidebar = () => {
 
 @media (max-width: 960px) {
   .app-shell {
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 208px 1fr;
   }
 
   .app-shell.is-collapsed {
-    grid-template-columns: 72px 1fr;
+    grid-template-columns: 56px 1fr;
   }
 }
 </style>

@@ -19,8 +19,9 @@ import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription
 import useSetting from '@/composables/setting'
 import { MODEL_OPTIONS } from '@/constants/models'
 
+const DEFAULT_CHAT_TOOLS = [{ type: 'image_generation' }]
 const messages = useMessages()
-const { loadding, send, stop } = useChat()
+const { loadding, send, stop } = useChat({ messagesStore: messages, tools: DEFAULT_CHAT_TOOLS })
 
 const {
   imageFiles,

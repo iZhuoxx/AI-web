@@ -16,6 +16,12 @@ export const AUDIO_EXTENSIONS = Object.freeze([
 export const TRANSCRIBE_ENDPOINT =
   import.meta.env.VITE_TRANSCRIBE_ENDPOINT?.trim() || '/api/audio/transcriptions'
 
+export const TRANSCRIBE_STREAM_ENDPOINT =
+  import.meta.env.VITE_TRANSCRIBE_STREAM_ENDPOINT?.trim() || '/api/audio/transcriptions/stream'
+
+export const TRANSCRIBE_REALTIME_WS_ENDPOINT =
+  import.meta.env.VITE_TRANSCRIBE_REALTIME_WS?.trim() || '/api/audio/transcriptions/live'
+
 const AUDIO_MIME_PREFIX = 'audio/'
 
 export function isAudioFile(file: File): boolean {

@@ -1,18 +1,47 @@
 // src/composables/useChat.ts
 import { ref, nextTick } from 'vue'
 import useSetting from '@/composables/setting'
-import useMessages from '@/composables/messages'
+import useMessages, { type MessagesStore } from '@/composables/messages'
 import { useResponsesStream } from '@/composables/useResponsesStream'
 import type { TFileInMessage } from '@/types' 
 
-export function useChat() {
+type ToolConfig = Record<string, any>
+
+export interface UseChatOptions {
+  messagesStore?: MessagesStore
+  storageKey?: string
+  tools?: ToolConfig[] | null | (() => ToolConfig[] | null | undefined)
+}
+
+export function useChat(options?: MessagesStore | UseChatOptions) {
   const setting = useSetting()
-  const messages = useMessages()
+  const resolvedStore: MessagesStore = (() => {
+    if (!options) return useMessages()
+    if ('addMessage' in (options as MessagesStore)) {
+      return options as MessagesStore
+    }
+    const opts = options as UseChatOptions
+    if (opts.messagesStore) return opts.messagesStore
+    if (opts.storageKey) return useMessages(opts.storageKey)
+    return useMessages()
+  })()
+  const messagesStore = resolvedStore
   const loadding = ref(false)
   let controller: AbortController | null = null
   let stoppedFlag = false
 
-  let lastCompletedResponseId: string | null = null
+  const initializePreferredTools = () => {
+    if (!options || 'addMessage' in (options as MessagesStore)) return
+    const candidate = (options as UseChatOptions).tools
+    if (candidate === undefined) return
+    const resolved =
+      typeof candidate === 'function'
+        ? candidate()
+        : candidate ?? null
+    messagesStore.setPreferredTools?.(resolved ?? null)
+  }
+
+  initializePreferredTools()
 
   const parseEvent = (line: string) => { try { return JSON.parse(line) } catch { return null } }
 
@@ -21,11 +50,13 @@ export function useChat() {
     imagesDataUrls,
     files,
     onDelta,
+    tools,
   }: {
     text: string
     imagesDataUrls: string[]
     files: TFileInMessage[]           
     onDelta?: (delta: string) => void
+    tools?: ToolConfig[] | null
   }) {
     const content = text.trim()
     if (!content && !imagesDataUrls.length && !files.length) return
@@ -34,7 +65,7 @@ export function useChat() {
     stoppedFlag = false
 
     // 入列用户消息
-    messages.addUserMessage({
+    messagesStore.addUserMessage({
       text: content,
       images: imagesDataUrls.slice(),
       files,
@@ -66,7 +97,7 @@ export function useChat() {
     input.push({ role: 'user', content: userContent })
 
     // 占位 assistant
-    messages.addAssistantPlaceholder()
+    messagesStore.addAssistantPlaceholder()
     await nextTick()
 
     // 开新控制器
@@ -81,10 +112,26 @@ export function useChat() {
       body.temperature = Number(temperature)
     }
     if (typeof maxOutputTokens === 'number') body.max_output_tokens = maxOutputTokens
+    const providedTools = Array.isArray(tools) ? tools : null
+    if (providedTools) {
+      messagesStore.setPreferredTools?.(providedTools)
+    }
+    const storedTools = Array.isArray(messagesStore.preferredTools?.value)
+      ? messagesStore.preferredTools.value
+      : null
     const configuredTools = Array.isArray((s as any).tools) ? (s as any).tools : null
-    body.tools = configuredTools && configuredTools.length
-      ? configuredTools
-      : [{ type: 'image_generation' }]
+    const effectiveTools =
+      (providedTools && providedTools.length
+        ? providedTools
+        : storedTools && storedTools.length
+        ? storedTools
+        : configuredTools && configuredTools.length
+        ? configuredTools
+        : null) ?? [{ type: 'image_generation' }]
+    body.tools = Array.isArray(effectiveTools)
+      ? JSON.parse(JSON.stringify(effectiveTools))
+      : effectiveTools
+    const lastCompletedResponseId = messagesStore.lastCompletedResponseId?.value ?? null
     if (lastCompletedResponseId) body.previous_response_id = lastCompletedResponseId
 
     const seenImagePayloads = new Set<string>()
@@ -148,7 +195,7 @@ export function useChat() {
         const prepared = clean.startsWith('data:')
           ? clean
           : `data:${mimeType || 'image/png'};base64,${clean}`
-        messages.appendImageToLastAssistant(prepared)
+        messagesStore.appendImageToLastAssistant(prepared)
       }
     }
 
@@ -157,31 +204,31 @@ export function useChat() {
         const evt = parseEvent(line); if (!evt) continue
 
         if (evt.type === 'response.completed' && evt.response?.id) {
-          lastCompletedResponseId = evt.response.id
-          messages.setLastAssistantMeta({ responseId: evt.response.id, completed: true, loading: false })
+          messagesStore.setLastCompletedResponseId?.(evt.response.id)
+          messagesStore.setLastAssistantMeta({ responseId: evt.response.id, completed: true, loading: false })
           pushImagesFromOutput(evt.response?.output)
         }
 
         if (evt.type === 'response.output_text.delta' && typeof evt.delta === 'string') {
-          messages.appendToLastAssistant(evt.delta)
+          messagesStore.appendToLastAssistant(evt.delta)
           onDelta?.(evt.delta)
         }
 
         if (evt.type === 'response.error' && evt.error) {
-          messages.setLastAssistantText('获取回复失败，请重试')
-          messages.setLastAssistantMeta({ error: true })
+          messagesStore.setLastAssistantText('获取回复失败，请重试')
+          messagesStore.setLastAssistantMeta({ error: true })
         }
 
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        messages.setLastAssistantText('获取回复失败，请重试')
-        messages.setLastAssistantMeta({ error: true })
+        messagesStore.setLastAssistantText('获取回复失败，请重试')
+        messagesStore.setLastAssistantMeta({ error: true })
       }
     } finally {
       controller = null
       loadding.value = false
-      messages.setLastAssistantMeta({ loading: false })
+      messagesStore.setLastAssistantMeta({ loading: false })
     }
   }
 
@@ -190,9 +237,8 @@ export function useChat() {
     controller?.abort()
     controller = null
     loadding.value = false
-    lastCompletedResponseId = null
-    messages.setLastAssistantMeta({ loading: false })
+    messagesStore.setLastAssistantMeta({ loading: false })
   }
 
-  return { loadding, send, stop }
+  return { loadding, send, stop, messagesStore }
 }

@@ -1,23 +1,10 @@
 <template>
   <div class="note-chat-panel">
-    <header class="chat-header compact">
-      <div class="header-inner">
-        <div class="header-left">
-          <LoadingOutlined v-if="loadding" class="header-spinner" />
-          <button
-            class="new-convo"
-            :class="{ selected: newConvoSelected }"
-            type="button"
-            @click="clearMessages"
-          >
-            <PlusCircleOutlined class="new-convo__icon" />
-            <span class="new-convo__label">新对话</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
     <div class="chat-main">
+      <div v-if="loadding" class="chat-main__status">
+        <LoadingOutlined class="chat-main__spinner" />
+        <span>回答生成中</span>
+      </div>
       <div
         ref="scrollContainer"
         class="messages"
@@ -140,7 +127,6 @@ import {
   PauseCircleOutlined,
   AudioOutlined,
   StopOutlined,
-  PlusCircleOutlined,
 } from '@ant-design/icons-vue'
 import { message as antdMessage } from 'ant-design-vue'
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
@@ -149,6 +135,14 @@ import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
 import useSetting from '@/composables/setting'
+
+export type NoteChatPanelExposed = {
+  startNewConversation: () => void
+}
+
+const emit = defineEmits<{
+  (e: 'has-messages-change', value: boolean): void
+}>()
 
 // 固定模型为 GPT-5
 const setting = useSetting()
@@ -194,6 +188,7 @@ const realtimeSegments = realtime.segments
 
 const chatMessages = messagesStore.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
+watch(hasMessages, value => emit('has-messages-change', value), { immediate: true })
 
 // 输入区
 const state = reactive({ message: '' })
@@ -377,13 +372,13 @@ watch([chatMessages, loadding], async () => {
   }
 }, { immediate: true })
 
-// ===== “新对话”按钮选中高亮（短暂） =====
-const newConvoSelected = ref(false)
-const clearMessages = () => {
+const startNewConversation = () => {
   messagesStore.clearMessages()
-  newConvoSelected.value = true
-  setTimeout(() => (newConvoSelected.value = false), 600)
 }
+
+defineExpose<NoteChatPanelExposed>({
+  startNewConversation,
+})
 
 // 生命周期
 const handlePaste = (event: ClipboardEvent) => { void onPaste(event) }
@@ -419,42 +414,24 @@ const handleAttachmentSelection = (event: Event) => {
 <style scoped>
 .note-chat-panel { display:flex; flex-direction:column; height:100%; min-height:0; background:#fff; }
 
-/* 更扁、更紧凑的顶部栏 */
-.chat-header { padding:8px 12px; border-bottom:none; background:#fff; }
-.chat-header.compact { padding:6px 10px; }
-.header-inner { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
-.header-left { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; justify-content:flex-end; }
-.header-spinner { color:#2563eb; font-size:16px; }
-
-/* 新对话按钮：默认白底，仅选中(聚焦/按下)时蓝色 */
-.new-convo {
-  display:inline-flex; align-items:center; gap:6px; padding:0 10px; height:28px;
-  border:1px solid rgba(148,163,184,0.35);
-  background:#fff; color:#1f2937; font-size:13px; font-weight:500; cursor:pointer;
-  border-radius:999px; transition:background .18s ease, color .18s ease, box-shadow .18s ease, transform .12s ease, border-color .18s ease;
-}
-.new-convo:hover {
-  border-color:rgba(37,99,235,0.45);
-  background:rgba(37,99,235,0.12);
-  color:#1d4ed8;
-}
-.new-convo:focus-visible {
-  outline:none;
-  box-shadow:0 0 0 2px rgba(37,99,235,0.2);
-}
-.new-convo:active {
-  transform:translateY(1px);
-}
-.new-convo.selected {
-  border-color:rgba(148,163,184,0.35);
-  background:#fff;
-  color:#1f2937;
-  box-shadow:none;
-}
-.new-convo__icon { font-size:16px; color:inherit; }
-.new-convo__label { line-height:1; }
-
 .chat-main { position:relative; /* 让悬浮按钮定位到容器内部 */ flex:1; display:flex; flex-direction:column; min-height:0; background:#fff; }
+.chat-main__status {
+  position:absolute;
+  top:10px;
+  right:14px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  color:#1d4ed8;
+  background:rgba(37,99,235,0.08);
+  border-radius:999px;
+  padding:4px 10px;
+  border:1px solid rgba(37,99,235,0.25);
+  z-index:5;
+  backdrop-filter:blur(6px);
+}
+.chat-main__spinner { font-size:14px; }
 .messages { flex:1; min-height:0; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:14px; background:#fff; }
 .messages--empty { justify-content:center; align-items:center; color:#94a3b8; font-size:13px; }
 .empty-hint { text-align:center; }

@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import ChatApp from '@/pages/ChatApp.vue'
 import PlaceholderPage from '@/pages/PlaceholderPage.vue'
-import NotesPage from '@/pages/NotesPage.vue'
+import NotesListView from '@/pages/NotesListView.vue'
+import NotesEditorView from '@/pages/NotesEditorView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -12,9 +13,15 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/notetaker',
-    name: 'notetaker',
-    component: NotesPage,
+    name: 'notes-list',
+    component: NotesListView,
     meta: { title: '笔记' },
+  },
+  {
+    path: '/notetaker/:id',
+    name: 'note-editor',
+    component: NotesEditorView,
+    meta: { title: '编辑笔记' },
   },
   {
     path: '/about',

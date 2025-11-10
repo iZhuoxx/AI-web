@@ -72,11 +72,11 @@ export function useSpeechToText(options?: SpeechToTextOptions) {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('model', chosenModel.value)
-    fd.append('response_format', 'text')
+    fd.append('response_format', 'json')
     if (chosenLanguage.value) {
       fd.append('language', chosenLanguage.value)
     }
-
+     fd.append('min_confidence', String(0.5));
     isTranscribing.value = true
     errorMessage.value = null
 

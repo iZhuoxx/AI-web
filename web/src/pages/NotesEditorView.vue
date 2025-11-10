@@ -146,14 +146,29 @@
                     </button>
                     <span class="tabs-nav__indicator" :style="tabsIndicatorStyle"></span>
                   </div>
-                  <button class="recording-toggle" type="button" @click="toggleRecordingPanel">
-                    <component :is="showRecordingPanel ? ChevronUpIcon : ChevronDownIcon" class="toggle-icon" />
-                  </button>
+                  <div class="insight-nav-actions">
+                    <button
+                      v-if="showNewChatButton"
+                      class="new-chat-trigger"
+                      type="button"
+                      @click="handleStartNewChat"
+                    >
+                      <PlusCircleIcon class="new-chat-trigger__icon" />
+                      <span>新对话</span>
+                    </button>
+                    <button class="recording-toggle" type="button" @click="toggleRecordingPanel">
+                      <component :is="showRecordingPanel ? ChevronUpIcon : ChevronDownIcon" class="toggle-icon" />
+                    </button>
+                  </div>
                 </div>
 
                 <div class="insight-stack__panels">
                   <div class="tabs-panel">
-                    <NoteChatPanel v-if="activeTab === 'chat'" />
+                    <NoteChatPanel
+                      v-if="activeTab === 'chat'"
+                      ref="noteChatPanelRef"
+                      @has-messages-change="handleChatMessagesChange"
+                    />
                     <NoteTranscriptionPanel
                       v-else-if="activeTab === 'realtime'"
                       :segments="transcriptSegments"
@@ -194,12 +209,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import type { CSSProperties } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon, ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon } from 'lucide-vue-next'
+import { ArrowLeftIcon, ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon, PlusCircleIcon } from 'lucide-vue-next'
 import type { KeywordItem, LearningMaterial, NoteItem, TranscriptSegment } from '@/types/notes'
 import NotebookNotesList from '@/components/note/NotebookNotesList.vue'
 import NoteEditorPanel from '@/components/note/NoteEditorPanel.vue'
 import NoteRecordingPanel from '@/components/note/NoteRecordingPanel.vue'
 import NoteChatPanel from '@/components/note/NoteChatPanel.vue'
+import type { NoteChatPanelExposed } from '@/components/note/NoteChatPanel.vue'
 import NoteKeywordsPanel from '@/components/note/NoteKeywordsPanel.vue'
 import NoteLearningPathPanel from '@/components/note/NoteLearningPathPanel.vue'
 import NoteMaterialsPanel from '@/components/note/NoteMaterialsPanel.vue'
@@ -220,6 +236,7 @@ const isEditingNotebookTitle = ref(false)
 const notebookTitleInput = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const tabsNavRef = ref<HTMLElement | null>(null)
+const noteChatPanelRef = ref<NoteChatPanelExposed | null>(null)
 const tabButtonRefs = reactive<Record<string, HTMLButtonElement | null>>({})
 const tabIndicator = reactive({ width: 0, left: 0, visible: false })
 const hasPendingChanges = ref(false)
@@ -229,6 +246,7 @@ const leavingEditor = ref(false)
 const isNotesFullscreen = ref(false)
 const showRecordingPanel = ref(true)
 const activeTab = ref('chat')
+const chatHasMessages = ref(false)
 const tabOptions = [
   { key: 'chat', label: 'AI 对话' },
   { key: 'realtime', label: '实时字幕' },
@@ -236,6 +254,7 @@ const tabOptions = [
   { key: 'learning', label: '学习路径' },
   { key: 'materials', label: '资料库' },
 ]
+const showNewChatButton = computed(() => activeTab.value === 'chat' && chatHasMessages.value)
 const leftPaneWidth = ref(45)
 const dragContainer = ref<HTMLElement | null>(null)
 const verticalDragging = ref(false)
@@ -637,6 +656,14 @@ const handleKeywordSelected = (keyword: string) => {
 
 const handleTabChange = (key: string) => {
   activeTab.value = key
+}
+
+const handleChatMessagesChange = (value: boolean) => {
+  chatHasMessages.value = value
+}
+
+const handleStartNewChat = () => {
+  noteChatPanelRef.value?.startNewConversation()
 }
 
 const enterFullscreen = () => {
@@ -1104,6 +1131,18 @@ watch(keywords, scheduleMaterialsUpdate, { deep: true, immediate: true })
   flex-wrap: wrap;
 }
 
+.insight-stack__nav .tabs-nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.insight-nav-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .insight-stack__panels {
   flex: 1;
   min-height: 0;
@@ -1149,6 +1188,39 @@ watch(keywords, scheduleMaterialsUpdate, { deep: true, immediate: true })
   background: #2563eb;
   transition: transform 0.25s ease, width 0.25s ease, opacity 0.2s ease;
   pointer-events: none;
+}
+
+.new-chat-trigger {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: #fff;
+  padding: 0 14px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.new-chat-trigger:hover {
+  border-color: rgba(37, 99, 235, 0.45);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.new-chat-trigger:active {
+  transform: translateY(0);
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.new-chat-trigger__icon {
+  width: 16px;
+  height: 16px;
 }
 
 .recording-toggle {
