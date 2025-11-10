@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import {
   LoadingOutlined,
-  PictureOutlined, CloseOutlined, PaperClipOutlined,
-  SendOutlined, PauseCircleOutlined,
-  AudioOutlined, AudioFilled,
-  PlusCircleOutlined
+  CloseOutlined,
+  PaperClipOutlined,
+  SendOutlined,
+  PauseCircleOutlined,
+  AudioOutlined,
+  StopOutlined,
+  PlusCircleOutlined,
 } from '@ant-design/icons-vue'
-
+import { message as antdMessage } from 'ant-design-vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import Message from '.././components/message.vue'
-
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import useMessages from '@/composables/messages'
 import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
-import { useSpeechToText } from '@/composables/useSpeechToText'
+import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
 import useSetting from '@/composables/setting'
 import { MODEL_OPTIONS } from '@/constants/models'
 
@@ -21,24 +23,36 @@ const messages = useMessages()
 const { loadding, send, stop } = useChat()
 
 const {
-  imageFiles, imagePreviews, genericFiles, dragOver,
-  onPickImages, addGenericFiles, removeGenericFile,
-  onPaste, onDragOver, onDragLeave, onDrop,
-  ensureUploads, ensureAudioTranscriptions, fileToDataURL, removeImage, resetAll,
+  imageFiles,
+  imagePreviews,
+  genericFiles,
+  dragOver,
+  addGenericFiles,
+  removeGenericFile,
+  onPaste,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  ensureUploads,
+  ensureAudioTranscriptions,
+  fileToDataURL,
+  removeImage,
+  resetAll,
   filesForChat,
-  addImages,                
+  addImages,
 } = useUploads()
 
 const setting = useSetting()
-const speech = useSpeechToText()
-const isAudioRecording = speech.isRecording
-const isAudioTranscribing = speech.isTranscribing
-const canUseMicrophone = speech.canRecord
-const lastTranscript = speech.lastTranscript
-const audioErrorMessage = speech.errorMessage
-const startAudioRecording = speech.startRecording
-const stopRecordingAndTranscribe = speech.stopRecordingAndTranscribe
-const cancelAudioRecording = speech.cancelRecording
+
+const realtime = useRealtimeTranscription({ includeLogprobs: true, minConfidence: 0 })
+const canUseMicrophone = realtime.canRecord
+const isAudioRecording = realtime.isRecording
+const liveTranscript = realtime.liveText
+const transcriptAggregate = realtime.transcriptText
+const audioErrorMessage = realtime.errorMessage
+const startRealtimeRecording = realtime.startRecording
+const stopRealtimeRecording = realtime.stopRecording
+const realtimeSegments = realtime.segments
 
 const modelOptions = MODEL_OPTIONS
 const selectedModel = computed({
@@ -50,13 +64,7 @@ const selectedModel = computed({
   },
 })
 
-const audioStatusMessage = ref('')
-const transcriptPreview = computed(() => {
-  const preview = lastTranscript.value.trim()
-  if (!preview) return ''
-  return preview.length > 160 ? `${preview.slice(0, 160)}…` : preview
-})
-const audioErrorText = computed(() => audioErrorMessage.value || '')
+const isAudioProcessing = ref(false)
 const hasPendingUploads = computed(() => genericFiles.value.some(it => it.status === 'pending'))
 
 const chatMessages = messages.messages
@@ -67,65 +75,48 @@ const handlePaste = (event: ClipboardEvent) => {
 }
 
 const state = reactive({ message: '' })
-const hasPayload = computed(() =>
-  state.message.trim().length > 0 || imageFiles.value.length > 0 || genericFiles.value.length > 0
+const hasPayload = computed(
+  () =>
+    state.message.trim().length > 0 ||
+    imageFiles.value.length > 0 ||
+    genericFiles.value.length > 0,
 )
 const canSend = computed(() => hasPayload.value && !hasPendingUploads.value)
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const MAX_TEXTAREA_H = 240
 const autoResize = () => {
-  const el = textareaRef.value; if (!el) return
+  const el = textareaRef.value
+  if (!el) return
   el.style.height = '0px'
   const h = Math.min(el.scrollHeight, MAX_TEXTAREA_H)
-  el.style.height = h + 'px'
+  el.style.height = `${h}px`
   el.style.overflowY = el.scrollHeight > MAX_TEXTAREA_H ? 'auto' : 'hidden'
-}
-
-const setAudioStatus = (message: string) => {
-  audioStatusMessage.value = message
 }
 
 const clearAudioError = () => {
   audioErrorMessage.value = null
 }
 
-const appendTranscriptToComposer = async (text: string) => {
-  const trimmed = text.trim()
-  if (!trimmed) return
-  if (!state.message) {
-    state.message = trimmed
-  } else {
-    const needsSpace = !state.message.endsWith('\n') && !state.message.endsWith(' ')
-    state.message = `${state.message}${needsSpace ? ' ' : ''}${trimmed}`
-  }
-  await nextTick()
-  autoResize()
-}
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
 
-watch(hasPendingUploads, (pending) => {
-  if (pending) {
-    if (!audioStatusMessage.value) {
-      setAudioStatus('音频正在转写中…')
+const waitForFinalTranscript = async (timeoutMs = 2000): Promise<string> => {
+  const deadline = Date.now() + timeoutMs
+  let lastSeen = ''
+  while (Date.now() < deadline) {
+    const current = transcriptAggregate.value.trim()
+    if (current && current !== lastSeen) {
+      lastSeen = current
+      if (!isAudioRecording.value) {
+        return current
+      }
     }
-  } else if (!isAudioRecording.value && !isAudioTranscribing.value) {
-    if (!audioErrorText.value) {
-      audioStatusMessage.value = ''
+    if (!isAudioRecording.value && current) {
+      return current
     }
+    await delay(120)
   }
-})
-
-const handleTranscript = async (text: string, label?: string) => {
-  const cleaned = text.trim()
-  if (!cleaned) {
-    audioErrorMessage.value = '语音识别结果为空，请重试'
-    setAudioStatus('')
-    return
-  }
-  await appendTranscriptToComposer(cleaned)
-  setAudioStatus('')
-  lastTranscript.value = ''
-  audioErrorMessage.value = null
+  return transcriptAggregate.value.trim()
 }
 
 function isFileDrag(e: DragEvent) {
@@ -152,37 +143,70 @@ function globalDrop(e: DragEvent) {
   if (others.length) addGenericFiles(others)
 }
 
+const handleAttachmentSelection = (event: Event) => {
+  const input = event.target as HTMLInputElement | null
+  if (!input?.files) return
+  const files = Array.from(input.files)
+  if (!files.length) return
+  const images = files.filter(file => /^image\//.test(file.type))
+  const others = files.filter(file => !/^image\//.test(file.type))
+  if (images.length) addImages(images)
+  if (others.length) addGenericFiles(others)
+  input.value = ''
+}
+
+const resetRecordingBuffers = () => {
+  liveTranscript.value = ''
+  realtimeSegments.value = []
+}
+
+const sendTranscriptionMessage = async (text: string) => {
+  const cleaned = text.trim()
+  if (!cleaned) {
+    throw new Error('实时转写结果为空，请重试')
+  }
+  state.message = cleaned
+  await onSend()
+}
+
 async function toggleRecording() {
   if (!canUseMicrophone.value) {
-    audioErrorMessage.value = '当前浏览器暂不支持录音'
+    const msg = '当前浏览器暂不支持录音'
+    audioErrorMessage.value = msg
+    antdMessage.error(msg)
     return
   }
   clearAudioError()
   if (isAudioRecording.value) {
-    setAudioStatus('录音完成，正在转写…')
+    isAudioProcessing.value = true
     try {
-      const result = await stopRecordingAndTranscribe()
-      await handleTranscript(result.text, '语音录制')
+      await stopRealtimeRecording()
+      const finalText = await waitForFinalTranscript()
+      await sendTranscriptionMessage(finalText)
+      clearAudioError()
+      antdMessage.success('语音已转写到对话')
     } catch (err: any) {
-      audioErrorMessage.value = err?.message || '语音转写失败'
-      setAudioStatus('语音转写失败')
+      const fallbackMessage = err?.message || '实时转写失败'
+      audioErrorMessage.value = fallbackMessage
+      antdMessage.error(fallbackMessage)
+    } finally {
+      resetRecordingBuffers()
+      isAudioProcessing.value = false
     }
     return
   }
 
   try {
-    await startAudioRecording()
-    setAudioStatus('录音中，再次点击停止并转写')
+    isAudioProcessing.value = true
+    resetRecordingBuffers()
+    await startRealtimeRecording()
   } catch (err: any) {
-    audioErrorMessage.value = err?.message || '无法开始录音'
-    setAudioStatus('')
+    const fallbackMessage = err?.message || '无法启动实时转写'
+    audioErrorMessage.value = fallbackMessage
+    antdMessage.error(fallbackMessage)
+  } finally {
+    isAudioProcessing.value = false
   }
-}
-
-async function cancelRecordingIfNeeded() {
-  if (!isAudioRecording.value) return
-  await cancelAudioRecording()
-  setAudioStatus('录音已取消')
 }
 
 onMounted(() => {
@@ -206,36 +230,31 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   ev?.preventDefault?.()
   const text = state.message.trim()
   if (!text && !imageFiles.value.length && !genericFiles.value.length) return
+
   if (hasPendingUploads.value) {
     await ensureAudioTranscriptions()
   }
   if (hasPendingUploads.value) {
-    setAudioStatus('仍有文件处理中，请稍后再试')
+    antdMessage.info('仍有文件处理中，请稍后再试')
     return
   }
 
-  // 1) 先确保文本文件上传，拿到提取结果
   await ensureUploads()
   await ensureAudioTranscriptions()
 
-  // 2) 图片转 dataURL（仅前端展示 & 传给视觉模型）
   const imagesDataUrls: string[] = []
-  for (const f of imageFiles.value) {
-    imagesDataUrls.push(await fileToDataURL(f))
+  for (const file of imageFiles.value) {
+    imagesDataUrls.push(await fileToDataURL(file))
   }
-
-  // 3) 生成聊天用文件对象（包含提取后的文本）
   const files = filesForChat()
 
-  // 4) 立即清空输入与选择
   state.message = ''
   resetAll()
-  audioStatusMessage.value = ''
-  lastTranscript.value = ''
-  audioErrorMessage.value = null
-  await nextTick(); autoResize()
+  resetRecordingBuffers()
+  clearAudioError()
+  await nextTick()
+  autoResize()
 
-  // 5) 发送
   await send({ text, imagesDataUrls, files })
 }
 
@@ -246,7 +265,7 @@ async function handlePrimaryAction() {
   }
   if (!canSend.value) {
     if (hasPendingUploads.value) {
-      setAudioStatus('文件处理中，请稍候')
+      antdMessage.info('文件处理中，请稍候')
     }
     return
   }
@@ -306,17 +325,13 @@ async function handlePrimaryAction() {
             <div class="composer" :class="{ 'drag-over': dragOver }" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
               <div class="composer-inner">
                 <div class="composer-accessories">
-                  <label class="icon-btn" title="选择图片">
-                    <input type="file" accept="image/*" multiple style="display:none" @change="onPickImages" />
-                    <PictureOutlined />
-                  </label>
-                  <label class="icon-btn" title="选择文本、PDF 或音频">
+                  <label class="icon-btn" title="上传附件">
                     <input
                       type="file"
                       multiple
-                      accept="text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
+                      accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
                       style="display:none"
-                      @change="(e:any)=>addGenericFiles(Array.from(e.target.files||[]))"
+                      @change="handleAttachmentSelection"
                     />
                     <PaperClipOutlined />
                   </label>
@@ -325,12 +340,12 @@ async function handlePrimaryAction() {
                     class="icon-btn mic-btn"
                     :class="{ recording: isAudioRecording }"
                     type="button"
-                    :disabled="isAudioTranscribing"
+                    :disabled="isAudioProcessing"
                     @click="toggleRecording"
-                    :title="isAudioRecording ? '停止录音并转写' : '开始录音'"
+                    :title="isAudioRecording ? '停止实时转写' : '开始实时转写'"
                   >
-                    <LoadingOutlined v-if="isAudioTranscribing" />
-                    <AudioFilled v-else-if="isAudioRecording" />
+                    <LoadingOutlined v-if="isAudioProcessing" />
+                    <StopOutlined v-else-if="isAudioRecording" />
                     <AudioOutlined v-else />
                   </button>
                 </div>
@@ -373,33 +388,6 @@ async function handlePrimaryAction() {
                   <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
                 </div>
               </div>
-
-              <div
-                v-if="isAudioRecording || isAudioTranscribing || audioStatusMessage || audioErrorText || transcriptPreview"
-                class="audio-status"
-              >
-                <div class="audio-status__icon">
-                  <LoadingOutlined v-if="isAudioTranscribing" />
-                  <AudioFilled v-else-if="isAudioRecording" />
-                  <AudioOutlined v-else />
-                </div>
-                <div class="audio-status__body">
-                  <div v-if="audioStatusMessage" class="audio-status__message">{{ audioStatusMessage }}</div>
-                  <div v-if="transcriptPreview && !audioErrorText" class="audio-status__preview">
-                    {{ transcriptPreview }}
-                  </div>
-                  <div v-if="audioErrorText" class="audio-status__error">{{ audioErrorText }}</div>
-                </div>
-                <button
-                  v-if="isAudioRecording"
-                  class="audio-status__action"
-                  type="button"
-                  @click="cancelRecordingIfNeeded"
-                >
-                  取消
-                </button>
-              </div>
-
             </div>
           </div>
         </div>
@@ -699,56 +687,6 @@ async function handlePrimaryAction() {
   border-color: #0284c7;
 }
 
-.audio-status {
-  margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.32);
-}
-.audio-status__icon {
-  font-size: 16px;
-  color: #2563eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.audio-status__body {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.audio-status__message {
-  font-size: 13px;
-  color: #1f2937;
-  font-weight: 500;
-}
-.audio-status__preview {
-  font-size: 12px;
-  color: #374151;
-  line-height: 1.4;
-}
-.audio-status__error {
-  font-size: 12px;
-  color: #dc2626;
-}
-.audio-status__action {
-  border: none;
-  background: transparent;
-  color: #dc2626;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 6px;
-  transition: background .15s ease;
-}
-.audio-status__action:hover {
-  background: rgba(220, 38, 38, 0.08);
-}
 
 .preview-bar,
 .file-list {
@@ -864,3 +802,23 @@ async function handlePrimaryAction() {
 
 
 </style>
+
+
+.loader-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.loader-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  animation: loaderDots 1.2s infinite ease-in-out;
+}
+.loader-dots span:nth-child(2) { animation-delay: 0.15s; }
+.loader-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes loaderDots {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}

@@ -51,7 +51,7 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
     <!-- AI 消息 -->
     <template v-else>
       <div class="bubble ai">
-        <div v-if="props.message.meta?.loading && !props.message.msg" class="ai-status">正在思考…</div>
+        <div v-if="props.message.meta?.loading && !props.message.msg" class="ai-status"><span class="loader-dots"><span></span><span></span><span></span></span></div>
         <div v-else class="md-wrap">
           <MarkdownRenderer :source="props.message.msg" />
         </div>
@@ -98,7 +98,7 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
 .bubble.user { background: #e7f3ff; border-color: #d6e8ff; max-width: 60%; }
 .bubble.ai   { background: #fff;    border-color: #e5e7eb; }
 
-.ai-status { color: #64748b; font-size: 13px; }
+.ai-status { color: #64748b; font-size: 13px; display:flex; gap:6px; align-items:center; }
 
 .text { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .md-wrap :deep(.prose) { max-width: none; }
@@ -129,3 +129,9 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
   background: rgba(255,255,255,.9); border: 1px solid #e5e7eb; cursor: pointer;
 }
 </style>
+
+.ai-status .loader-dots{display:inline-flex;gap:4px;}
+.ai-status .loader-dots span{width:6px;height:6px;border-radius:50%;background:#64748b;animation:loaderDots 1.2s infinite ease-in-out;}
+.ai-status .loader-dots span:nth-child(2){animation-delay:0.15s;}
+.ai-status .loader-dots span:nth-child(3){animation-delay:0.3s;}
+@keyframes loaderDots{0%,80%,100%{transform:scale(0.6);opacity:0.4;}40%{transform:scale(1);opacity:1;}}
