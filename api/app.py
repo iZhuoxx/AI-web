@@ -8,6 +8,9 @@ from fastapi.exceptions import HTTPException as StarletteHTTPException
 from .routes import responses as responses_router
 from .routes import files as files_router
 from .routes import audio as audio_router
+from .routes import auth as auth_router
+from .routes import notes as notes_router
+from .routes import attachments as attachments_router
 
 SERVE_SPA = os.getenv("SERVE_SPA", "false").lower() == "true"
 
@@ -54,6 +57,9 @@ app.add_middleware(
 app.include_router(responses_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(audio_router.router, prefix="/api")
+app.include_router(auth_router.router, prefix="/api")
+app.include_router(notes_router.router, prefix="/api")
+app.include_router(attachments_router.router, prefix="/api")
 
 if SERVE_SPA:
     FRONTEND_DIST = (Path(__file__).resolve().parent.parent / "web" / "dist").resolve()

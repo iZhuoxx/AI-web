@@ -10,6 +10,9 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_COMP_URL = "https://api.openai.com/v1/completions"
 OPENAI_CHAT_COMP_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_AUDIO_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
+OPENAI_REALTIME_TRANSCRIBE_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
+# OPENAI_REALTIME_TRANSCRIBE_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime"
+
 
 
 
@@ -58,6 +61,8 @@ async def transcribe_audio(
     content_type: Optional[str],
     model: str,
     response_format: str = "text",
+    include: Optional[list[str]] = None,
+    timestamp_granularities: Optional[list[str]] = None,
     language: Optional[str] = None,
     temperature: Optional[float] = None,
     prompt: Optional[str] = None,
@@ -81,6 +86,15 @@ async def transcribe_audio(
         data["temperature"] = temperature
     if prompt:
         data["prompt"] = prompt
+    if include:
+        filtered_include = [item for item in include if item]
+        if filtered_include:
+            data["include[]"] = filtered_include
+    if timestamp_granularities:
+        filtered_granularity = [item for item in timestamp_granularities if item]
+        if filtered_granularity:
+            data["timestamp_granularities[]"] = filtered_granularity
+
     async with create_client(timeout=timeout) as client:
         response = await client.post(
             OPENAI_AUDIO_TRANSCRIPTIONS_URL,
@@ -116,3 +130,63 @@ async def transcribe_audio(
         "prompt": prompt,
         "raw": parsed_json,
     }
+
+
+async def stream_audio_transcription(
+    *,
+    filename: str,
+    content: bytes,
+    content_type: Optional[str],
+    model: str,
+    response_format: str = "text",
+    include: Optional[list[str]] = None,
+    timestamp_granularities: Optional[list[str]] = None,
+    language: Optional[str] = None,
+    temperature: Optional[float] = None,
+    prompt: Optional[str] = None,
+    timeout: float = 120.0,
+) -> AsyncIterator[str]:
+    headers = get_headers()
+    headers.pop("Content-Type", None)
+    files = {
+        "file": (
+            filename,
+            content,
+            content_type or "application/octet-stream",
+        )
+    }
+    data: Dict[str, Any] = {"model": model, "stream": "true"}
+    if response_format:
+        data["response_format"] = response_format
+    if language:
+        data["language"] = language
+    if temperature is not None:
+        data["temperature"] = temperature
+    if prompt:
+        data["prompt"] = prompt
+    if include:
+        filtered_include = [item for item in include if item]
+        if filtered_include:
+            data["include[]"] = filtered_include
+    if timestamp_granularities:
+        filtered_granularity = [item for item in timestamp_granularities if item]
+        if filtered_granularity:
+            data["timestamp_granularities[]"] = filtered_granularity
+
+    async with create_client(timeout=timeout) as client:
+        async with client.stream(
+            "POST",
+            OPENAI_AUDIO_TRANSCRIPTIONS_URL,
+            data=data,
+            files=files,
+            headers=headers,
+        ) as response:
+            if response.status_code >= 400:
+                body = await response.aread()
+                body_text = body.decode(errors="ignore")
+                raise RuntimeError(
+                    f"OpenAI audio transcription stream failed (HTTP {response.status_code}): {body_text}"
+                )
+            async for chunk in response.aiter_lines():
+                if chunk:
+                    yield chunk

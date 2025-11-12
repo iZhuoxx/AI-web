@@ -10,7 +10,7 @@ import {
   PlusCircleOutlined,
 } from '@ant-design/icons-vue'
 import { message as antdMessage } from 'ant-design-vue'
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import Message from '.././components/message.vue'
 import useMessages from '@/composables/messages'
 import { useChat } from '@/composables/useChat'
@@ -85,6 +85,8 @@ const hasPayload = computed(
 const canSend = computed(() => hasPayload.value && !hasPendingUploads.value)
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const chatRef = ref<HTMLElement | null>(null)
+const layoutBodyRef = ref<HTMLElement | null>(null)
 const MAX_TEXTAREA_H = 240
 const autoResize = () => {
   const el = textareaRef.value
@@ -259,6 +261,54 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   await send({ text, imagesDataUrls, files })
 }
 
+// Auto-scroll logic
+const isAutoScroll = ref(true)
+const showScrollToBottom = ref(false)
+const BOTTOM_THRESHOLD = 12
+
+const scrollToBottom = async () => {
+  await nextTick()
+  const el = layoutBodyRef.value
+  if (!el) return
+  try {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  } catch {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+const scrollToBottomAndEnableAuto = async () => {
+  await scrollToBottom()
+  isAutoScroll.value = true
+  showScrollToBottom.value = false
+}
+
+const onChatScroll = () => {
+  const el = layoutBodyRef.value
+  if (!el) return
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD
+  if (!atBottom) {
+    if (isAutoScroll.value) isAutoScroll.value = false
+    showScrollToBottom.value = true
+  } else {
+    showScrollToBottom.value = false
+  }
+}
+
+watch([chatMessages, loadding], async () => {
+  if (isAutoScroll.value) {
+    await scrollToBottom()
+  }
+}, { deep: true })
+
+onMounted(() => {
+  if (chatMessages.value.length) {
+    isAutoScroll.value = true
+    showScrollToBottom.value = false
+    void scrollToBottom()
+  }
+})
+
 async function handlePrimaryAction() {
   if (loadding.value) {
     stop()
@@ -266,7 +316,7 @@ async function handlePrimaryAction() {
   }
   if (!canSend.value) {
     if (hasPendingUploads.value) {
-      antdMessage.info('文件处理中，请稍候')
+      antdMessage.info('文件处理中,请稍候')
     }
     return
   }
@@ -274,14 +324,12 @@ async function handlePrimaryAction() {
 }
 </script>
 
-
 <template>
   <div id="layout">
     <header id="header">
       <div class="header-container">
         <div class="header-inner">
           <div class="left">
-            <LoadingOutlined v-if="loadding" class="header-spinner" />
             <button class="new-convo" type="button" @click="clearMessages">
               <PlusCircleOutlined class="new-convo__icon" />
               <span class="new-convo__label">新对话</span>
@@ -305,131 +353,297 @@ async function handlePrimaryAction() {
       </div>
     </header>
 
-    <div id="layout-body">
-      <main id="main">
-        <div class="container" :class="{ 'container--empty': !hasMessages }">
-          <div class="chat-container" :class="{ 'chat-container--empty': !hasMessages }">
-            <div v-if="!hasMessages" class="welcome-placeholder">
-              有什么可以帮您的吗？
-            </div>
-            <template v-else>
-              <Message
-                v-for="(msg, idx) in chatMessages"
-                :key="idx"
-                :message="msg"
-                :class="msg.type === 1 ? 'send' : 'replay'"
-              />
-            </template>
-          </div>
+    <div class="content-divider"></div>
 
-          <div class="composer-stage" :class="{ 'composer-stage--empty': !hasMessages }">
-            <div class="composer" :class="{ 'drag-over': dragOver }" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-              <div class="composer-inner">
-                <div class="composer-accessories">
-                  <label class="icon-btn" title="上传附件">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
-                      style="display:none"
-                      @change="handleAttachmentSelection"
-                    />
-                    <PaperClipOutlined />
-                  </label>
+    <div id="layout-body">
+      <div
+        id="main-scroll"
+        ref="layoutBodyRef"
+        :class="{ 'main-scroll--empty': !hasMessages }"
+        @scroll="onChatScroll"
+      >
+        <main id="main">
+          <div class="container" :class="{ 'container--empty': !hasMessages }">
+            <div
+              ref="chatRef"
+              class="chat-container"
+              :class="{ 'chat-container--empty': !hasMessages }"
+            >
+              <div v-if="!hasMessages" class="welcome-placeholder">
+                有什么可以帮您的吗？
+              </div>
+              <template v-else>
+                <Message
+                  v-for="(msg, idx) in chatMessages"
+                  :key="idx"
+                  :message="msg"
+                  :class="msg.type === 1 ? 'send' : 'replay'"
+                />
+              </template>
+            </div>
+
+            <!-- Composer inside scrollable area when no messages -->
+            <div v-if="!hasMessages" class="composer-stage composer-stage--empty">
+              <div class="composer" :class="{ 'drag-over': dragOver }" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+                <div class="composer-inner">
+                  <div class="composer-accessories">
+                    <label class="icon-btn" title="上传附件">
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
+                        style="display:none"
+                        @change="handleAttachmentSelection"
+                      />
+                      <PaperClipOutlined />
+                    </label>
+                    <button
+                      v-if="canUseMicrophone"
+                      class="icon-btn mic-btn"
+                      :class="{ recording: isAudioRecording }"
+                      type="button"
+                      :disabled="isAudioProcessing"
+                      @click="toggleRecording"
+                      :title="isAudioRecording ? '停止实时转写' : '开始实时转写'"
+                    >
+                      <LoadingOutlined v-if="isAudioProcessing" />
+                      <StopOutlined v-else-if="isAudioRecording" />
+                      <AudioOutlined v-else />
+                    </button>
+                  </div>
+                  <textarea
+                    ref="textareaRef"
+                    v-model="state.message"
+                    placeholder="发消息..."
+                    @input="autoResize"
+                    @keydown.enter.exact.prevent="handlePrimaryAction"
+                    @keydown.enter.shift.exact.stop
+                    class="composer-input"
+                    rows="1"
+                  />
                   <button
-                    v-if="canUseMicrophone"
-                    class="icon-btn mic-btn"
-                    :class="{ recording: isAudioRecording }"
+                    class="primary-action"
+                    :class="{ 'is-stop': loadding }"
+                    :disabled="!loadding && !canSend"
+                    @click="handlePrimaryAction"
                     type="button"
-                    :disabled="isAudioProcessing"
-                    @click="toggleRecording"
-                    :title="isAudioRecording ? '停止实时转写' : '开始实时转写'"
                   >
-                    <LoadingOutlined v-if="isAudioProcessing" />
-                    <StopOutlined v-else-if="isAudioRecording" />
-                    <AudioOutlined v-else />
+                    <PauseCircleOutlined v-if="loadding" />
+                    <SendOutlined v-else />
                   </button>
                 </div>
-                <textarea
-                  ref="textareaRef"
-                  v-model="state.message"
-                  placeholder="发消息..."
-                  @input="autoResize"
-                  @keydown.enter.exact.prevent="handlePrimaryAction"
-                  @keydown.enter.shift.exact.stop
-                  class="composer-input"
-                  rows="1"
-                />
+
+                <div v-if="imagePreviews.length" class="preview-bar">
+                  <div v-for="(src,i) in imagePreviews" :key="'img-'+i" class="preview-item">
+                    <img :src="src" alt="preview" />
+                    <button class="preview-remove" @click="removeImage(i)"><CloseOutlined /></button>
+                  </div>
+                </div>
+
+                <div v-if="genericFiles.length" class="file-list">
+                  <div v-for="(f, i) in genericFiles" :key="'file-'+i" class="file-pill" :class="f.status">
+                    <span class="name">{{ f.name }}</span>
+                    <span class="meta">{{ (f.size/1024/1024).toFixed(2) }}MB</span>
+                    <span class="status" v-if="f.status==='pending'">上传中…</span>
+                    <span class="status ok" v-else-if="f.status==='ok'">就绪</span>
+                    <span class="status error" v-else>失败</span>
+                    <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Composer at bottom when there are messages -->
+      <div v-if="hasMessages" class="composer-wrapper">
+        <div class="composer-stage">
+          <div class="composer" :class="{ 'drag-over': dragOver }" @dragover.prevent="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
+            <div class="composer-inner">
+              <div class="composer-accessories">
+                <label class="icon-btn" title="上传附件">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
+                    style="display:none"
+                    @change="handleAttachmentSelection"
+                  />
+                  <PaperClipOutlined />
+                </label>
                 <button
-                  class="primary-action"
-                  :class="{ 'is-stop': loadding }"
-                  :disabled="!loadding && !canSend"
-                  @click="handlePrimaryAction"
+                  v-if="canUseMicrophone"
+                  class="icon-btn mic-btn"
+                  :class="{ recording: isAudioRecording }"
                   type="button"
+                  :disabled="isAudioProcessing"
+                  @click="toggleRecording"
+                  :title="isAudioRecording ? '停止实时转写' : '开始实时转写'"
                 >
-                  <PauseCircleOutlined v-if="loadding" />
-                  <SendOutlined v-else />
+                  <LoadingOutlined v-if="isAudioProcessing" />
+                  <StopOutlined v-else-if="isAudioRecording" />
+                  <AudioOutlined v-else />
                 </button>
               </div>
+              <textarea
+                ref="textareaRef"
+                v-model="state.message"
+                placeholder="发消息..."
+                @input="autoResize"
+                @keydown.enter.exact.prevent="handlePrimaryAction"
+                @keydown.enter.shift.exact.stop
+                class="composer-input"
+                rows="1"
+              />
+              <button
+                class="primary-action"
+                :class="{ 'is-stop': loadding }"
+                :disabled="!loadding && !canSend"
+                @click="handlePrimaryAction"
+                type="button"
+              >
+                <PauseCircleOutlined v-if="loadding" />
+                <SendOutlined v-else />
+              </button>
+            </div>
 
-              <div v-if="imagePreviews.length" class="preview-bar">
-                <div v-for="(src,i) in imagePreviews" :key="'img-'+i" class="preview-item">
-                  <img :src="src" alt="preview" />
-                  <button class="preview-remove" @click="removeImage(i)"><CloseOutlined /></button>
-                </div>
+            <div v-if="imagePreviews.length" class="preview-bar">
+              <div v-for="(src,i) in imagePreviews" :key="'img-'+i" class="preview-item">
+                <img :src="src" alt="preview" />
+                <button class="preview-remove" @click="removeImage(i)"><CloseOutlined /></button>
               </div>
+            </div>
 
-              <div v-if="genericFiles.length" class="file-list">
-                <div v-for="(f, i) in genericFiles" :key="'file-'+i" class="file-pill" :class="f.status">
-                  <span class="name">{{ f.name }}</span>
-                  <span class="meta">{{ (f.size/1024/1024).toFixed(2) }}MB</span>
-                  <span class="status" v-if="f.status==='pending'">上传中…</span>
-                  <span class="status ok" v-else-if="f.status==='ok'">就绪</span>
-                  <span class="status error" v-else>失败</span>
-                  <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
-                </div>
+            <div v-if="genericFiles.length" class="file-list">
+              <div v-for="(f, i) in genericFiles" :key="'file-'+i" class="file-pill" :class="f.status">
+                <span class="name">{{ f.name }}</span>
+                <span class="meta">{{ (f.size/1024/1024).toFixed(2) }}MB</span>
+                <span class="status" v-if="f.status==='pending'">上传中…</span>
+                <span class="status ok" v-else-if="f.status==='ok'">就绪</span>
+                <span class="status error" v-else>失败</span>
+                <button class="pill-remove" @click="removeGenericFile(i)"><CloseOutlined /></button>
               </div>
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
 
+      <!-- Scroll to bottom button -->
+      <button
+        v-if="showScrollToBottom && hasMessages"
+        class="scroll-fab"
+        type="button"
+        aria-label="滚动到底部"
+        @click="scrollToBottomAndEnableAuto"
+      >
+        <svg viewBox="0 0 24 24" class="chevron-down" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* ====== 布局基础 ====== */
-#layout { display: flex; flex-direction: column; width: 100%; height: 100%; background: #f7f7f8; }
-#layout-body { flex: 1 1 0%; overflow-y: auto; display: flex; flex-direction: column; }
-#main { flex: 1 1 auto; display: flex; padding: 24px 0 0; }
+#layout { 
+  display: flex; 
+  flex-direction: column; 
+  width: 100%; 
+  height: 100vh;
+  background: #f7f7f8; 
+  overflow: hidden;
+}
 
+#layout-body {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
 
+#main-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
-/* 顶部栏 */
+#main-scroll.main-scroll--empty {
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+/* Hide scrollbars entirely on welcome view */
+#main-scroll.main-scroll--empty::-webkit-scrollbar {
+  display: none;
+}
+
+/* Only show scrollbar when there are messages */
+#main-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+#main-scroll::-webkit-scrollbar-track {
+  background: #f7f7f8;
+}
+
+#main-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+#main-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Firefox */
+#main-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f7f7f8;
+}
+
+#main { 
+  flex: 1 1 auto;
+  display: flex; 
+  flex-direction: column; 
+  padding: 0; 
+  min-height: 100%;
+  position: relative;
+}
+
+.composer-wrapper {
+  flex-shrink: 0;
+  width: 100%;
+  background: #f7f7f8;
+  border-top: 1px solid rgba(229, 231, 235, 0.5);
+  position: relative;
+  z-index: 5;
+}
+
+.content-divider { 
+  width: calc(100% - 48px); 
+  height: 1px; 
+  background: #e5e7eb; 
+  margin: 4px 24px 0; 
+  align-self: center; 
+  border-radius: 999px; 
+  flex-shrink: 0;
+}
+
 #header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex-shrink: 0;
   background: transparent;
   box-shadow: none;
   padding: 20px 0 12px;
 }
 .header-container { width: 100%; padding: 0 24px; }
-#header .header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-#header .left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.header-spinner {
-  color: #2563eb;
-  font-size: 16px;
-}
+#header .header-inner { display: flex; align-items: center; justify-content: space-between; }
+#header .left { display: flex; align-items: center; gap: 16px; }
 .new-convo {
   display: inline-flex;
   align-items: center;
@@ -445,19 +659,9 @@ async function handlePrimaryAction() {
   cursor: pointer;
   transition: background .2s ease, border-color .2s ease, color .2s ease;
 }
-.new-convo:hover {
-  background: rgba(37, 99, 235, 0.18);
-  border-color: rgba(37, 99, 235, 0.45);
-  color: #1e40af;
-}
-.new-convo__icon {
-  font-size: 18px;
-}
-.model-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
+.new-convo:hover { background: rgba(37, 99, 235, 0.18); border-color: rgba(37, 99, 235, 0.45); color: #1e40af; }
+.new-convo__icon { font-size: 18px; }
+.model-select { display: inline-flex; align-items: center; gap: 6px; }
 
 .model-select :deep(.ant-select-selector) {
   border: 0 !important;
@@ -466,106 +670,122 @@ async function handlePrimaryAction() {
   min-height: 30px !important;
   padding: 0 4px !important; 
 }
-
-.model-select :deep(.ant-select:not(.ant-select-disabled):hover .ant-select-selector) {
-  border-color: transparent !important;
-}
-.model-select :deep(.ant-select-focused .ant-select-selector) {
-  border-color: transparent !important;
-  box-shadow: none !important;
-}
-
+.model-select :deep(.ant-select:not(.ant-select-disabled):hover .ant-select-selector) { border-color: transparent !important; }
+.model-select :deep(.ant-select-focused .ant-select-selector) { border-color: transparent !important; box-shadow: none !important; }
 .model-select :deep(.ant-select-selection-item),
 .model-select :deep(.ant-select-selection-placeholder) {
   font-size: 17px;
-  line-height: 30px;            /* 与 min-height 对齐，保证垂直居中 */
+  line-height: 30px;
   display: inline-flex;
-  align-items: center;           /* 垂直居中 */
-  justify-content: center;       /* 水平居中（像 ChatGPT 居中展示）*/
+  align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 0;
   margin: 0;
-  color: #111827;              
+  color: #111827;
 }
-
-.model-select__control {
-  min-width: auto;               
-}
-
-.model-select :deep(.ant-select-arrow) {
-  color: #6b7280;
-  font-size: 10px;
-  right: 0;                      
-}
-
-.model-select :deep(.ant-select-dropdown) {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);  
-}
-
-.model-select :deep(.ant-select-selector:hover) {
-  background: rgba(0,0,0,0.04) !important;
-  border-radius: 8px !important;
-}
-
-.model-select__dropdown {
-  width: auto !important;
-  min-width: max-content !important;   /* 让宽度以最长选项为准 */
-  border-radius: 8px;
-}
-
+.model-select__control { min-width: auto; }
+.model-select :deep(.ant-select-arrow) { color: #6b7280; font-size: 10px; right: 0; }
+.model-select :deep(.ant-select-dropdown) { box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+.model-select :deep(.ant-select-selector:hover) { background: rgba(0,0,0,0.04) !important; border-radius: 8px !important; }
+.model-select__dropdown { width: auto !important; min-width: max-content !important; border-radius: 8px; z-index: 2000; }
 .model-select__dropdown .ant-select-item,
-.model-select__dropdown .ant-select-item-option-content {
-  white-space: nowrap;
+.model-select__dropdown .ant-select-item-option-content { white-space: nowrap; }
+
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 16px 12px;
+  min-height: 100%;
 }
 
-.model-select__dropdown {
-  z-index: 2000;
+.container--empty {
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
 
+/* Chat container without scrollbar */
 .chat-container {
   flex: 1 1 auto;
-  padding: 16px 0 16px;
-  padding-left: var(--chat-offset);
+  min-height: 0;
+  padding: 16px 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  justify-content: flex-end;
-  overflow-y: auto;
+  overflow: visible;
 }
 
-
-.chat-container--empty::-webkit-scrollbar {
-  display: none;
+.chat-container--empty {
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: visible;
 }
+
+/* Hide any accidental scrollbars on chat container */
+.chat-container::-webkit-scrollbar { 
+  display: none; 
+}
+
+.chat-container:not(.chat-container--empty) {
+  justify-content: flex-start;
+}
+
 .welcome-placeholder {
   font-size: 24px;
   line-height: 1.8;
   font-weight: 500;
   color: #1f2937;
   max-width: 520px;
+  text-align: center;
 }
 
 .composer-stage {
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
-  margin-top: auto;
-
-  padding-left: var(--chat-offset, 0);
-  padding-bottom: var(--composer-bottom-padding);
+  padding: 12px 16px;
+  padding-bottom: var(--composer-bottom-padding, 12px);
+  background: transparent;
 }
 
 .composer-stage--empty {
-
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  margin-top: 0;
-  padding-left: 0;
-  padding-bottom: 0;
-  align-self: center;
+  /* When empty, composer is centered with the welcome message */
+  padding: 0 16px;
+  margin-top: 20px;
 }
 
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 16px 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.container--empty {
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  min-height: 100vh;
+  padding-bottom: 80px; /* Add space to account for header */
+}
+
+.container--empty > .chat-container--empty {
+  /* Center the welcome message when no messages */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
 
 .composer {
   width: 100%;
@@ -573,26 +793,21 @@ async function handlePrimaryAction() {
   position: relative;
   transition: border-color .2s ease, background .2s ease;
 }
-.composer.drag-over {
-  border: 1px dashed rgba(59, 130, 246, 0.6);
-  background: rgba(59, 130, 246, 0.08);
-}
-.composer-inner {
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.composer-stage--empty .composer-inner {
-  max-width: 720px;
+.composer.drag-over { 
+  border: 1px dashed rgba(59, 130, 246, 0.6); 
+  background: rgba(59, 130, 246, 0.08); 
 }
 
-.composer-accessories {
-  display: flex;
-  gap: 8px;
+.composer-inner { 
+  width: 100%; 
+  max-width: 720px; 
+  margin: 0 auto; 
+  display: flex; 
+  align-items: center; 
+  gap: 12px; 
 }
+
+.composer-accessories { display: flex; gap: 8px; }
 
 .icon-btn {
   width: 36px;
@@ -606,26 +821,20 @@ async function handlePrimaryAction() {
   color: #334155;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
   transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  cursor: pointer;
 }
-.icon-btn:hover {
-  background: rgba(241, 245, 249, 0.85);
-  border-color: rgba(148, 163, 184, 0.65);
+.icon-btn:hover { 
+  background: rgba(241, 245, 249, 0.85); 
+  border-color: rgba(148, 163, 184, 0.65); 
 }
-
-.icon-btn:active {
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.15);
+.icon-btn:active { box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.15); }
+.mic-btn.recording { 
+  border-color: rgba(34, 197, 94, 0.55); 
+  background: rgba(34, 197, 94, 0.16); 
+  color: #15803d; 
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.25); 
 }
-.mic-btn.recording {
-  border-color: rgba(34, 197, 94, 0.55);
-  background: rgba(34, 197, 94, 0.16);
-  color: #15803d;
-  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.25);
-}
-.mic-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
+.mic-btn:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
 
 .composer-input {
   flex: 1 1 auto;
@@ -659,35 +868,31 @@ async function handlePrimaryAction() {
   border: 1px solid rgba(37, 99, 235, 0.5);
   background: #2563eb;
   color: #fff;
+  cursor: pointer;
   box-shadow: 0 20px 32px rgba(37, 99, 235, 0.25);
   transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
 }
-
-
-.primary-action:hover {
-  transform: translateY(-1px);
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+.primary-action:hover { 
+  transform: translateY(-1px); 
+  background: #1d4ed8; 
+  border-color: #1d4ed8; 
 }
-.primary-action:active {
-  transform: translateY(0);
+.primary-action:active { transform: translateY(0); }
+.primary-action:disabled { 
+  opacity: .55; 
+  cursor: not-allowed; 
+  transform: none; 
+  box-shadow: none; 
 }
-.primary-action:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+.primary-action.is-stop { 
+  border-color: rgba(14, 165, 233, 0.65); 
+  background: #0ea5e9; 
+  box-shadow: 0 20px 32px rgba(14, 165, 233, 0.28); 
 }
-.primary-action.is-stop {
-  border-color: rgba(14, 165, 233, 0.65);
-  background: #0ea5e9;
-  box-shadow: 0 20px 32px rgba(14, 165, 233, 0.28);
+.primary-action.is-stop:hover { 
+  background: #0284c7; 
+  border-color: #0284c7; 
 }
-.primary-action.is-stop:hover {
-  background: #0284c7;
-  border-color: #0284c7;
-}
-
 
 .preview-bar,
 .file-list {
@@ -698,128 +903,151 @@ async function handlePrimaryAction() {
   gap: 8px;
   flex-wrap: wrap;
 }
-.composer-stage--empty .preview-bar,
-.composer-stage--empty .file-list {
-  max-width: 680px;
-}
-.preview-item { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb; }
-.preview-item img { width: 100%; height: 100%; object-fit: cover; display:block; }
-.preview-remove { position: absolute; top: 4px; right: 4px; border: none; background: rgba(0,0,0,.45); color: #fff; width: 20px; height: 20px; border-radius: 6px; display:flex; align-items:center; justify-content:center; }
 
-.file-pill { position: relative; display:flex; align-items:center; gap:8px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb; }
-.file-pill .name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-item { 
+  position: relative; 
+  width: 84px; 
+  height: 84px; 
+  border-radius: 10px; 
+  overflow: hidden; 
+  border: 1px solid #e5e7eb; 
+}
+.preview-item img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+  display: block; 
+}
+.preview-remove { 
+  position: absolute; 
+  top: 4px; 
+  right: 4px; 
+  border: none; 
+  background: rgba(0,0,0,.45); 
+  color: #fff; 
+  width: 20px; 
+  height: 20px; 
+  border-radius: 6px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  cursor: pointer;
+}
+
+.file-pill { 
+  position: relative; 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  padding: 6px 10px; 
+  border: 1px solid #e5e7eb; 
+  border-radius: 999px; 
+  background: #f9fafb; 
+}
+.file-pill .name { 
+  max-width: 220px; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+}
 .file-pill .meta { color: #6b7280; font-size: 12px; }
 .file-pill .status { font-size: 12px; color: #6b7280; }
 .file-pill.ok { background: #eefdf3; border-color: #b6f0c5; }
 .file-pill.error { background: #fef2f2; border-color: #fecaca; }
-.pill-remove { border:none; background: transparent; color:#6b7280; }
-.pill-remove:hover { color:#111827; }
-
-/* ====== 容器基础 ====== */
-.container {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  max-width: 900px;
-  margin: 0 auto;
-
-  /* 这里的底部 padding 会把输入框顶高，聊天态我们改小 */
-  padding: 0 16px 12px; /* ← 原本是 48px，改小让输入框更贴底 */
-  transition: padding .3s ease;
+.pill-remove { 
+  border: none; 
+  background: transparent; 
+  color: #6b7280; 
+  cursor: pointer;
 }
+.pill-remove:hover { color: #111827; }
 
-/* 空态：把整列内容居中（注意：头部是 48px，不是 20px） */
-.container--empty {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;   /* 垂直居中整列 */
-  align-items: center;
-  gap: 20px;
-  padding: 0 16px;
-  min-height: calc(100vh - 48px); /* ← 修正你误写的 20px */
-  position: relative;        /* 便于子项 transform 视觉位移 */
-}
-
-/* 聊天区（空态）不要拉伸填满，否则会把输入区“挤低” */
-.chat-container--empty {
-  flex: 0 0 auto;
+/* Scroll to bottom button - ChatGPT style */
+.scroll-fab {
+  position: fixed;
+  left: calc(50% + 100px); /* shift slightly right so it doesn't overlap center content */
+  bottom: 100px;
+  transform: translateX(-50%);
+  z-index: 10;
+  
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff;
+  color: #0f172a;
+  
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  gap: 16px;
-  text-align: center;
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
+  
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+  cursor: pointer;
+  
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+  
+  animation: fadeIn 0.2s ease-in-out;
 }
 
-/* ====== 输入区：聊天态吸底，空态居中 ====== */
-
-/* 可调参数：空态整体上移 & 聊态底部留白 */
-:global(:root) {
-  --empty-vertical-offset: -10vh;
-  --composer-bottom-padding: 12px;
-}
-/* 聊天态（默认）：吸底 */
-.composer-stage {
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-
-  /* 关键：吸底 */
-  margin-top: auto;
-
-  /* 左侧缩进 + 底部留白（变量可调） */
-  padding-left: var(--chat-offset, 0);
-  padding-bottom: var(--composer-bottom-padding);
+.scroll-fab:hover {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  border-color: rgba(0, 0, 0, 0.18);
 }
 
-/* 兼容安全区（手机底部手势条）——只保留这一份，删掉你上面那份固定 20px 的版本 */
-@supports (padding: env(safe-area-inset-bottom)) {
-  .composer-stage {
-    padding-bottom: calc(var(--composer-bottom-padding) + env(safe-area-inset-bottom));
+.scroll-fab:active { 
+  transform: translateX(-50%) translateY(0); 
+}
+
+.scroll-fab .chevron-down { 
+  width: 20px; 
+  height: 20px; 
+  display: block; 
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
 
-/* 空态：不要吸底，和欢迎文案一起居中 */
-.composer-stage--empty {
-  width: 100%;
-  max-width: 720px;
-  margin: 0 auto;
-  margin-top: 0;        /* 不吸底 */
-  padding-left: 0;
-  padding-bottom: 0;
-  align-self: center;   /* 水平居中 */
+:global(:root) {
+  --composer-bottom-padding: 12px;
+  --chat-offset: 0;
 }
 
-/* 空态：欢迎文案 + 输入区 整体上移一点（看起来更舒服） */
-.container--empty > .chat-container--empty,
-.container--empty > .composer-stage.composer-stage--empty {
-  transform: translateY(var(--empty-vertical-offset));
+@supports (padding: env(safe-area-inset-bottom)) {
+  :global(:root) {
+    --composer-bottom-padding: calc(12px + env(safe-area-inset-bottom));
+  }
 }
-
-
-
-
 </style>
 
-
-.loader-dots {
-  display: inline-flex;
-  gap: 4px;
-}
-.loader-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #64748b;
-  animation: loaderDots 1.2s infinite ease-in-out;
+<style>
+.loader-dots { display: inline-flex; gap: 4px; }
+.loader-dots span { 
+  width: 6px; 
+  height: 6px; 
+  border-radius: 50%; 
+  background: #64748b; 
+  animation: loaderDots 1.2s infinite ease-in-out; 
 }
 .loader-dots span:nth-child(2) { animation-delay: 0.15s; }
 .loader-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes loaderDots {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
+@keyframes loaderDots { 
+  0%, 80%, 100% { 
+    transform: scale(0.6); 
+    opacity: 0.4; 
+  } 
+  40% { 
+    transform: scale(1); 
+    opacity: 1; 
+  } 
 }
+</style>

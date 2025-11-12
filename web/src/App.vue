@@ -21,6 +21,7 @@ const toggleSidebar = () => {
 .app-shell {
   display: grid;
   grid-template-columns: 232px 1fr;
+  grid-template-rows: 1fr;
   height: 100vh;
   width: 100vw;
   background: #f7f7f8;
@@ -40,6 +41,7 @@ const toggleSidebar = () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 @media (max-width: 960px) {

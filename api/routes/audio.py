@@ -371,50 +371,49 @@ async def realtime_transcriptions(websocket: WebSocket):
         if normalized_noise not in {"none", "null", "off"}:
             noise_reduction_config = {"type": normalized_noise}
 
-    session_update: Dict[str, Any] = {
-        "type": "session.update",
-        "session": {
-            "input_audio_format": "pcm16",
-            "input_audio_transcription": transcription_config,
-        },
-    }
-    turn_detection_config: Dict[str, Any] = {
-        "type": "server_vad",
-        "threshold": max(0.0, min(1.0, vad_threshold)),
-        "silence_duration_ms": max(100, silence_ms),
-        "prefix_padding_ms": max(0, prefix_ms),
-    }
-    session_update["session"]["turn_detection"] = turn_detection_config
-    if noise_reduction_config is not None:
-        session_update["session"]["input_audio_noise_reduction"] = noise_reduction_config
-    if include_fields:
-        session_update["session"]["include"] = include_fields
-
-    
     headers = [
         ("Authorization", f"Bearer {settings.API_KEY}"),
         ("OpenAI-Beta", "realtime=v1"),
     ]
+    # --- Build the update AFTER session.created ---
+    session_update = {
+        "type": "transcription_session.update",
+        "session": {
+            # 输入音频格式
+            "input_audio_format": "pcm16",
+            # 语音转写配置
+            "input_audio_transcription": transcription_config,
+            # 服务端 VAD
+            "turn_detection": {
+                "type": "server_vad",
+                "threshold": max(0.0, min(1.0, vad_threshold)),
+                "silence_duration_ms": max(100, silence_ms),
+                "prefix_padding_ms": max(0, prefix_ms),
+            },
+            # （可选）降噪
+            **({"input_audio_noise_reduction": noise_reduction_config} if noise_reduction_config else {}),
+            # （可选）include 字段放这里
+            **({"include": include_fields} if include_fields else {}),
+        }
+    }
 
 
     try:
-        async with websockets.connect(
-            openai_client.OPENAI_REALTIME_TRANSCRIBE_URL,
-            extra_headers=headers,
-            max_size=None,
-        ) as openai_ws:
+        async with websockets.connect(openai_client.OPENAI_REALTIME_TRANSCRIBE_URL, extra_headers=headers, max_size=None) as openai_ws:
+            # 1) 等待服务端创建消息
+            created = await openai_ws.recv()
+            # 2) 发送会话更新（注意此处是上面的 session_update）
             await openai_ws.send(json.dumps(session_update))
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "event": "session_started",
-                        "model": model,
-                        "sample_rate": sample_rate,
-                        "min_confidence": confidence_threshold,
-                    }
-                )
-            )
+            # 3) 告知前端“session_started”（可选）
+            await websocket.send_text(json.dumps({
+                "event": "session_started",
+                "model": model,
+                "sample_rate": sample_rate,
+                "min_confidence": confidence_threshold,
+            }))
+            # 4) 进入双向转发
             await _relay_realtime_transcription(websocket, openai_ws)
+
     except websockets.exceptions.InvalidStatusCode as exc:
         await websocket.send_text(json.dumps({"event": "error", "message": f"HTTP {exc.status_code}"}))
         await websocket.close(code=1011)

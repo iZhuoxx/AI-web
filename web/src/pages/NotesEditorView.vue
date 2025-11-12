@@ -142,7 +142,8 @@
                       :ref="el => setTabButtonRef(tab.key, el as HTMLButtonElement | null)"
                       @click="handleTabChange(tab.key)"
                     >
-                      {{ tab.label }}
+                      <component :is="tab.icon" class="tabs-nav__icon" aria-hidden="true" />
+                      <span>{{ tab.label }}</span>
                     </button>
                     <span class="tabs-nav__indicator" :style="tabsIndicatorStyle"></span>
                   </div>
@@ -175,16 +176,13 @@
                       :live-text="liveText"
                       :isRecording="isRecording"
                     />
-                    <NoteKeywordsPanel
-                      v-else-if="activeTab === 'keywords'"
-                      :keywords="keywords"
-                      @keyword-selected="handleKeywordSelected"
-                    />
-                    <NoteLearningPathPanel
+                    <NoteFlashcardsPanel v-else-if="activeTab === 'flashcards'" />
+                    <NoteQuizPanel v-else-if="activeTab === 'quiz'" />
+                    <NoteMindMapPanel
                       v-else-if="activeTab === 'learning'"
-                      :materials="materialsForLearning"
+                      :materials="mindMapMaterials"
                       :keywords="keywords"
-                      :isLoading="isLoadingMaterials"
+                      :isLoading="isMindMapLoading"
                     />
                     <NoteMaterialsPanel
                       v-else
@@ -209,16 +207,29 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import type { CSSProperties } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon, ChevronDownIcon, ChevronLeftIcon, ChevronUpIcon, PlusCircleIcon } from 'lucide-vue-next'
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronUpIcon,
+  ClipboardListIcon,
+  FolderOpenIcon,
+  MapIcon,
+  MessageSquareIcon,
+  MicIcon,
+  PlusCircleIcon,
+  SparklesIcon,
+} from 'lucide-vue-next'
 import type { KeywordItem, LearningMaterial, NoteItem, TranscriptSegment } from '@/types/notes'
 import NotebookNotesList from '@/components/note/NotebookNotesList.vue'
 import NoteEditorPanel from '@/components/note/NoteEditorPanel.vue'
 import NoteRecordingPanel from '@/components/note/NoteRecordingPanel.vue'
 import NoteChatPanel from '@/components/note/NoteChatPanel.vue'
 import type { NoteChatPanelExposed } from '@/components/note/NoteChatPanel.vue'
-import NoteKeywordsPanel from '@/components/note/NoteKeywordsPanel.vue'
-import NoteLearningPathPanel from '@/components/note/NoteLearningPathPanel.vue'
+import NoteFlashcardsPanel from '@/components/note/NoteFlashcardsPanel.vue'
+import NoteMindMapPanel from '@/components/note/NoteMindMapPanel.vue'
 import NoteMaterialsPanel from '@/components/note/NoteMaterialsPanel.vue'
+import NoteQuizPanel from '@/components/note/NoteQuizPanel.vue'
 import NoteTranscriptionPanel from '@/components/note/NoteTranscriptionPanel.vue'
 import { useNotes } from '@/composables/useNotes'
 import { useAuth } from '@/composables/useAuth'
@@ -229,6 +240,15 @@ const notesStore = useNotes()
 const route = useRoute()
 const router = useRouter()
 
+type InsightTabKey = 'chat' | 'realtime' | 'flashcards' | 'quiz' | 'learning' | 'materials'
+type InsightTabIcon = typeof SparklesIcon
+
+interface InsightTabOption {
+  key: InsightTabKey
+  label: string
+  icon: InsightTabIcon
+}
+
 const panelNotes = ref<NoteItem[]>([])
 const editorDraft = reactive({ title: '', content: '' })
 const selectedNoteId = ref<string | null>(null)
@@ -237,7 +257,7 @@ const notebookTitleInput = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const tabsNavRef = ref<HTMLElement | null>(null)
 const noteChatPanelRef = ref<NoteChatPanelExposed | null>(null)
-const tabButtonRefs = reactive<Record<string, HTMLButtonElement | null>>({})
+const tabButtonRefs = reactive<Partial<Record<InsightTabKey, HTMLButtonElement | null>>>({})
 const tabIndicator = reactive({ width: 0, left: 0, visible: false })
 const hasPendingChanges = ref(false)
 const shouldAutoSyncNotes = ref(true)
@@ -245,23 +265,24 @@ const syncingFromStore = ref(false)
 const leavingEditor = ref(false)
 const isNotesFullscreen = ref(false)
 const showRecordingPanel = ref(true)
-const activeTab = ref('chat')
+const activeTab = ref<InsightTabKey>('chat')
 const chatHasMessages = ref(false)
-const tabOptions = [
-  { key: 'chat', label: 'AI 对话' },
-  { key: 'realtime', label: '实时字幕' },
-  { key: 'keywords', label: '重点分析' },
-  { key: 'learning', label: '学习路径' },
-  { key: 'materials', label: '资料库' },
+const tabOptions: InsightTabOption[] = [
+  { key: 'chat', label: 'AI 助手', icon: MessageSquareIcon },
+  { key: 'realtime', label: '实时字幕', icon: MicIcon },
+  { key: 'flashcards', label: '闪卡', icon: SparklesIcon },
+  { key: 'quiz', label: '测验', icon: ClipboardListIcon },
+  { key: 'learning', label: '思维导图', icon: MapIcon },
+  { key: 'materials', label: '资料库', icon: FolderOpenIcon },
 ]
 const showNewChatButton = computed(() => activeTab.value === 'chat' && chatHasMessages.value)
 const leftPaneWidth = ref(45)
 const dragContainer = ref<HTMLElement | null>(null)
 const verticalDragging = ref(false)
-const materialsForLearning = ref<LearningMaterial[]>([])
-const isLoadingMaterials = ref(false)
-let materialsTimer: number | null = null
-const materialTypes: LearningMaterial['type'][] = ['article', 'video', 'document']
+const mindMapMaterials = ref<LearningMaterial[]>([])
+const isMindMapLoading = ref(false)
+let mindMapTimer: number | null = null
+const mindMapMaterialTypes: LearningMaterial['type'][] = ['article', 'video', 'document']
 
 const {
   canRecord,
@@ -588,7 +609,7 @@ const cancelNotebookTitleEdit = () => {
   notebookTitleInput.value = notebookTitle.value
 }
 
-const setTabButtonRef = (key: string, el: HTMLButtonElement | null) => {
+const setTabButtonRef = (key: InsightTabKey, el: HTMLButtonElement | null) => {
   if (el) {
     tabButtonRefs[key] = el
     nextTick(() => updateTabsIndicator())
@@ -650,11 +671,7 @@ const handleResumeRecording = async () => {
   await resumeRecording()
 }
 
-const handleKeywordSelected = (keyword: string) => {
-  message.info(`已选择关键词：${keyword}`)
-}
-
-const handleTabChange = (key: string) => {
+const handleTabChange = (key: InsightTabKey) => {
   activeTab.value = key
 }
 
@@ -760,9 +777,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseup', stopDragging)
   window.removeEventListener('resize', updateTabsIndicator)
-  if (materialsTimer !== null) {
-    window.clearTimeout(materialsTimer)
-    materialsTimer = null
+  if (mindMapTimer !== null) {
+    window.clearTimeout(mindMapTimer)
+    mindMapTimer = null
   }
   void cancelRecording()
 })
@@ -816,36 +833,36 @@ const extractKeywords = (text: string, limit = 12) => {
 
 const keywords = computed<KeywordItem[]>(() => extractKeywords(transcriptText.value))
 
-const scheduleMaterialsUpdate = () => {
-  if (materialsTimer !== null) {
-    window.clearTimeout(materialsTimer)
-    materialsTimer = null
+const scheduleMindMapUpdate = () => {
+  if (mindMapTimer !== null) {
+    window.clearTimeout(mindMapTimer)
+    mindMapTimer = null
   }
   if (keywords.value.length < 3) {
-    materialsForLearning.value = []
-    isLoadingMaterials.value = false
+    mindMapMaterials.value = []
+    isMindMapLoading.value = false
     return
   }
-  isLoadingMaterials.value = true
+  isMindMapLoading.value = true
   const snapshot = keywords.value.slice(0, 6)
-  materialsTimer = window.setTimeout(() => {
-    materialsForLearning.value = snapshot.map((k, i) => {
-      const type = materialTypes[i % materialTypes.length]
+  mindMapTimer = window.setTimeout(() => {
+    mindMapMaterials.value = snapshot.map((k, i) => {
+      const type = mindMapMaterialTypes[i % mindMapMaterialTypes.length]
       return {
         id: `material-${k.id}-${i}`,
         title: `${k.text} ${type === 'video' ? '讲解' : type === 'document' ? '文档' : '进阶指南'}`,
-        description: `结合「${k.text}」主题的精选${type === 'video' ? '视频' : type === 'document' ? '文档资料' : '文章与教程'}，帮助你快速巩固知识点。`,
+        description: `结合「${k.text}」主题的精选${type === 'video' ? '视频' : type === 'document' ? '文档资料' : '文章与教程'}，帮助你构建清晰的思维导图。`,
         type,
         url: `https://www.google.com/search?q=${encodeURIComponent(k.text)}`,
         relevance: k.relevance,
         keywords: snapshot.map(item => item.text),
       }
     })
-    isLoadingMaterials.value = false
+    isMindMapLoading.value = false
   }, 800)
 }
 
-watch(keywords, scheduleMaterialsUpdate, { deep: true, immediate: true })
+watch(keywords, scheduleMindMapUpdate, { deep: true, immediate: true })
 </script>
 
 <style scoped>
@@ -1168,6 +1185,9 @@ watch(keywords, scheduleMaterialsUpdate, { deep: true, immediate: true })
   cursor: pointer;
   transition: color 0.2s ease;
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tabs-nav__btn:hover {
@@ -1188,6 +1208,11 @@ watch(keywords, scheduleMaterialsUpdate, { deep: true, immediate: true })
   background: #2563eb;
   transition: transform 0.25s ease, width 0.25s ease, opacity 0.2s ease;
   pointer-events: none;
+}
+
+.tabs-nav__icon {
+  width: 14px;
+  height: 14px;
 }
 
 .new-chat-trigger {

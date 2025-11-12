@@ -1,17 +1,13 @@
 <template>
   <div class="note-chat-panel">
     <div class="chat-main">
-      <div v-if="loadding" class="chat-main__status">
-        <LoadingOutlined class="chat-main__spinner" />
-        <span>回答生成中</span>
-      </div>
       <div
         ref="scrollContainer"
         class="messages"
-        :class="{ 'messages--empty': !hasMessages }"
+        :class="{ 'messages--empty': !hasMessages && !loadding }"
         @scroll="onMessagesScroll"
       >
-        <div v-if="!hasMessages" class="empty-hint">暂无对话，开始输入或录音吧。</div>
+        <div v-if="!hasMessages && !loadding" class="empty-hint">暂无对话，开始输入或录音吧。</div>
         <template v-else>
           <Message
             v-for="(msg, idx) in chatMessages"
@@ -19,6 +15,14 @@
             :message="msg"
             :class="msg.type === 1 ? 'send' : 'replay'"
           />
+          <!-- Loading bubble when waiting for response - only show if no assistant message started yet -->
+          <div v-if="loadding && !hasAssistantMessageStarted" class="loading-bubble">
+            <div class="loader-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
         </template>
       </div>
 
@@ -102,7 +106,7 @@
         </div>
       </form>
 
-      <!-- 居中底部“下箭头”悬浮按钮：不在底部时显示 -->
+      <!-- 居中底部"下箭头"悬浮按钮：不在底部时显示 -->
       <button
         v-if="showScrollToBottom"
         class="scroll-fab"
@@ -189,6 +193,13 @@ const realtimeSegments = realtime.segments
 const chatMessages = messagesStore.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
 watch(hasMessages, value => emit('has-messages-change', value), { immediate: true })
+
+// Track if assistant message has started
+const messageCountBeforeSend = ref(0)
+const hasAssistantMessageStarted = computed(() => {
+  if (!loadding.value) return false
+  return chatMessages.value.length > messageCountBeforeSend.value
+})
 
 // 输入区
 const state = reactive({ message: '' })
@@ -310,6 +321,9 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   await nextTick()
   autoResize()
 
+  // Track message count before send
+  messageCountBeforeSend.value = chatMessages.value.length
+
   await send({ text, imagesDataUrls, files })
 }
 
@@ -326,13 +340,12 @@ async function handlePrimaryAction() {
   await onSend()
 }
 
-// ===== 新增：自动滚逻辑 =====
+// ===== 自动滚动逻辑 =====
 const scrollContainer = ref<HTMLDivElement | null>(null)
-const isAutoScroll = ref(true) // 是否开启自动滚
-const showScrollToBottom = ref(false) // 是否显示“向下”按钮
-const BOTTOM_THRESHOLD = 12 // 判定在底部的阈值(px)
+const isAutoScroll = ref(true)
+const showScrollToBottom = ref(false)
+const BOTTOM_THRESHOLD = 12
 
-// 平滑滚到底部（不支持时回退瞬时）
 const scrollToBottom = async () => {
   await nextTick()
   const el = scrollContainer.value
@@ -344,14 +357,12 @@ const scrollToBottom = async () => {
   }
 }
 
-// 点击“向下” => 滚到底并开启自动滚
 const scrollToBottomAndEnableAuto = async () => {
   await scrollToBottom()
   isAutoScroll.value = true
   showScrollToBottom.value = false
 }
 
-// 消息列表滚动事件（用户上滑 => 关闭自动滚并显示按钮）
 const onMessagesScroll = () => {
   const el = scrollContainer.value
   if (!el) return
@@ -360,17 +371,15 @@ const onMessagesScroll = () => {
     if (isAutoScroll.value) isAutoScroll.value = false
     showScrollToBottom.value = true
   } else {
-    // 到底部隐藏按钮；是否开启自动滚由用户点击按钮决定
     showScrollToBottom.value = false
   }
 }
 
-// 只有在 isAutoScroll 为 true 时，收到新消息才自动滚动
 watch([chatMessages, loadding], async () => {
   if (isAutoScroll.value) {
     await scrollToBottom()
   }
-}, { immediate: true })
+}, { deep: true })
 
 const startNewConversation = () => {
   messagesStore.clearMessages()
@@ -412,91 +421,349 @@ const handleAttachmentSelection = (event: Event) => {
 </script>
 
 <style scoped>
-.note-chat-panel { display:flex; flex-direction:column; height:100%; min-height:0; background:#fff; }
-
-.chat-main { position:relative; /* 让悬浮按钮定位到容器内部 */ flex:1; display:flex; flex-direction:column; min-height:0; background:#fff; }
-.chat-main__status {
-  position:absolute;
-  top:10px;
-  right:14px;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  font-size:12px;
-  color:#1d4ed8;
-  background:rgba(37,99,235,0.08);
-  border-radius:999px;
-  padding:4px 10px;
-  border:1px solid rgba(37,99,235,0.25);
-  z-index:5;
-  backdrop-filter:blur(6px);
+.note-chat-panel { 
+  display: flex; 
+  flex-direction: column; 
+  height: 100%; 
+  min-height: 0; 
+  background: #fff; 
 }
-.chat-main__spinner { font-size:14px; }
-.messages { flex:1; min-height:0; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:14px; background:#fff; }
-.messages--empty { justify-content:center; align-items:center; color:#94a3b8; font-size:13px; }
-.empty-hint { text-align:center; }
 
-.composer { border-top:1px solid #eef2f7; background:#fff; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
-.composer.drag-over { border-color:rgba(37,99,235,0.45); background:rgba(37,99,235,0.06); }
-.composer-inner { display:flex; align-items:flex-end; gap:10px; }
-.composer-accessories { display:flex; gap:6px; }
-.icon-btn { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; border:1px solid rgba(148,163,184,0.35); background:#fff; color:#334155; transition:background .15s ease, border-color .15s ease; }
-.icon-btn:hover { background:rgba(241,245,249,0.9); border-color:rgba(148,163,184,0.6); }
-.icon-btn:active { border-color:rgba(37,99,235,0.4); }
-.mic-btn.recording { border-color:rgba(34,197,94,0.55); background:rgba(34,197,94,0.16); color:#15803d; }
-.mic-btn:disabled { opacity:.55; cursor:not-allowed; }
+.chat-main { 
+  position: relative; 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+  min-height: 0; 
+  background: #fff; 
+}
 
-.composer-input { flex:1; border-radius:12px; border:1px solid rgba(148,163,184,0.45); background:#fff; padding:10px 12px; font-size:14px; min-height:40px; max-height:220px; resize:none; line-height:1.6; color:#0f172a; transition:border-color .2s, box-shadow .2s; }
-.composer-input:focus-visible { outline:none; border-color:rgba(59,130,246,0.85); box-shadow:0 0 0 3px rgba(59,130,246,0.18); }
+.messages { 
+  flex: 1; 
+  min-height: 0; 
+  overflow-y: auto; 
+  padding: 12px 14px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 14px; 
+  background: #fff;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #fff;
+}
 
-.primary-action { width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:12px; border:1px solid rgba(37,99,235,0.45); background:#2563eb; color:#fff; transition:transform .15s ease, box-shadow .15s ease, background .15s ease; }
-.primary-action:hover { transform:translateY(-1px); box-shadow:0 10px 18px rgba(37,99,235,0.25); background:#1d4ed8; }
-.primary-action:disabled { opacity:.55; cursor:not-allowed; transform:none; box-shadow:none; }
-.primary-action.is-stop { border-color:rgba(14,165,233,0.55); background:#0ea5e9; }
+.messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages::-webkit-scrollbar-track {
+  background: #fff;
+}
+
+.messages::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.messages::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.messages--empty { 
+  justify-content: center; 
+  align-items: center; 
+  color: #94a3b8; 
+  font-size: 13px; 
+}
+
+.empty-hint { 
+  text-align: center; 
+}
+
+/* Loading bubble */
+.loading-bubble {
+  align-self: flex-start;
+  background: #f1f5f9;
+  border-radius: 16px;
+  padding: 12px 18px;
+  max-width: 80%;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loader-dots { 
+  display: inline-flex; 
+  gap: 4px; 
+}
+
+.loader-dots span { 
+  width: 8px; 
+  height: 8px; 
+  border-radius: 50%; 
+  background: #64748b; 
+  animation: loaderDots 1.2s infinite ease-in-out; 
+}
+
+.loader-dots span:nth-child(2) { 
+  animation-delay: 0.15s; 
+}
+
+.loader-dots span:nth-child(3) { 
+  animation-delay: 0.3s; 
+}
+
+@keyframes loaderDots { 
+  0%, 80%, 100% { 
+    transform: scale(0.6); 
+    opacity: 0.4; 
+  } 
+  40% { 
+    transform: scale(1); 
+    opacity: 1; 
+  } 
+}
+
+.composer { 
+  border-top: 1px solid #eef2f7; 
+  background: #fff; 
+  padding: 12px 14px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+}
+
+.composer.drag-over { 
+  border-color: rgba(37, 99, 235, 0.45); 
+  background: rgba(37, 99, 235, 0.06); 
+}
+
+.composer-inner { 
+  display: flex; 
+  align-items: flex-end; 
+  gap: 10px; 
+}
+
+.composer-accessories { 
+  display: flex; 
+  gap: 6px; 
+}
+
+.icon-btn { 
+  width: 32px; 
+  height: 32px; 
+  display: inline-flex; 
+  align-items: center; 
+  justify-content: center; 
+  border-radius: 10px; 
+  border: 1px solid rgba(148, 163, 184, 0.35); 
+  background: #fff; 
+  color: #334155; 
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease; 
+}
+
+.icon-btn:hover { 
+  background: rgba(241, 245, 249, 0.9); 
+  border-color: rgba(148, 163, 184, 0.6); 
+}
+
+.icon-btn:active { 
+  border-color: rgba(37, 99, 235, 0.4); 
+}
+
+.mic-btn.recording { 
+  border-color: rgba(34, 197, 94, 0.55); 
+  background: rgba(34, 197, 94, 0.16); 
+  color: #15803d; 
+}
+
+.mic-btn:disabled { 
+  opacity: .55; 
+  cursor: not-allowed; 
+}
+
+.composer-input { 
+  flex: 1; 
+  border-radius: 12px; 
+  border: 1px solid rgba(148, 163, 184, 0.45); 
+  background: #fff; 
+  padding: 10px 12px; 
+  font-size: 14px; 
+  min-height: 40px; 
+  max-height: 220px; 
+  resize: none; 
+  line-height: 1.6; 
+  color: #0f172a; 
+  transition: border-color .2s, box-shadow .2s; 
+}
+
+.composer-input:focus-visible { 
+  outline: none; 
+  border-color: rgba(59, 130, 246, 0.85); 
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18); 
+}
+
+.primary-action { 
+  width: 36px; 
+  height: 36px; 
+  display: inline-flex; 
+  align-items: center; 
+  justify-content: center; 
+  border-radius: 12px; 
+  border: 1px solid rgba(37, 99, 235, 0.45); 
+  background: #2563eb; 
+  color: #fff; 
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease; 
+}
+
+.primary-action:hover { 
+  transform: translateY(-1px); 
+  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.25); 
+  background: #1d4ed8; 
+}
+
+.primary-action:disabled { 
+  opacity: .55; 
+  cursor: not-allowed; 
+  transform: none; 
+  box-shadow: none; 
+}
+
+.primary-action.is-stop { 
+  border-color: rgba(14, 165, 233, 0.55); 
+  background: #0ea5e9; 
+}
 
 .preview-bar,
-.file-list { width:100%; display:flex; gap:8px; flex-wrap:wrap; }
-.preview-item { position:relative; width:84px; height:84px; border-radius:10px; overflow:hidden; border:1px solid #e5e7eb; }
-.preview-item img { width:100%; height:100%; object-fit:cover; display:block; }
-.preview-remove { position:absolute; top:4px; right:4px; border:none; background:rgba(0,0,0,0.45); color:#fff; width:20px; height:20px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.file-list { 
+  width: 100%; 
+  display: flex; 
+  gap: 8px; 
+  flex-wrap: wrap; 
+}
 
-.file-pill { position:relative; display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; background:#f9fafb; font-size:12px; color:#0f172a; }
-.file-pill.ok { background:#eefdf3; border-color:#b6f0c5; }
-.file-pill.error { background:#fef2f2; border-color:#fecaca; }
-.pill-remove { border:none; background:transparent; color:#6b7280; cursor:pointer; }
-.pill-remove:hover { color:#1f2937; }
+.preview-item { 
+  position: relative; 
+  width: 84px; 
+  height: 84px; 
+  border-radius: 10px; 
+  overflow: hidden; 
+  border: 1px solid #e5e7eb; 
+}
+
+.preview-item img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+  display: block; 
+}
+
+.preview-remove { 
+  position: absolute; 
+  top: 4px; 
+  right: 4px; 
+  border: none; 
+  background: rgba(0, 0, 0, 0.45); 
+  color: #fff; 
+  width: 20px; 
+  height: 20px; 
+  border-radius: 6px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  cursor: pointer; 
+}
+
+.file-pill { 
+  position: relative; 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  padding: 6px 10px; 
+  border: 1px solid #e5e7eb; 
+  border-radius: 999px; 
+  background: #f9fafb; 
+  font-size: 12px; 
+  color: #0f172a; 
+}
+
+.file-pill.ok { 
+  background: #eefdf3; 
+  border-color: #b6f0c5; 
+}
+
+.file-pill.error { 
+  background: #fef2f2; 
+  border-color: #fecaca; 
+}
+
+.pill-remove { 
+  border: none; 
+  background: transparent; 
+  color: #6b7280; 
+  cursor: pointer; 
+}
+
+.pill-remove:hover { 
+  color: #1f2937; 
+}
 
 /* 居中底部下箭头按钮（ChatGPT 风格） */
 .scroll-fab {
   position: absolute;
   left: 50%;
-  /* 按你的输入区高度微调：72~100px 都可 */
   bottom: 84px;
   transform: translateX(-50%);
   z-index: 6;
-
   width: 40px;
   height: 40px;
   border-radius: 999px;
-
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   background: #fff;
   color: #0f172a;
-
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
   cursor: pointer;
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+  animation: fadeInButton 0.2s ease-in-out;
+}
 
-  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease, opacity .15s ease;
+@keyframes fadeInButton {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
+
 .scroll-fab:hover {
-  transform: translateX(-50%) translateY(-1px);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.14);
-  border-color: rgba(0,0,0,0.18);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  border-color: rgba(0, 0, 0, 0.18);
 }
-.scroll-fab:active { transform: translateX(-50%) translateY(0); }
-.scroll-fab .chevron-down { width: 20px; height: 20px; display: block; }
+
+.scroll-fab:active { 
+  transform: translateX(-50%) translateY(0); 
+}
+
+.scroll-fab .chevron-down { 
+  width: 20px; 
+  height: 20px; 
+  display: block; 
+}
 </style>

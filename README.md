@@ -34,6 +34,18 @@ pnpm run dev
 python3 -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
+```bash
+#启动Postgre数据库
+docker start postgres
+psql -h localhost -U noteai -d appdb
+```
+
+
+登录数据库：psql -h localhost -U noteai -d appdb
+
+update the table → PYTHONPATH=.. poetry run alembic revision --autogenerate -m "Comments" → PYTHONPATH=.. poetry run alembic upgrade head
+
+
 ### 语音转写
 
 - 新增 `POST /api/audio/transcriptions` 接口，支持 mp3、wav、webm 等常见音频，默认使用 `gpt-4o-transcribe` 模型，返回纯文本结果。
