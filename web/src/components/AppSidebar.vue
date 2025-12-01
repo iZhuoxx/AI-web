@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
-import { useNotes } from '@/composables/useNotes'
+import { useNotebookStore } from '@/composables/useNotes'
 import AuthPopup from '@/components/AuthPopup.vue'
 
 interface SidebarItem {
@@ -16,7 +16,7 @@ const emit = defineEmits<{ (e: 'toggle'): void }>()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuth()
-const notes = useNotes()
+const notebookStore = useNotebookStore()
 
 const navItems = computed<SidebarItem[]>(() => [
   { label: '笔记', name: 'notes' },
@@ -32,12 +32,12 @@ const isActive = (name: string) => {
 
 const handleNavigate = (name: string) => {
   if (name === 'notes') {
-    const activeId = notes.state.active?.id
+    const activeId = notebookStore.notebooksState.activeNotebook?.id
     const onEditor = route.name === 'note-editor'
     const onList = route.name === 'notes-list'
 
     if (onEditor) {
-      notes.clearActiveNote()
+      notebookStore.clearActiveNotebook()
       void router.push({ name: 'notes-list' })
       return
     }
@@ -58,7 +58,7 @@ const handleNavigate = (name: string) => {
 
 const authPopupOpen = ref(false)
 
-const activeMembership = computed(() => auth.state.memberships.find(item => item.status === 'active'))
+  const activeMembership = computed(() => auth.state.memberships.find(item => item.status === 'active'))
 const membershipLabel = computed(() => {
   if (!auth.state.user) return '未登录 · 点击登录'
   const membership = activeMembership.value
@@ -165,7 +165,7 @@ onMounted(() => {
   padding: 18px 14px;
   height: 100%;
   box-sizing: border-box;
-  background: #fff;
+  background: #f1f5f9;
   gap: 14px;
   transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -255,7 +255,7 @@ onMounted(() => {
   top: 50%;
   transform: translateY(-50%);
   background: rgba(15, 23, 42, 0.9);
-  color: #fff;
+  color: #f1f5f9;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -286,7 +286,7 @@ onMounted(() => {
   padding: 6px 10px;
   border-radius: 12px;
   border: 1px solid transparent;
-  background: #fff;
+  background: #f1f5f9;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   font-size: 12px;
@@ -294,7 +294,7 @@ onMounted(() => {
 }
 
 .sidebar__item:hover {
-  background: #f1f5f9;
+  background: #edeff3;
   border-color: rgba(15, 23, 42, 0.08);
 }
 
@@ -315,7 +315,7 @@ onMounted(() => {
 
 .sidebar.is-collapsed .sidebar__item:not(.is-active) {
   border-color: transparent;
-  background: #fff;
+  background: #f1f5f9;
 }
 
 .sidebar__icon {
@@ -381,7 +381,7 @@ onMounted(() => {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: #fff;
+  background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -14,7 +14,7 @@ export const AUDIO_EXTENSIONS = Object.freeze([
 ]) as readonly string[]
 
 export const TRANSCRIBE_ENDPOINT =
-  import.meta.env.VITE_TRANSCRIBE_ENDPOINT?.trim() || '/api/audio/transcriptions'
+  import.meta.env.VITE_TRANSCRIBE_ENDPOINT?.trim() || '/audio/transcriptions'
 
 export const TRANSCRIBE_STREAM_ENDPOINT =
   import.meta.env.VITE_TRANSCRIBE_STREAM_ENDPOINT?.trim() || '/api/audio/transcriptions/stream'

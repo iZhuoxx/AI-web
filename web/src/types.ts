@@ -4,8 +4,6 @@ export type TFileInMessage = {
   text?: string
   truncated?: boolean
   fileId?: string
-  purpose?: 'vision' | 'assistants'
-  viewUrl?: string
 }
 
 export type TMessage = {
@@ -16,4 +14,13 @@ export type TMessage = {
   images: string[]
   files: TFileInMessage[]
   meta: Record<string, any>
+}
+
+export type UiPhase = 'waiting' | 'streaming' | 'finished'
+
+export interface ResponseUIState {
+  phase: UiPhase
+  statusKey: string | null
+  statusText: string | null
+  hasTextStarted: boolean
 }

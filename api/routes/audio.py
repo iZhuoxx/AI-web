@@ -196,6 +196,11 @@ async def create_transcription(
             prompt=prompt.strip() if prompt else None,
         )
     except RuntimeError as exc:
+        # Print upstream error for easier debugging in terminal
+        try:
+            print("[Transcription error]", str(exc))
+        except Exception:
+            pass
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # --- 置信度过滤 ---

@@ -12,27 +12,38 @@
 
       <div v-else class="notes-list-view">
         <header class="notes-list-view__header">
-          <div class="header-text">
+          <div class="header-content">
             <h2>我的笔记</h2>
-            <p>{{ headerSubtitle }}</p>
+            <p class="header-subtitle">{{ headerSubtitle }}</p>
+          </div>
+          
+          <div class="header-actions">
+            <div :class="['search-container', { 'is-expanded': searchExpanded }]">
+              <button 
+                v-if="!searchExpanded" 
+                class="search-icon-btn" 
+                @click="handleSearchExpand"
+                type="button"
+              >
+                <SearchOutlined />
+              </button>
+              <a-input
+                v-else
+                ref="searchInputRef"
+                v-model:value="searchQuery"
+                size="large"
+                allow-clear
+                placeholder="搜索标题或摘要..."
+                class="search-input"
+                @blur="handleSearchBlur"
+              >
+                <template #prefix>
+                  <SearchOutlined />
+                </template>
+              </a-input>
+            </div>
           </div>
         </header>
-
-        <div class="notes-toolbar">
-          <div class="notes-search">
-            <a-input
-              v-model:value="searchQuery"
-              size="large"
-              allow-clear
-              placeholder="搜索标题、摘要或标签..."
-              class="notes-search__input"
-            >
-              <template #prefix>
-                <SearchOutlined />
-              </template>
-            </a-input>
-          </div>
-        </div>
 
         <div v-if="listLoading" class="notes-list-view__placeholder">
           <a-spin />
@@ -40,67 +51,69 @@
         </div>
 
         <div v-else>
-          <div v-if="shouldShowCreateCard || notes.length" class="notes-list-view__grid">
+          <div v-if="shouldShowCreateCard || notebooks.length" class="notes-list-view__grid">
             <div
               v-if="shouldShowCreateCard"
               key="create-card"
               :class="['notes-list-view__card', 'notes-list-view__card--create', { 'is-loading': creatingCard }]"
               role="button"
               tabindex="0"
-              @click="!creatingCard && handleCreateNote()"
-              @keydown.enter.prevent="!creatingCard && handleCreateNote()"
+              @click="!creatingCard && handleCreateNotebook()"
+              @keydown.enter.prevent="!creatingCard && handleCreateNotebook()"
             >
-              <div class="create-card__badge">
+              <div class="create-card__icon">
                 <PlusOutlined />
               </div>
               <h3>新建笔记</h3>
-              <p>开启属于你的知识库。</p>
+              <p>开启属于你的知识库</p>
               <a-spin v-if="creatingCard" size="small" />
             </div>
             <div
-              v-for="note in notes"
-              :key="note.id"
-              :class="['notes-list-view__card', { 'is-active': note.id === activeNoteId }]"
-              @click="handleSelectNote(note.id)"
-              @keydown.enter.prevent="handleSelectNote(note.id)"
+              v-for="notebook in notebooks"
+              :key="notebook.id"
+              :class="['notes-list-view__card', `card-color--${notebook.color || 'yellow'}`, { 'is-active': notebook.id === activeNotebookId }]"
+              @click="handleSelectNotebook(notebook.id)"
+              @keydown.enter.prevent="handleSelectNotebook(notebook.id)"
               role="button"
               tabindex="0"
             >
               <div class="card-header">
                 <div class="card-header__info">
-                  <h3>{{ note.title }}</h3>
-                  <span>{{ formatDate(note.updatedAt) }}</span>
+                  <h3>{{ notebook.title || '未命名笔记' }}</h3>
+                  <span>{{ formatDate(notebook.updatedAt) }}</span>
                 </div>
                 <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-card-menu">
                   <button class="card-menu" type="button" @click.stop>
                     <MoreOutlined />
                   </button>
                   <template #overlay>
-                    <a-menu @click="onNoteMenuClick(note, $event)">
+                    <a-menu @click="onNotebookMenuClick(notebook, $event)">
                       <a-menu-item key="rename">
                         <EditOutlined />
                         <span>重命名</span>
                       </a-menu-item>
-                      <a-menu-item key="delete">
-                        <DeleteOutlined />
-                        <span>删除</span>
+                      <a-menu-item key="color">
+                        <BgColorsOutlined />
+                        <span>更改颜色</span>
                       </a-menu-item>
+                <a-menu-divider />
+                <a-menu-item key="delete">
+                  <DeleteOutlined />
+                  <span>删除</span>
+                </a-menu-item>
                     </a-menu>
                   </template>
                 </a-dropdown>
               </div>
-              <p class="card-summary">{{ note.summary || '暂无摘要，进入笔记继续完善内容～' }}</p>
-              <div class="card-tags">
-                <a-tag v-for="tag in note.tags" :key="`${note.id}-${tag}`" bordered>{{ tag }}</a-tag>
-              </div>
+              <p class="card-summary">{{ notebook.summary || '暂无摘要，进入笔记继续完善内容～' }}</p>
             </div>
           </div>
 
-          <div v-if="isSearching && !notes.length" class="notes-list-view__placeholder notes-list-view__placeholder--surface">
+          <div v-if="isSearching && !notebooks.length" class="notes-list-view__placeholder notes-list-view__placeholder--surface">
             <a-empty description="没有找到相关笔记，换个关键词试试？" />
           </div>
 
-          <div v-else-if="!isSearching && !notes.length" class="notes-list-view__empty-hint">
+          <div v-else-if="!isSearching && !notebooks.length" class="notes-list-view__empty-hint">
             <h3>还没有笔记</h3>
             <p>点击上方的卡片立即创建第一篇笔记吧。</p>
           </div>
@@ -128,7 +141,7 @@
           ref="renameInputRef"
           v-model:value="renameModal.value"
           allow-clear
-          maxlength="60"
+          :maxlength="60"
           size="large"
           placeholder="输入新的笔记名称"
           autofocus
@@ -181,6 +194,33 @@
         </div>
       </div>
     </a-modal>
+
+    <a-modal
+      v-model:visible="colorModal.open"
+      :footer="null"
+      :maskClosable="true"
+      :width="320"
+      centered
+      destroy-on-close
+      wrap-class-name="note-modal note-modal--color"
+      @cancel="handleColorCancel"
+      @afterClose="resetColorModal"
+    >
+      <div class="note-modal__body note-modal__body--color">
+        <h3 class="color-modal__title">选择笔记颜色</h3>
+        <div class="color-picker">
+          <button
+            v-for="color in noteColors"
+            :key="color.value"
+            :class="['color-picker__item', `color-picker__item--${color.value}`, { 'is-selected': (colorModal.note?.color || 'yellow') === color.value }]"
+            @click="handleColorSelect(color.value)"
+            type="button"
+          >
+            <CheckOutlined v-if="(colorModal.note?.color || 'yellow') === color.value" class="color-selected-icon" />
+          </button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -188,47 +228,62 @@
 import { message } from 'ant-design-vue'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOutlined, DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { BookOutlined, BgColorsOutlined, CheckOutlined, DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import { useAuth } from '@/composables/useAuth'
-import { useNotes } from '@/composables/useNotes'
+import { useNotebookStore } from '@/composables/useNotes'
 import type { NotebookSummary } from '@/types/notes'
 
 const auth = useAuth()
-const notesStore = useNotes()
+const notebookStore = useNotebookStore()
 const router = useRouter()
 
-const { state, fetchList, createNewNote, renameNote, removeNote, clearActiveNote } = notesStore
+const {
+  notebooksState,
+  fetchNotebookList,
+  createNotebookWithFirstNote,
+  renameNotebook,
+  removeNotebook,
+  updateNotebookColor,
+  clearActiveNotebook,
+} = notebookStore
 
-const listLoading = computed(() => state.listLoading)
+const listLoading = computed(() => notebooksState.listLoading)
 const searchQuery = ref('')
+const searchExpanded = ref(false)
+const searchInputRef = ref<any>(null)
 const creatingCard = ref(false)
-const sortedNotes = computed(() => [...state.list].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1)))
-const filteredNotes = computed(() => {
+
+const noteColors = [
+  { value: 'yellow', label: '浅黄色' },
+  { value: 'blue', label: '浅蓝色' },
+  { value: 'green', label: '浅绿色' },
+  { value: 'purple', label: '浅紫色' },
+  { value: 'pink', label: '浅粉色' },
+  { value: 'orange', label: '浅橙色' },
+]
+
+const sortedNotebooks = computed(() => [...notebooksState.list].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1)))
+const filteredNotebooks = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return sortedNotes.value
-  return sortedNotes.value.filter(note => {
-    const inTitle = note.title?.toLowerCase().includes(query)
-    const inSummary = note.summary?.toLowerCase().includes(query)
-    const inTags = note.tags?.some(tag => tag.toLowerCase().includes(query))
-    return inTitle || inSummary || inTags
+  if (!query) return sortedNotebooks.value
+  return sortedNotebooks.value.filter(notebook => {
+    const inTitle = notebook.title?.toLowerCase().includes(query)
+    const inSummary = notebook.summary?.toLowerCase().includes(query)
+    return inTitle || inSummary
   })
 })
-const notes = computed<NotebookSummary[]>(() =>
-  filteredNotes.value.map(note => ({
-    ...note,
-    tags: [...note.tags],
-  }))
-)
+const notebooks = computed<NotebookSummary[]>(() => filteredNotebooks.value)
 const isSearching = computed(() => Boolean(searchQuery.value.trim()))
 const shouldShowCreateCard = computed(() => !isSearching.value)
-const totalCount = computed(() => state.list.length)
-const activeNoteId = computed(() => state.active?.id ?? null)
+const totalCount = computed(() => notebooksState.list.length)
+const activeNotebookId = computed(() => notebooksState.activeNotebook?.id ?? null)
 const headerSubtitle = computed(() => {
-  if (!isSearching.value) return `共 ${totalCount.value} 条记录，随时同步到云端`
-  return `共 ${totalCount.value} 条记录，当前显示 ${notes.value.length} 条匹配结果`
+  if (!isSearching.value) return `共 ${totalCount.value} 条记录`
+  return `显示 ${notebooks.value.length} / ${totalCount.value} 条匹配结果`
 })
 
-type CardAction = 'rename' | 'delete'
+type CardAction = 'rename' | 'delete' | 'color'
 
 const renameModal = reactive({
   open: false,
@@ -243,6 +298,12 @@ const deleteModal = reactive({
   note: null as NotebookSummary | null,
 })
 
+const colorModal = reactive({
+  open: false,
+  loading: false,
+  note: null as NotebookSummary | null,
+})
+
 const renameInputRef = ref<{ focus?: () => void } | null>(null)
 
 watch(
@@ -251,27 +312,40 @@ watch(
     if (!ready) return
     if (authed) {
       try {
-        await fetchList()
+        await fetchNotebookList()
       } catch (err) {
         // 错误在 store 内部已有提示
       }
     } else {
-      clearActiveNote()
+      clearActiveNotebook()
     }
   },
   { immediate: true },
 )
 
-const handleSelectNote = (noteId: string) => {
-  router.push({ name: 'note-editor', params: { id: noteId } })
+const handleSearchExpand = () => {
+  searchExpanded.value = true
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
 }
 
-const handleCreateNote = async () => {
+const handleSearchBlur = () => {
+  if (!searchQuery.value.trim()) {
+    searchExpanded.value = false
+  }
+}
+
+const handleSelectNotebook = (notebookId: string) => {
+  router.push({ name: 'note-editor', params: { id: notebookId } })
+}
+
+const handleCreateNotebook = async () => {
   if (creatingCard.value) return
   creatingCard.value = true
   try {
-    await createNewNote()
-    const active = state.active
+    await createNotebookWithFirstNote()
+    const active = notebooksState.activeNotebook
     if (active?.id) {
       router.push({ name: 'note-editor', params: { id: active.id } })
     }
@@ -289,25 +363,26 @@ const formatDate = (value?: string | null) => {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-const handleCardMenuAction = (note: NotebookSummary, action: CardAction) => {
+const handleCardMenuAction = (notebook: NotebookSummary, action: CardAction) => {
   if (action === 'rename') {
-    openRenameModal(note)
+    openRenameModal(notebook)
   } else if (action === 'delete') {
-    openDeleteModal(note)
+    openDeleteModal(notebook)
+  } else if (action === 'color') {
+    openColorModal(notebook)
   }
 }
 
-interface MenuClickEvent {
-  key: string
+const onNotebookMenuClick = (notebook: NotebookSummary, event: MenuInfo) => {
+  const actionKey = String(event.key)
+  if (actionKey === 'rename' || actionKey === 'delete' || actionKey === 'color') {
+    handleCardMenuAction(notebook, actionKey as CardAction)
+  }
 }
 
-const onNoteMenuClick = (note: NotebookSummary, event: MenuClickEvent) => {
-  handleCardMenuAction(note, event.key as CardAction)
-}
-
-const openRenameModal = (note: NotebookSummary) => {
-  renameModal.note = note
-  renameModal.value = note.title ?? ''
+const openRenameModal = (notebook: NotebookSummary) => {
+  renameModal.note = notebook
+  renameModal.value = notebook.title ?? ''
   renameModal.open = true
   nextTick(() => {
     renameInputRef.value?.focus?.()
@@ -338,8 +413,8 @@ const handleRenameSubmit = async () => {
   }
   renameModal.loading = true
   try {
-    await renameNote(renameModal.note.id, newTitle)
-    await fetchList()
+    await renameNotebook(renameModal.note.id, newTitle)
+    await fetchNotebookList()
     renameModal.open = false
   } catch (err) {
     return
@@ -348,8 +423,8 @@ const handleRenameSubmit = async () => {
   }
 }
 
-const openDeleteModal = (note: NotebookSummary) => {
-  deleteModal.note = note
+const openDeleteModal = (notebook: NotebookSummary) => {
+  deleteModal.note = notebook
   deleteModal.open = true
 }
 
@@ -366,10 +441,37 @@ const handleDeleteConfirm = async () => {
   if (!deleteModal.note) return
   deleteModal.loading = true
   try {
-    await removeNote(deleteModal.note.id)
+    await removeNotebook(deleteModal.note.id)
     deleteModal.open = false
   } finally {
     deleteModal.loading = false
+  }
+}
+
+const openColorModal = (notebook: NotebookSummary) => {
+  colorModal.note = notebook
+  colorModal.open = true
+}
+
+const handleColorCancel = () => {
+  colorModal.open = false
+}
+
+const resetColorModal = () => {
+  colorModal.note = null
+  colorModal.loading = false
+}
+
+const handleColorSelect = async (color: string) => {
+  if (!colorModal.note) return
+  colorModal.loading = true
+  try {
+    await updateNotebookColor(colorModal.note.id, color)
+    colorModal.open = false
+  } catch (err) {
+    // error handled in store
+  } finally {
+    colorModal.loading = false
   }
 }
 </script>
@@ -379,7 +481,7 @@ const handleDeleteConfirm = async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #f5f7fb;
+  background: #f7f7f8;
 }
 
 .page-content {
@@ -387,8 +489,11 @@ const handleDeleteConfirm = async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px;
+  padding: 40px 60px;
   box-sizing: border-box;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .notes-placeholder {
@@ -397,116 +502,137 @@ const handleDeleteConfirm = async () => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #4b5563;
-  border-radius: 16px;
+  color: #5f6368;
+  border-radius: 8px;
   padding: 24px;
 }
 
 .notes-placeholder--center {
   flex: 1;
   background: #fff;
-  border: 1px dashed rgba(37, 99, 235, 0.16);
+  border: 1px solid #e8eaed;
 }
 
 .placeholder-text {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .notes-list-view {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 32px;
   height: 100%;
 }
 
+/* Header Styles - Simple and Advanced */
 .notes-list-view__header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 24px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, rgba(79, 137, 255, 0.12), rgba(134, 179, 255, 0.25));
-  box-shadow: 0 16px 32px rgba(79, 137, 255, 0.12);
+  align-items: flex-end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8eaed;
 }
 
-.header-text h2 {
+.header-content h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #111827;
+  font-size: 32px;
+  font-weight: 400;
+  color: #202124;
+  letter-spacing: -0.5px;
 }
 
-.header-text p {
-  margin: 6px 0 0;
-  color: rgba(17, 24, 39, 0.72);
+.header-subtitle {
+  margin: 4px 0 0;
+  color: #5f6368;
   font-size: 14px;
+  font-weight: 400;
 }
 
-.notes-toolbar {
+/* Compact Search Box */
+.header-actions {
   display: flex;
-  gap: 12px;
   align-items: center;
-  padding: 0 4px;
-  margin-bottom: 12px;
-  margin-top: 10px;
+  padding-bottom: 2px;
 }
 
-.notes-search {
-  flex: 1;
-  --search-radius: 28px;
-}
-
-.notes-search__input {
-  width: 100%;
+.search-container {
+  width: 36px;
+  height: 36px;
+  transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   position: relative;
-  border-radius: var(--search-radius);
-  padding: 2px;
+}
+
+.search-container.is-expanded {
+  width: 280px;
+}
+
+.search-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #dadce0;
   background: #fff;
-  border: 1px solid rgba(86, 100, 132, 0.18);
-  transition:
-    border-color 0.2s ease,
-    transform 0.2s ease;
+  color: #5f6368;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
-.notes-search__input:focus-within {
-  border-color: rgba(79, 109, 255, 0.42);
-  transform: translateY(-1px);
+.search-icon-btn:hover {
+  background: #f8f9fa;
+  border-color: #c0c4cc;
 }
 
-.notes-search__input :deep(.ant-input-affix-wrapper) {
-  position: relative;
-  border-radius: calc(var(--search-radius) - 6px);
-  border: none;
+.search-icon-btn:active {
+  background: #f1f3f4;
+}
+
+.search-input {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px !important;
+  border: 1px solid #dadce0 !important;
+  background: #fff !important;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.search-input:hover {
+  border-color: #c0c4cc !important;
+}
+
+.search-input:focus-within {
+  border-color: #1a73e8 !important;
+  box-shadow: 0 1px 4px rgba(26, 115, 232, 0.25);
+}
+
+.search-input :deep(.ant-input-affix-wrapper) {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 12px !important;
+  height: 100%;
+}
+
+.search-input :deep(.ant-input-prefix) {
+  color: #5f6368;
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.search-input :deep(.ant-input) {
   background: transparent;
-  padding: 12px 26px 12px 34px;
-  transition:
-    transform 0.24s ease;
+  font-size: 14px;
+  color: #202124;
 }
 
-.notes-search__input :deep(.ant-input-prefix) {
-  margin-right: 16px;
-  color: rgba(71, 96, 255, 0.8);
-  font-size: 18px;
+.search-input :deep(.ant-input::placeholder) {
+  color: #80868b;
 }
 
-.notes-search__input :deep(.ant-input-clear-icon) {
-  color: rgba(71, 96, 255, 0.65);
-  transition: color 0.2s ease;
-}
-
-.notes-search__input :deep(.ant-input-clear-icon:hover) {
-  color: rgba(71, 96, 255, 0.95);
-}
-
-.notes-search__input :deep(.ant-input) {
-  background: transparent;
-  font-size: 15px;
-  color: #1f2937;
-  padding-left: 6px;
-}
-
-.notes-search__input :deep(.ant-input::placeholder) {
-  color: rgba(31, 41, 55, 0.58);
+.search-input :deep(.ant-input-clear-icon) {
+  color: #5f6368;
 }
 
 .notes-list-view__placeholder {
@@ -516,28 +642,28 @@ const handleDeleteConfirm = async () => {
   gap: 12px;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(37, 99, 235, 0.2);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.6);
-  color: #4b5563;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  background: #fff;
+  color: #5f6368;
 }
 
 .notes-list-view__placeholder--surface {
-  background: rgba(248, 250, 255, 0.72);
-  border: 1px solid rgba(121, 145, 255, 0.18);
+  background: #f8f9fa;
+  border: 1px solid #e8eaed;
 }
 
 .notes-list-view__empty-hint {
-  margin-top: 20px;
+  margin-top: 40px;
   text-align: center;
-  color: rgba(55, 65, 81, 0.78);
+  color: #5f6368;
 }
 
 .notes-list-view__empty-hint h3 {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #3b4bff;
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 400;
+  color: #202124;
 }
 
 .notes-list-view__empty-hint p {
@@ -545,365 +671,424 @@ const handleDeleteConfirm = async () => {
   font-size: 14px;
 }
 
+/* Constant Size Grid - Smaller notebooks */
 .notes-list-view__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  justify-content: center;
-  gap: 14px;
-  padding: 6px 0 12px;
+  grid-template-columns: repeat(auto-fill, 200px);
+  gap: 16px;
+  padding: 8px 0;
   overflow: auto;
-  margin-top: 14px;
 }
 
+/* Note Cards - Constant Size with Google-inspired Colors */
 .notes-list-view__card {
-  position: relative;
-  border-radius: 18px;
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
   padding: 16px;
-  text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: linear-gradient(150deg, #fff8d8, #ffe6ad);
-  transition:
-    transform 0.2s ease,
-    background 0.2s ease;
+  gap: 10px;
+  border: 1px solid #e8eaed;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   cursor: pointer;
-  min-height: 180px;
 }
 
+.notes-list-view__card:hover {
+  border-color: #d0d3d7;
+}
+
+.notes-list-view__card:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+/* Color Variants - Google Keep Style */
+.card-color--yellow {
+  background: #fff8e1;
+}
+
+.card-color--blue {
+  background: #e3f2fd;
+}
+
+.card-color--green {
+  background: #e8f5e9;
+}
+
+.card-color--purple {
+  background: #f3e5f5;
+}
+
+.card-color--pink {
+  background: #fce4ec;
+}
+
+.card-color--orange {
+  background: #ffe0b2;
+}
+
+/* Create Card */
 .notes-list-view__card--create {
   background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid #e8eaed;
   align-items: center;
   text-align: center;
-  gap: 14px;
+  gap: 12px;
   justify-content: center;
-  padding: 28px 16px 26px;
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease;
 }
 
 .notes-list-view__card--create:hover {
-  transform: translateY(-4px);
-  border-color: rgba(79, 109, 255, 0.35);
+  border-color: #1a73e8;
+  background: #f8f9fa;
 }
 
 .notes-list-view__card--create h3 {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 16px;
-  font-weight: 600;
-  color: #273469;
+  font-weight: 500;
+  color: #202124;
 }
 
 .notes-list-view__card--create p {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 13px;
-  color: rgba(39, 52, 105, 0.6);
+  color: #5f6368;
 }
 
 .notes-list-view__card--create.is-loading {
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
-.notes-list-view__card--create :deep(.ant-spin) {
-  margin-top: 6px;
-}
-
-.create-card__badge {
-  width: 68px;
-  height: 68px;
+.create-card__icon {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(86, 115, 255, 0.12);
-  color: #4058ff;
+  background: #f1f3f4;
+  color: #5f6368;
 }
 
-.create-card__badge .anticon {
-  font-size: 20px;
-}
-
-.notes-list-view__card:focus-visible {
-  outline: 2px solid rgba(255, 175, 45, 0.45);
-  outline-offset: 3px;
+.create-card__icon .anticon {
+  font-size: 24px;
 }
 
 .notes-list-view__card.is-active {
-  background: linear-gradient(150deg, #fff8d8, #ffe6ad);
-  transform: none;
-}
-
-.notes-list-view__card:hover {
-  transform: translateY(-3px);
+  border-color: #1a73e8;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .card-header__info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
 .card-header h3 {
   margin: 0;
   font-size: 16px;
-  font-weight: 600;
-  color: #8a5800;
+  font-weight: 500;
+  color: #202124;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-header span {
   font-size: 12px;
-  color: rgba(138, 88, 0, 0.7);
+  color: #5f6368;
 }
 
 .card-summary {
   margin: 0;
-  color: #5f3c00;
+  color: #202124;
   font-size: 14px;
-  line-height: 1.6;
-  min-height: 42px;
+  line-height: 1.5;
+  flex: 1;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  line-clamp: 5;
+  -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.card-tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.card-tags :deep(.ant-tag) {
-  background: rgba(255, 255, 255, 0.6);
-  border: none;
-  color: #b05d00;
-  border-radius: 999px;
-  font-weight: 500;
 }
 
 .card-menu {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   border: none;
   background: transparent;
-  color: rgba(138, 88, 0, 0.55);
+  color: #5f6368;
   cursor: pointer;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
 }
 
 .card-menu:hover {
-  background: rgba(255, 196, 72, 0.22);
-  color: #8a5800;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .card-menu:active {
-  background: rgba(255, 196, 72, 0.3);
+  background: rgba(0, 0, 0, 0.1);
 }
 
+/* Dropdown Menu */
 :deep(.note-card-menu .ant-dropdown-menu) {
-  border-radius: 14px;
-  padding: 8px;
-  background: rgba(255, 253, 240, 0.96);
-  box-shadow:
-    0 18px 36px rgba(79, 137, 255, 0.14),
-    0 6px 16px rgba(189, 156, 58, 0.18);
-  border: 1px solid rgba(255, 199, 96, 0.2);
-  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 8px 0;
+  background: #fff;
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  border: none;
+  min-width: 200px;
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item) {
-  border-radius: 10px;
-  color: #8a5800;
-  font-weight: 500;
+  padding: 8px 16px;
+  color: #202124;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item:hover) {
-  background: rgba(255, 209, 120, 0.3);
-  color: #5f3c00;
+  background: #f1f3f4;
 }
 
+:deep(.note-card-menu .ant-dropdown-menu-item-group-title) {
+  padding: 8px 16px;
+  color: #5f6368;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+:deep(.note-card-menu .ant-dropdown-menu-item-divider) {
+  background: #e8eaed;
+  margin: 4px 0;
+}
+
+/* Color Picker Modal */
+.note-modal--color :deep(.ant-modal-content) {
+  padding: 24px;
+}
+
+.note-modal__body--color {
+  gap: 20px;
+}
+
+.color-modal__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #202124;
+  text-align: center;
+}
+
+.color-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.color-picker__item {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.color-picker__item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.color-picker__item.is-selected {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.color-picker__item--yellow { background: #fff8e1; }
+.color-picker__item--blue { background: #e3f2fd; }
+.color-picker__item--green { background: #e8f5e9; }
+.color-picker__item--purple { background: #f3e5f5; }
+.color-picker__item--pink { background: #fce4ec; }
+.color-picker__item--orange { background: #ffe0b2; }
+
+.color-selected-icon {
+  color: #1a73e8;
+  font-size: 24px;
+}
+
+/* Modal Styles */
 :deep(.note-modal.ant-modal) {
-  border-radius: 32px;
-  overflow: hidden;
+  border-radius: 8px;
 }
 
 :deep(.note-modal .ant-modal-content) {
-  border-radius: 30px;
-  padding: 36px 34px 32px;
-  background: rgba(248, 250, 255, 0.96);
-  box-shadow:
-    0 28px 64px rgba(71, 99, 255, 0.22),
-    0 12px 32px rgba(71, 99, 255, 0.12);
-  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
 }
 
 .note-modal__body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
 }
 
 .note-modal__body--delete {
-  gap: 28px;
+  gap: 24px;
 }
 
 .note-modal__avatar {
-  width: 96px;
-  height: 96px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.9), rgba(83, 106, 255, 0.95));
+  background: #1a73e8;
   color: #fff;
-  font-size: 44px;
+  font-size: 36px;
 }
 
 .note-modal__label {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: rgba(55, 65, 81, 0.86);
+  font-size: 14px;
+  font-weight: 500;
+  color: #202124;
   align-self: flex-start;
 }
 
 .note-modal__input {
   width: 100%;
-  border-radius: 18px;
-  border: 1px solid rgba(123, 145, 255, 0.35);
-  padding: 0;
-  overflow: hidden;
-  transition:
-    border-color 0.22s ease,
-    box-shadow 0.22s ease,
-    background 0.22s ease;
+  border-radius: 4px;
+  border: 1px solid #dadce0;
 }
 
 .note-modal__input :deep(.ant-input) {
   border: none;
   padding: 12px 16px;
   font-size: 14px;
-  background: transparent;
-  color: #1f2937;
-}
-
-.note-modal__input :deep(.ant-input::placeholder) {
-  color: rgba(31, 41, 55, 0.55);
-}
-
-.note-modal__input :deep(.ant-input-clear-icon) {
-  color: rgba(79, 101, 255, 0.65);
+  color: #202124;
 }
 
 .note-modal__input:focus-within {
-  border-color: rgba(79, 137, 255, 0.65);
-  box-shadow: 0 0 0 3px rgba(79, 137, 255, 0.18);
-  background: rgba(255, 255, 255, 0.98);
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
 .note-modal__actions {
   display: flex;
-  justify-content: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
   width: 100%;
 }
 
 .note-modal__btn {
-  border-radius: 999px !important;
-  font-weight: 600 !important;
-}
-
-.note-modal__btn--ghost,
-.note-modal__btn--primary {
-  height: 40px !important;
-  padding: 0 28px !important;
-  min-width: 102px;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+  height: 36px !important;
+  padding: 0 24px !important;
 }
 
 .note-modal__btn--ghost {
-  background: rgba(122, 146, 255, 0.12) !important;
+  background: transparent !important;
   border: none !important;
-  color: #6175ff !important;
+  color: #1a73e8 !important;
 }
 
 .note-modal__btn--ghost:hover {
-  background: rgba(122, 146, 255, 0.22) !important;
-  color: #4252d8 !important;
+  background: rgba(26, 115, 232, 0.08) !important;
 }
 
 .note-modal__btn--primary {
-  background: linear-gradient(135deg, #547bff, #7f5bff) !important;
+  background: #1a73e8 !important;
   border: none !important;
   color: #fff !important;
 }
 
 .note-modal__btn--primary:hover {
-  filter: brightness(1.05);
+  background: #1765cc !important;
 }
 
 .note-modal__btn--danger {
-  background: linear-gradient(135deg, #7a6bff, #5f57ff) !important;
+  background: #d93025 !important;
   border: none !important;
   color: #fff !important;
-  box-shadow: 0 8px 18px rgba(91, 86, 255, 0.32) !important;
-  height: 40px !important;
-  padding: 0 28px !important;
-  min-width: 102px;
 }
 
 .note-modal__btn--danger:hover {
-  filter: brightness(1.05);
+  background: #c5221f !important;
 }
 
 .note-modal__delete-title {
   margin: 0;
   font-size: 16px;
-  color: rgba(31, 41, 55, 0.88);
+  color: #202124;
   text-align: center;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .note-modal__note-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: rgba(226, 234, 255, 0.56);
-  color: #4051c0;
-  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f1f3f4;
+  color: #202124;
+  font-weight: 500;
 }
 
 @media (max-width: 768px) {
   .page-content {
-    padding: 12px;
+    padding: 20px;
   }
 
   .notes-list-view__header {
     flex-direction: column;
-    gap: 16px;
     align-items: flex-start;
+    gap: 16px;
   }
 
-  .notes-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .header-actions {
+    width: 100%;
+  }
+
+  .search-container.is-expanded {
+    width: 100%;
+  }
+
+  .notes-list-view__grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+
+  .notes-list-view__card {
+    width: 100%;
   }
 }
 </style>

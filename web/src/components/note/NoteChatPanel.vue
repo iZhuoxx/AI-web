@@ -14,6 +14,7 @@
             :key="idx"
             :message="msg"
             :class="msg.type === 1 ? 'send' : 'replay'"
+            @open-citation="emit('open-citation', $event)"
           />
           <!-- Loading bubble when waiting for response - only show if no assistant message started yet -->
           <div v-if="loadding && !hasAssistantMessageStarted" class="loading-bubble">
@@ -40,7 +41,7 @@
               <input
                 type="file"
                 multiple
-                accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
+                accept="image/*,.c,.cpp,.cs,.css,.csv,.doc,.docx,.gif,.go,.html,.java,.jpeg,.jpg,.js,.json,.md,.pdf,.php,.pkl,.png,.pptx,.py,.rb,.tar,.tex,.ts,.txt,.webp,.xlsx,.xml,.zip,.mp3"
                 style="display:none"
                 @change="handleAttachmentSelection"
               />
@@ -133,11 +134,12 @@ import {
   StopOutlined,
 } from '@ant-design/icons-vue'
 import { message as antdMessage } from 'ant-design-vue'
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch, shallowRef } from 'vue'
 import Message from '@/components/message.vue'
 import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
+import { useNotebookStore } from '@/composables/useNotes'
 import useSetting from '@/composables/setting'
 
 export type NoteChatPanelExposed = {
@@ -146,18 +148,78 @@ export type NoteChatPanelExposed = {
 
 const emit = defineEmits<{
   (e: 'has-messages-change', value: boolean): void
+  (e: 'open-citation', payload: {
+    fileId: string
+    filename?: string
+    index?: number
+    startIndex?: number
+    endIndex?: number
+    quote?: string
+    label?: number
+  }): void
 }>()
 
 // 固定模型为 GPT-5
 const setting = useSetting()
-setting.value.model = 'gpt-5'
+setting.value.model = 'gpt-5-mini-2025-08-07'
 
-// chat 相关
-const NOTE_CHAT_TOOLS = [{ type: 'image_generation' }]
-const { loadding, send, stop, messagesStore } = useChat({
-  storageKey: 'notes-chat-messages',
-  tools: NOTE_CHAT_TOOLS,
+// 当前笔记本的向量库 ID，用于 file_search
+const notebookStore = useNotebookStore()
+const vectorStoreId = computed(() => notebookStore.notebooksState.activeNotebook?.openaiVectorStoreId || null)
+const chatTools = computed(() => {
+  const tools = []
+  if (vectorStoreId.value) {
+    tools.push({
+      type: 'file_search',
+      vector_store_ids: [vectorStoreId.value],
+    })
+  }
+  return tools
 })
+
+// chat 相关：按 notebook id 生成独立的存储 key
+const activeNotebookId = computed(() => notebookStore.activeNotebook.value?.id ?? null)
+type ChatInstance = ReturnType<typeof useChat>
+const chatInstance = shallowRef<ChatInstance | null>(null)
+
+const createChatInstance = (id: string | number | null) => {
+  if (!id) {
+    chatInstance.value?.stop?.()
+    chatInstance.value = null
+    return
+  }
+
+  chatInstance.value?.stop?.()
+  const instance = useChat({
+    storageKey: 'notes-chat-messages' + id,
+    tools: () => chatTools.value,
+    includes: () => (vectorStoreId.value ? ['file_search_call.results'] : []),
+  })
+  instance.messagesStore.setPreferredTools?.(chatTools.value ?? null)
+  chatInstance.value = instance
+}
+
+watch(activeNotebookId, id => createChatInstance(id), { immediate: true })
+
+// 同步 tools 变化（例如 notebook 切换后 vector store id 变化）
+watch(
+  [chatTools, chatInstance],
+  ([value, instance]) => {
+    instance?.messagesStore.setPreferredTools?.(value ?? null)
+  },
+  { immediate: true },
+)
+
+const loadding = computed(() => chatInstance.value?.loadding.value ?? false)
+const messagesStore = computed(() => chatInstance.value?.messagesStore ?? null)
+const chatMessages = computed(() => messagesStore.value?.messages.value ?? [])
+const send: ChatInstance['send'] = async payload => {
+  if (!chatInstance.value) return
+  return chatInstance.value.send(payload)
+}
+const stop = () => {
+  chatInstance.value?.stop()
+}
 
 // 上传/拖拽/音频转写 相关
 const {
@@ -190,7 +252,6 @@ const startRealtimeRecording = realtime.startRecording
 const stopRealtimeRecording = realtime.stopRecording
 const realtimeSegments = realtime.segments
 
-const chatMessages = messagesStore.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
 watch(hasMessages, value => emit('has-messages-change', value), { immediate: true })
 
@@ -297,16 +358,12 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   const text = state.message.trim()
   if (!text && !imageFiles.value.length && !genericFiles.value.length) return
 
-  if (hasPendingUploads.value) {
-    await ensureAudioTranscriptions()
-  }
+  await ensureUploads()
+  await ensureAudioTranscriptions()
   if (hasPendingUploads.value) {
     antdMessage.info('仍有文件处理中，请稍后再试')
     return
   }
-
-  await ensureUploads()
-  await ensureAudioTranscriptions()
 
   const imagesDataUrls: string[] = []
   for (const file of imageFiles.value) {
@@ -382,7 +439,14 @@ watch([chatMessages, loadding], async () => {
 }, { deep: true })
 
 const startNewConversation = () => {
-  messagesStore.clearMessages()
+  stop()
+  const store = messagesStore.value
+  if (store) {
+    store.clearMessages()
+    store.resetLastCompletedResponseId?.()
+  }
+  isAutoScroll.value = true
+  showScrollToBottom.value = false
 }
 
 defineExpose<NoteChatPanelExposed>({
@@ -421,31 +485,39 @@ const handleAttachmentSelection = (event: Event) => {
 </script>
 
 <style scoped>
-.note-chat-panel { 
-  display: flex; 
-  flex-direction: column; 
-  height: 100%; 
-  min-height: 0; 
-  background: #fff; 
+.note-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: #fff;
+  overflow-x: hidden;
 }
 
-.chat-main { 
-  position: relative; 
-  flex: 1; 
-  display: flex; 
-  flex-direction: column; 
-  min-height: 0; 
-  background: #fff; 
+.chat-main {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: #fff;
+  overflow-x: hidden;
 }
 
-.messages { 
-  flex: 1; 
-  min-height: 0; 
-  overflow-y: auto; 
-  padding: 12px 14px; 
-  display: flex; 
-  flex-direction: column; 
-  gap: 14px; 
+.messages {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
   background: #fff;
   scrollbar-width: thin;
   scrollbar-color: #d1d5db #fff;
@@ -538,8 +610,10 @@ const handleAttachmentSelection = (event: Event) => {
   padding: 12px 14px; 
   display: flex; 
   flex-direction: column; 
-  gap: 10px; 
-}
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+} 
 
 .composer.drag-over { 
   border-color: rgba(37, 99, 235, 0.45); 
@@ -548,12 +622,14 @@ const handleAttachmentSelection = (event: Event) => {
 
 .composer-inner { 
   display: flex; 
-  align-items: flex-end; 
-  gap: 10px; 
-}
+  align-items: center; 
+  gap: 10px;
+  min-width: 0;
+} 
 
 .composer-accessories { 
   display: flex; 
+  align-items: center;
   gap: 6px; 
 }
 
@@ -593,6 +669,7 @@ const handleAttachmentSelection = (event: Event) => {
 
 .composer-input { 
   flex: 1; 
+  min-width: 0;
   border-radius: 12px; 
   border: 1px solid rgba(148, 163, 184, 0.45); 
   background: #fff; 

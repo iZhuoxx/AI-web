@@ -56,10 +56,11 @@
           <div v-if="isNotesFullscreen" class="editor-view__fullscreen">
             <NoteEditorPanel
               v-if="selectedNoteId"
-              :notes="panelNotes"
+              :note="activeNoteForEditor"
               :isGenerating="isGeneratingNotes"
               :isFullscreen="true"
               :showSyncButton="showSyncButton"
+              @back="handleReturnToBrowser"
               @toggle-fullscreen="exitFullscreen"
               @user-edit="handleNoteEdited"
               @request-sync="restoreAutoSync"
@@ -88,17 +89,12 @@
                 @create="handleCreateNote"
               />
               <div v-else class="editor-panel">
-                <div class="editor-panel__header">
-                  <a-button type="link" class="editor-panel__back" @click="handleReturnToBrowser">
-                    <ChevronLeftIcon class="back-icon" />
-                    返回笔记浏览
-                  </a-button>
-                </div>
                 <NoteEditorPanel
-                  :notes="panelNotes"
+                  :note="activeNoteForEditor"
                   :isGenerating="isGeneratingNotes"
                   :isFullscreen="false"
                   :showSyncButton="showSyncButton"
+                  @back="handleReturnToBrowser"
                   @toggle-fullscreen="enterFullscreen"
                   @user-edit="handleNoteEdited"
                   @request-sync="restoreAutoSync"
@@ -165,32 +161,31 @@
 
                 <div class="insight-stack__panels">
                   <div class="tabs-panel">
-                    <NoteChatPanel
-                      v-if="activeTab === 'chat'"
-                      ref="noteChatPanelRef"
-                      @has-messages-change="handleChatMessagesChange"
-                    />
-                    <NoteTranscriptionPanel
-                      v-else-if="activeTab === 'realtime'"
-                      :segments="transcriptSegments"
-                      :live-text="liveText"
-                      :isRecording="isRecording"
-                    />
-                    <NoteFlashcardsPanel v-else-if="activeTab === 'flashcards'" />
-                    <NoteQuizPanel v-else-if="activeTab === 'quiz'" />
-                    <NoteMindMapPanel
-                      v-else-if="activeTab === 'learning'"
-                      :materials="mindMapMaterials"
-                      :keywords="keywords"
-                      :isLoading="isMindMapLoading"
-                    />
-                    <NoteMaterialsPanel
-                      v-else
-                      :attachments="notebookAttachments"
-                      :notebook-id="activeNotebookId"
-                      :loading="noteLoading"
-                      @updated="handleMaterialsUpdated"
-                    />
+                    <KeepAlive>
+                      <NoteChatPanel
+                        v-if="activeTab === 'chat'"
+                        ref="noteChatPanelRef"
+                        @has-messages-change="handleChatMessagesChange"
+                        @open-citation="handleCitationOpen"
+                      />
+                      <NoteTranscriptionPanel
+                        v-else-if="activeTab === 'realtime'"
+                        :segments="transcriptSegments"
+                        :live-text="liveText"
+                        :isRecording="isRecording"
+                      />
+                      <NoteFlashcardsPanel v-else-if="activeTab === 'flashcards'" />
+                      <NoteQuizPanel v-else-if="activeTab === 'quiz'" />
+                      <NoteMindMapPanel v-else-if="activeTab === 'learning'" />
+                      <NoteMaterialsPanel
+                        v-else
+                        ref="materialsPanelRef"
+                        :attachments="notebookAttachments"
+                        :notebook-id="activeNotebookId"
+                        :loading="noteLoading"
+                        @updated="handleMaterialsUpdated"
+                      />
+                    </KeepAlive>
                   </div>
                 </div>
               </div>
@@ -210,7 +205,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
   ChevronUpIcon,
   ClipboardListIcon,
   FolderOpenIcon,
@@ -220,7 +214,7 @@ import {
   PlusCircleIcon,
   SparklesIcon,
 } from 'lucide-vue-next'
-import type { KeywordItem, LearningMaterial, NoteItem, TranscriptSegment } from '@/types/notes'
+import type { ActiveNoteForEditor, TranscriptSegment } from '@/types/notes'
 import NotebookNotesList from '@/components/note/NotebookNotesList.vue'
 import NoteEditorPanel from '@/components/note/NoteEditorPanel.vue'
 import NoteRecordingPanel from '@/components/note/NoteRecordingPanel.vue'
@@ -231,17 +225,29 @@ import NoteMindMapPanel from '@/components/note/NoteMindMapPanel.vue'
 import NoteMaterialsPanel from '@/components/note/NoteMaterialsPanel.vue'
 import NoteQuizPanel from '@/components/note/NoteQuizPanel.vue'
 import NoteTranscriptionPanel from '@/components/note/NoteTranscriptionPanel.vue'
-import { useNotes } from '@/composables/useNotes'
+import { useNotebookStore } from '@/composables/useNotes'
 import { useAuth } from '@/composables/useAuth'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
 
 const auth = useAuth()
-const notesStore = useNotes()
+const notebookStore = useNotebookStore()
 const route = useRoute()
 const router = useRouter()
 
 type InsightTabKey = 'chat' | 'realtime' | 'flashcards' | 'quiz' | 'learning' | 'materials'
 type InsightTabIcon = typeof SparklesIcon
+type CitationOpenPayload = {
+  fileId: string
+  filename?: string
+  index?: number
+  startIndex?: number
+  endIndex?: number
+  quote?: string
+  label?: number
+}
+type MaterialsPanelExposed = {
+  focusAttachmentByCitation?: (payload: CitationOpenPayload) => Promise<boolean> | boolean
+}
 
 interface InsightTabOption {
   key: InsightTabKey
@@ -249,7 +255,7 @@ interface InsightTabOption {
   icon: InsightTabIcon
 }
 
-const panelNotes = ref<NoteItem[]>([])
+const activeNoteForEditor = ref<ActiveNoteForEditor | null>(null)
 const editorDraft = reactive({ title: '', content: '' })
 const selectedNoteId = ref<string | null>(null)
 const isEditingNotebookTitle = ref(false)
@@ -257,6 +263,7 @@ const notebookTitleInput = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const tabsNavRef = ref<HTMLElement | null>(null)
 const noteChatPanelRef = ref<NoteChatPanelExposed | null>(null)
+const materialsPanelRef = ref<MaterialsPanelExposed | null>(null)
 const tabButtonRefs = reactive<Partial<Record<InsightTabKey, HTMLButtonElement | null>>>({})
 const tabIndicator = reactive({ width: 0, left: 0, visible: false })
 const hasPendingChanges = ref(false)
@@ -279,10 +286,6 @@ const showNewChatButton = computed(() => activeTab.value === 'chat' && chatHasMe
 const leftPaneWidth = ref(45)
 const dragContainer = ref<HTMLElement | null>(null)
 const verticalDragging = ref(false)
-const mindMapMaterials = ref<LearningMaterial[]>([])
-const isMindMapLoading = ref(false)
-let mindMapTimer: number | null = null
-const mindMapMaterialTypes: LearningMaterial['type'][] = ['article', 'video', 'document']
 
 const {
   canRecord,
@@ -306,14 +309,14 @@ const {
 const transcriptSegments = computed<TranscriptSegment[]>(() => segments.value)
 const recordingError = computed(() => errorMessage.value)
 const isGeneratingNotes = computed(() => isRecording.value && !isPaused.value)
-const notebookNotes = computed(() => notesStore.notesForEditor.value)
-const noteLoading = computed(() => notesStore.state.noteLoading)
-const saving = computed(() => notesStore.state.saving)
-const notebookTitle = computed(() => notesStore.state.active?.title || '未命名笔记本')
+const notebookNotes = computed(() => notebookStore.notesForEditor.value)
+const noteLoading = computed(() => notebookStore.notebooksState.activeLoading)
+const saving = computed(() => notebookStore.notebooksState.saving)
+const notebookTitle = computed(() => notebookStore.notebooksState.activeNotebook?.title || '未命名笔记本')
 const showSyncButton = computed(() => Boolean(selectedNoteId.value) && !shouldAutoSyncNotes.value)
 const isEditorRoute = computed(() => route.name === 'note-editor')
-const activeNotebookId = computed(() => notesStore.state.active?.id ?? null)
-const notebookAttachments = computed(() => notesStore.state.active?.attachments ?? [])
+const activeNotebookId = computed(() => notebookStore.notebooksState.activeNotebook?.id ?? null)
+const notebookAttachments = computed(() => notebookStore.notebooksState.activeNotebook?.attachments ?? [])
 const hasUnsavedChanges = computed(() => {
   if (!selectedNoteId.value) return false
   const note = notebookNotes.value.find(item => item.id === selectedNoteId.value)
@@ -340,12 +343,12 @@ const routeNotebookId = computed(() => {
 
 const persistDraft = () => {
   if (!selectedNoteId.value) return
-  notesStore.setDraft(selectedNoteId.value, { title: editorDraft.title, content: editorDraft.content })
+  notebookStore.setDraft(selectedNoteId.value, { title: editorDraft.title, content: editorDraft.content })
 }
 
 const resetEditorState = () => {
   selectedNoteId.value = null
-  panelNotes.value = []
+  activeNoteForEditor.value = null
   editorDraft.title = ''
   editorDraft.content = ''
   hasPendingChanges.value = false
@@ -356,13 +359,13 @@ const loadNoteIntoEditor = (noteId: string) => {
   const note = notebookNotes.value.find(item => item.id === noteId)
   if (!note) return
   syncingFromStore.value = true
-  const draft = notesStore.getDraft(noteId)
+  const draft = notebookStore.getDraft(noteId)
   const title = draft?.title ?? note.title ?? '未命名笔记'
   const content = draft?.content ?? note.content ?? ''
   selectedNoteId.value = noteId
   editorDraft.title = title
   editorDraft.content = content
-  panelNotes.value = [{ id: noteId, title, content }]
+  activeNoteForEditor.value = { id: noteId, title, content }
   hasPendingChanges.value = !!draft
   shouldAutoSyncNotes.value = true
   nextTick(() => {
@@ -374,25 +377,18 @@ const ensureNoteLoaded = async (id?: string) => {
   if (!isEditorRoute.value) return
   if (!id) {
     message.warning('请选择要打开的笔记')
-    notesStore.clearActiveNote()
+    notebookStore.clearActiveNotebook()
     resetEditorState()
     await router.replace({ name: 'notes-list' })
     return
   }
-  if (notesStore.state.active?.id === id) return
-  try {
-    await notesStore.openNote(id)
-    resetEditorState()
-  } catch (err) {
-    message.error('无法打开笔记，请稍后再试')
-    notesStore.clearActiveNote()
-    resetEditorState()
-    await router.replace({ name: 'notes-list' })
-  }
+  if (notebookStore.notebooksState.activeNotebook?.id === id) return
+  await notebookStore.openNotebook(id)
+  resetEditorState()
 }
 
 watch(
-  () => notesStore.state.active?.id,
+  () => notebookStore.notebooksState.activeNotebook?.id,
   (currentId, previousId) => {
     if (!currentId || currentId !== previousId) {
       resetEditorState()
@@ -417,7 +413,7 @@ watch(
   async ({ ready, authed }) => {
     if (!ready) return
     if (!authed) {
-      notesStore.clearActiveNote()
+      notebookStore.clearActiveNotebook()
       resetEditorState()
       if (isEditorRoute.value) {
         message.info('请先登录后查看笔记')
@@ -454,7 +450,11 @@ const extractSegmentsAsNote = () => {
   const text = transcriptText.value.trim()
   if (!text) {
     editorDraft.content = ''
-    panelNotes.value = [{ id: selectedNoteId.value, title: editorDraft.title || '实时记录', content: '' }]
+    activeNoteForEditor.value = {
+      id: selectedNoteId.value,
+      title: editorDraft.title || '实时记录',
+      content: '',
+    }
     hasPendingChanges.value = true
     persistDraft()
     nextTick(() => {
@@ -464,7 +464,11 @@ const extractSegmentsAsNote = () => {
   }
   const html = text.replace(/\n/g, '<br>')
   editorDraft.content = html
-  panelNotes.value = [{ id: selectedNoteId.value, title: editorDraft.title || '实时记录', content: html }]
+  activeNoteForEditor.value = {
+    id: selectedNoteId.value,
+    title: editorDraft.title || '实时记录',
+    content: html,
+  }
   hasPendingChanges.value = true
   persistDraft()
   nextTick(() => {
@@ -492,8 +496,14 @@ const handleEditorChange = (payload: { title: string; content: string }) => {
   if (!selectedNoteId.value) return
   editorDraft.title = payload.title
   editorDraft.content = payload.content
-  if (panelNotes.value.length) {
-    panelNotes.value[0] = { ...panelNotes.value[0], title: payload.title, content: payload.content }
+  if (activeNoteForEditor.value) {
+    activeNoteForEditor.value = {
+      ...activeNoteForEditor.value,
+      title: payload.title,
+      content: payload.content,
+    }
+  } else {
+    activeNoteForEditor.value = { id: selectedNoteId.value, ...payload }
   }
   if (syncingFromStore.value) return
   hasPendingChanges.value = true
@@ -501,26 +511,28 @@ const handleEditorChange = (payload: { title: string; content: string }) => {
 }
 
 const handleSaveNote = async (payload: { title: string; content: string }) => {
-  if (!notesStore.state.active || !selectedNoteId.value) {
+  const noteId = selectedNoteId.value
+  if (!notebookStore.notebooksState.activeNotebook || !noteId) {
     message.warning('请选择要编辑的笔记')
     return
   }
   editorDraft.title = payload.title
   editorDraft.content = payload.content
-  try {
-    const previousId = selectedNoteId.value
-    const updatedNote = await notesStore.saveActiveNote(
-      { title: payload.title, content: payload.content },
-      { noteId: previousId },
-    )
-    const nextId = updatedNote?.id ?? previousId
-    if (previousId && previousId !== nextId) {
-      notesStore.clearDraft(previousId)
+  if (activeNoteForEditor.value) {
+    activeNoteForEditor.value = {
+      ...activeNoteForEditor.value,
+      title: payload.title,
+      content: payload.content,
     }
-    notesStore.clearDraft(nextId)
+  }
+  try {
+    await notebookStore.saveNoteInActiveNotebook(
+      { title: payload.title, content: payload.content },
+      { noteId },
+    )
+    notebookStore.clearDraft(noteId)
     hasPendingChanges.value = false
     await nextTick()
-    loadNoteIntoEditor(nextId)
   } catch {
     // 错误信息由 store 统一处理
   }
@@ -561,7 +573,7 @@ const handleCreateNote = async () => {
     return
   }
   try {
-    const created = await notesStore.addNoteToActive({ title: '新建笔记', content: '' })
+    const created = await notebookStore.addNoteToActiveNotebook({ title: '新建笔记', content: '' })
     if (created?.id) {
       await nextTick()
       loadNoteIntoEditor(created.id)
@@ -578,7 +590,7 @@ const handleNotebookTitleChange = async (value: string) => {
   const nextTitle = value?.trim() || '未命名笔记本'
   if (nextTitle === notebookTitle.value) return
   try {
-    await notesStore.updateActiveNotebookTitle(nextTitle)
+    await notebookStore.updateActiveNotebookTitle(nextTitle)
   } catch (err) {
     // 错误已在 store 中提示
   }
@@ -627,8 +639,8 @@ const updateTabsIndicator = () => {
   }
   const navRect = nav.getBoundingClientRect()
   const btnRect = btn.getBoundingClientRect()
-  tabIndicator.width = btnRect.width
-  tabIndicator.left = btnRect.left - navRect.left
+  tabIndicator.width = btnRect.width - 6
+  tabIndicator.left = btnRect.left - navRect.left + 3
   tabIndicator.visible = true
 }
 
@@ -644,7 +656,7 @@ const toggleRecordingPanel = () => {
 
 const handleMaterialsUpdated = async () => {
   if (!activeNotebookId.value) return
-  await ensureNoteLoaded(activeNotebookId.value)
+  await notebookStore.reloadActiveNotebook()
   if (selectedNoteId.value) {
     await nextTick()
     loadNoteIntoEditor(selectedNoteId.value)
@@ -677,6 +689,16 @@ const handleTabChange = (key: InsightTabKey) => {
 
 const handleChatMessagesChange = (value: boolean) => {
   chatHasMessages.value = value
+}
+
+const handleCitationOpen = async (payload: CitationOpenPayload) => {
+  if (!payload?.fileId) return
+  activeTab.value = 'materials'
+  await nextTick()
+  const opened = materialsPanelRef.value?.focusAttachmentByCitation?.(payload)
+  if (opened === false) {
+    message.warning('未找到对应的资料')
+  }
 }
 
 const handleStartNewChat = () => {
@@ -713,10 +735,10 @@ const handleMouseMove = (event: MouseEvent) => {
 }
 
 const waitForOngoingSave = async () => {
-  if (!notesStore.state.saving) return
+  if (!notebookStore.notebooksState.saving) return
   await new Promise<void>((resolve) => {
     const stop = watch(
-      () => notesStore.state.saving,
+      () => notebookStore.notebooksState.saving,
       (value) => {
         if (!value) {
           stop()
@@ -736,30 +758,30 @@ const handleBackToList = async () => {
   try {
     await waitForOngoingSave()
     if (notebookId && noteId) {
-      const draft = notesStore.getDraft(noteId)
+      const draft = notebookStore.getDraft(noteId)
       const needsSave = Boolean(hasPendingChanges.value || hasUnsavedChanges.value || draft)
       if (needsSave) {
         try {
-          const updatedNote = await notesStore.saveActiveNote(
+          const updatedNote = await notebookStore.saveNoteInActiveNotebook(
             { title: editorDraft.title, content: editorDraft.content },
             { noteId },
           )
           const nextId = updatedNote?.id ?? noteId
           if (nextId !== noteId) {
-            notesStore.clearDraft(noteId)
+            notebookStore.clearDraft(noteId)
           }
-          notesStore.clearDraft(nextId)
+          notebookStore.clearDraft(nextId)
         } catch {
           message.error('返回前保存笔记失败，请稍后重试')
           leavingEditor.value = false
           return
         }
       } else {
-        notesStore.clearDraft(noteId)
+        notebookStore.clearDraft(noteId)
       }
     }
     await router.push({ name: 'notes-list' })
-    notesStore.clearActiveNote()
+    notebookStore.clearActiveNotebook()
     resetEditorState()
   } finally {
     leavingEditor.value = false
@@ -777,92 +799,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseup', stopDragging)
   window.removeEventListener('resize', updateTabsIndicator)
-  if (mindMapTimer !== null) {
-    window.clearTimeout(mindMapTimer)
-    mindMapTimer = null
-  }
   void cancelRecording()
 })
 
-const STOPWORDS = new Set([
-  'the','and','you','are','for','with','that','have','this','from','your','just','will','they',
-  '我们','你们','他们','这个','那个','的','是','以及','还有','而且','但是','或者','因此','那么','一个','或者','以及','的','了','呢','吧','啊','吗','是','在','和','到','就','还','也','很','让','能',
-])
-
-const isChineseToken = (w: string) => /[\u4e00-\u9fa5]/.test(w)
-
-const segmentText = (text: string) => {
-  const list: string[] = []
-  const trySeg = (locale: string) => {
-    try {
-      const S: any = (Intl as any).Segmenter
-      if (!S) return
-      const seg = new S(locale, { granularity: 'word' })
-      for (const it of seg.segment(text)) if (it.isWordLike) list.push(it.segment)
-    } catch (err) {
-      // ignore segmentation error
-    }
-  }
-  trySeg('zh-Hans')
-  trySeg('en')
-  if (!list.length) list.push(...text.split(/[\s,.;:，。！？、]+/g))
-  return list
-}
-
-const extractKeywords = (text: string, limit = 12) => {
-  const t = text.trim()
-  if (!t) return [] as KeywordItem[]
-  const map = new Map<string, { text: string; score: number }>()
-  const add = (w: string) => {
-    const raw = w.trim()
-    if (!raw) return
-    const low = raw.toLowerCase()
-    if (STOPWORDS.has(low) || STOPWORDS.has(raw)) return
-    if (/^\d+(\.\d+)?$/.test(raw)) return
-    if (low.length < 2 && !isChineseToken(raw)) return
-    const existing = map.get(low)
-    if (existing) existing.score += 1
-    else map.set(low, { text: raw, score: 1 })
-  }
-  for (const tk of segmentText(t)) add(tk)
-  return Array.from(map.values())
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((entry, index) => ({ id: `${entry.text}-${index}`, text: entry.text, relevance: entry.score }))
-}
-
-const keywords = computed<KeywordItem[]>(() => extractKeywords(transcriptText.value))
-
-const scheduleMindMapUpdate = () => {
-  if (mindMapTimer !== null) {
-    window.clearTimeout(mindMapTimer)
-    mindMapTimer = null
-  }
-  if (keywords.value.length < 3) {
-    mindMapMaterials.value = []
-    isMindMapLoading.value = false
-    return
-  }
-  isMindMapLoading.value = true
-  const snapshot = keywords.value.slice(0, 6)
-  mindMapTimer = window.setTimeout(() => {
-    mindMapMaterials.value = snapshot.map((k, i) => {
-      const type = mindMapMaterialTypes[i % mindMapMaterialTypes.length]
-      return {
-        id: `material-${k.id}-${i}`,
-        title: `${k.text} ${type === 'video' ? '讲解' : type === 'document' ? '文档' : '进阶指南'}`,
-        description: `结合「${k.text}」主题的精选${type === 'video' ? '视频' : type === 'document' ? '文档资料' : '文章与教程'}，帮助你构建清晰的思维导图。`,
-        type,
-        url: `https://www.google.com/search?q=${encodeURIComponent(k.text)}`,
-        relevance: k.relevance,
-        keywords: snapshot.map(item => item.text),
-      }
-    })
-    isMindMapLoading.value = false
-  }, 800)
-}
-
-watch(keywords, scheduleMindMapUpdate, { deep: true, immediate: true })
 </script>
 
 <style scoped>
@@ -1171,32 +1110,36 @@ watch(keywords, scheduleMindMapUpdate, { deep: true, immediate: true })
 .tabs-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 0;
   position: relative;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 
 .tabs-nav__btn {
   border: none;
+  border-radius: 6px;
   background: transparent;
-  padding: 4px 0;
+  padding: 6px 12px 8px;
   font-size: 13px;
   color: #475569;
   cursor: pointer;
-  transition: color 0.2s ease;
-  position: relative;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 .tabs-nav__btn:hover {
-  color: #111827;
+  color: #1d4ed8;
+  background: rgba(191, 219, 254, 0.6);
 }
 
 .tabs-nav__btn--active {
   color: #1d4ed8;
   font-weight: 600;
+  background: rgba(191, 219, 254, 0.85);
 }
 
 .tabs-nav__indicator {

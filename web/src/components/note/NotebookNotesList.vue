@@ -12,7 +12,7 @@
         </button>
         <button class="new-note-btn" type="button" @click="$emit('create')">
           <PlusIcon class="icon" />
-          新增笔记
+          添加笔记
         </button>
       </div>
     </template>
@@ -29,24 +29,71 @@
           :class="['note-item', { active: note.id === selectedId }]"
           @click="$emit('select', note.id)"
         >
-          <div class="item-top">
+          <div class="item-main">
             <FileTextIcon class="item-icon" />
-            <div class="item-text">
-              <div class="item-title">{{ resolveTitle(note.title) }}</div>
-              <div class="item-preview">{{ buildPreview(note.content) }}</div>
-            </div>
+            <div class="item-title">{{ resolveTitle(note.title) }}</div>
           </div>
-          <ChevronRightIcon class="chevron" />
+          <div class="item-actions">
+            <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-actions-dropdown">
+              <button class="more-btn" type="button" @click.stop>
+                <MoreVerticalIcon class="more-icon" />
+              </button>
+              <template #overlay>
+                <a-menu @click="onMenuClick(note, $event)">
+                  <a-menu-item key="delete">
+                    <Trash2Icon class="menu-icon" />
+                    <span>删除</span>
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </div>
         </li>
       </ul>
     </a-spin>
   </a-card>
+  <a-modal
+    v-model:visible="deleteModal.open"
+    :footer="null"
+    :maskClosable="false"
+    :width="360"
+    centered
+    destroy-on-close
+    wrap-class-name="note-delete-modal"
+    @cancel="handleDeleteCancel"
+    @afterClose="resetDeleteModal"
+  >
+    <div class="delete-modal__body">
+      <p class="delete-modal__title">
+        要删除
+        <span class="delete-modal__note">
+          <FileTextIcon class="delete-modal__note-icon" />
+          <span>{{ resolveTitle(deleteModal.note?.title || '') }}</span>
+        </span>
+        吗？
+      </p>
+      <div class="delete-modal__actions">
+        <a-button class="delete-modal__btn" @click="handleDeleteCancel">取消</a-button>
+        <a-button
+          type="primary"
+          danger
+          class="delete-modal__btn delete-modal__btn--danger"
+          :loading="deleteModal.loading"
+          @click="handleDeleteConfirm"
+        >
+          删除
+        </a-button>
+      </div>
+    </div>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { BotIcon, ChevronRightIcon, FileTextIcon, PlusIcon } from 'lucide-vue-next'
+import { computed, reactive } from 'vue'
+import { BotIcon, FileTextIcon, MoreVerticalIcon, PlusIcon, Trash2Icon } from 'lucide-vue-next'
+import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import type { NoteItem } from '@/types/notes'
+import { useNotebookStore } from '@/composables/useNotes'
 
 const props = defineProps<{
   notes: ReadonlyArray<NoteItem>
@@ -61,19 +108,45 @@ defineEmits<{
   (e: 'ai-report'): void
 }>()
 
+const notebookStore = useNotebookStore()
 const loading = computed(() => props.loading === true)
 
-const stripHtml = (value: string) => {
-  const doc = new DOMParser().parseFromString(value, 'text/html')
-  return doc.body.textContent || ''
-}
-
-const buildPreview = (value: string) => {
-  const plain = stripHtml(value)
-  return plain.length > 54 ? `${plain.slice(0, 54)}…` : plain || '暂无内容'
-}
-
 const resolveTitle = (value: string) => value?.trim() || '未命名笔记'
+
+const deleteModal = reactive({
+  open: false,
+  loading: false,
+  note: null as NoteItem | null,
+})
+
+const onMenuClick = (note: NoteItem, event: MenuInfo) => {
+  if (String(event.key) === 'delete') {
+    deleteModal.note = note
+    deleteModal.open = true
+  }
+}
+
+const handleDeleteCancel = () => {
+  deleteModal.open = false
+}
+
+const resetDeleteModal = () => {
+  deleteModal.loading = false
+  deleteModal.note = null
+}
+
+const handleDeleteConfirm = async () => {
+  if (!deleteModal.note) return
+  deleteModal.loading = true
+  try {
+    await notebookStore.removeNoteFromActiveNotebook(deleteModal.note.id)
+    deleteModal.open = false
+  } catch (err) {
+    // 错误提示由 store 统一处理
+  } finally {
+    deleteModal.loading = false
+  }
+}
 </script>
 
 <style scoped>
@@ -177,25 +250,24 @@ const resolveTitle = (value: string) => value?.trim() || '未命名笔记'
 
 .notes-list {
   list-style: none;
-  padding: 0;
+  padding: 8px;
   margin: 0;
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .note-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 10px 12px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  border-bottom: 1px solid rgba(5, 5, 5, 0.06);
-}
-
-.note-item:last-child {
-  border-bottom: none;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .note-item:hover {
@@ -204,30 +276,22 @@ const resolveTitle = (value: string) => value?.trim() || '未命名笔记'
 
 .note-item.active {
   background: rgba(37, 99, 235, 0.12);
-  border-left: 3px solid #2563eb;
-  padding-left: 13px;
 }
 
-.item-top {
+.item-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   flex: 1;
+  min-width: 0;
 }
 
 .item-icon {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
   color: #2563eb;
   flex-shrink: 0;
-}
-
-.item-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
 }
 
 .item-title {
@@ -237,18 +301,108 @@ const resolveTitle = (value: string) => value?.trim() || '未命名笔记'
   text-overflow: ellipsis;
 }
 
-.item-preview {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
-  line-height: 1.4;
-  max-height: 2.8em;
-  overflow: hidden;
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.chevron {
+.more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.more-btn:hover {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+.more-icon {
   width: 16px;
   height: 16px;
-  color: rgba(0, 0, 0, 0.3);
-  flex-shrink: 0;
+}
+
+:deep(.note-actions-dropdown .ant-dropdown-menu) {
+  padding: 6px 0;
+  border-radius: 10px;
+}
+
+:deep(.note-actions-dropdown .ant-dropdown-menu-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+}
+
+.menu-icon {
+  width: 16px;
+  height: 16px;
+  color: #dc2626;
+}
+
+:deep(.note-delete-modal .ant-modal-content) {
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.delete-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.delete-modal__title {
+  margin: 0;
+  text-align: center;
+  color: #111827;
+  line-height: 1.5;
+}
+
+.delete-modal__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+}
+
+.delete-modal__note-icon {
+  width: 16px;
+  height: 16px;
+  color: #2563eb;
+}
+
+.delete-modal__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.delete-modal__btn {
+  min-width: 80px;
+}
+
+.delete-modal__btn--danger {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.delete-modal__btn--danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
 </style>

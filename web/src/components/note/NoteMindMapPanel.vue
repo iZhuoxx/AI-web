@@ -1,4 +1,4 @@
-<template>
+ <template>
   <a-card class="placeholder-panel" :body-style="{ height: '100%', padding: '32px' }">
     <div class="placeholder-panel__content">
       <MapIcon class="placeholder-panel__icon" />
@@ -10,20 +10,6 @@
 
 <script setup lang="ts">
 import { MapIcon } from 'lucide-vue-next'
-import type { KeywordItem, LearningMaterial } from '@/types/notes'
-
-withDefaults(
-  defineProps<{
-    materials?: LearningMaterial[]
-    keywords?: KeywordItem[]
-    isLoading?: boolean
-  }>(),
-  {
-    materials: () => [],
-    keywords: () => [],
-    isLoading: false,
-  },
-)
 </script>
 
 <style scoped>

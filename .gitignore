@@ -29,3 +29,5 @@ api/.env
 .env
 *.env
 api/.env
+api/s3_accessKeys.csv
+

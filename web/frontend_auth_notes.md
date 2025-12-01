@@ -18,7 +18,7 @@ This backend update adds REST endpoints for authentication (`/api/auth/*`), note
    - Disable note-related actions until the user is authenticated.
 
 4. **Notes data flow**
-   - Replace mock notes arrays with API calls: list via `GET /api/notes`, create/update via the new POST/PUT routes (send CSRF header), and append chat messages via `POST /api/notes/{id}/messages`.
+   - Replace mock notes arrays with API calls: list via `GET /api/notebooks`, create/update via the new POST/PUT routes (send CSRF header), and append chat messages via `POST /api/notebooks/{id}/messages`.
    - Wire attachment uploads through `POST /api/attachments/presign-upload` followed by direct S3 upload using the returned form data. Refresh the note detail afterwards.
 
 5. **Environment config**

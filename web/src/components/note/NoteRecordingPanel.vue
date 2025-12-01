@@ -25,17 +25,23 @@
         </div>
       </div>
 
-      <!-- 中间：波形（与主背景一致、无边框） -->
-      <div class="wave" :class="{ on: isRecording }" role="img" aria-label="audio level">
-        <span
-          v-for="(bar, i) in waveBars"
-          :key="i"
-          class="bar"
-          :style="{ '--h': bar + 'px', '--d': (i * 14) + 'ms' }"
-        />
+      <!-- 中间：中心对称波形（从中线向上下扩散） -->
+      <div class="wave-wrapper" role="img" aria-label="audio level">
+        <div class="wave" :class="{ on: isRecording }">
+          <span
+            v-for="(bar, i) in waveBars"
+            :key="i"
+            class="bar"
+            :style="{ 
+              '--h': bar + '%',
+              '--d': (i * 6) + 'ms',
+              '--opacity': bar > 20 ? 0.95 : 0.6
+            }"
+          />
+        </div>
       </div>
 
-      <!-- 右侧：仅错误/不可用提示（不显示“连接中”） -->
+      <!-- 右侧：仅错误/不可用提示（不显示"连接中"） -->
       <div v-if="statusText" class="hint" :class="statusClass">
         <span class="dot" /> {{ statusText }}
       </div>
@@ -71,7 +77,7 @@ const emit = defineEmits<{
   (e: 'resume'): void
 }>()
 
-const panelBodyStyle = { padding: '12px 14px' } // 更扁
+const panelBodyStyle = { padding: '12px 14px' }
 
 const formattedDuration = computed(() => {
   const m = Math.floor(props.duration / 60).toString().padStart(2, '0')
@@ -79,7 +85,6 @@ const formattedDuration = computed(() => {
   return `${m}:${s}`
 })
 
-/* 只显示不可用/错误；不显示“连接中”/“就绪”/“录制中” */
 const statusText = computed(() => {
   if (!props.canRecord) return '麦克风不可用'
   if (props.errorMessage) return props.errorMessage
@@ -91,17 +96,36 @@ const statusClass = computed(() => {
   return 'muted'
 })
 
-/* 流动感波形 */
+/* 现代音频频谱 - 中心对称上下扩散 */
 const waveBars = computed(() => {
-  const bars = 26
+  const bars = 64 // 64条频谱
   const base = Math.min(1, Math.max(0, props.audioLevel || 0))
-  const intensity = props.isRecording ? base : base * 1.2
+  const intensity = props.isRecording ? base : base * 0.6
   const arr: number[] = []
+  const time = Date.now() * 0.003 // 加快动画速度
+  
   for (let i = 0; i < bars; i++) {
-    const m = Math.sin((i + 1) * 0.42) * 0.35 + 0.9
-    const h = 6 + (intensity * 40 + 8) * m
-    arr.push(h)
+    // 多层波形模拟真实频谱，增大振幅
+    const wave1 = Math.sin((i + 1) * 0.28 + time) * 0.5
+    const wave2 = Math.sin((i + 1) * 0.45 + time * 1.5) * 0.4
+    const wave3 = Math.sin((i + 1) * 0.68 + time * 0.8) * 0.35
+    const wave4 = Math.sin((i + 1) * 0.92 + time * 1.2) * 0.25
+    
+    // 中心对称：中间频段能量更高
+    const distanceFromCenter = Math.abs(i - bars / 2) / (bars / 2)
+    const centerBoost = Math.pow(1 - distanceFromCenter, 1.2) * 0.6 + 0.4
+    
+    // 组合波形
+    const combined = (wave1 + wave2 + wave3 + wave4) * centerBoost
+    
+    // 大幅增加高度范围，让波动更明显
+    const baseHeight = 15 // 增加最小高度
+    const dynamicHeight = intensity * 120 * (combined + 1.2) * centerBoost // 大幅增加动态范围
+    const finalHeight = baseHeight + dynamicHeight
+    
+    arr.push(Math.max(12, Math.min(98, finalHeight)))
   }
+  
   return arr
 })
 
@@ -114,14 +138,14 @@ const handlePrimaryAction = () => {
 
 <style scoped>
 /* 统一浅蓝主背景变量 */
-:host, .rec-panel, .rec-btn, .wave, .hint, .live, .time{
+:host, .rec-panel, .rec-btn, .wave-wrapper, .hint, .live, .time{
   --panel-bg: linear-gradient(145deg, rgba(248,250,255,0.96), rgba(232,243,255,0.9));
   --text: #0f172a;
   --muted: #475569;
-  --blue-plain: #7ca9ff; /* 浅蓝（默认按钮） */
-  --blue-hover: #2563eb; /* hover 深一点 */
+  --blue-plain: #7ca9ff;
+  --blue-hover: #2563eb;
   --blue-hover2: #1d4ed8;
-  --red: #dc2626;        /* 停止色 */
+  --red: #dc2626;
 }
 
 /* Panel 更扁：无边框，极轻阴影 */
@@ -154,7 +178,7 @@ const handlePrimaryAction = () => {
   background: linear-gradient(135deg, var(--blue-hover), var(--blue-hover2));
   transform: translateY(-1px);
 }
-.rec-btn.on{ /* 停止按钮：仅颜色变化，无脉冲等动效 */
+.rec-btn.on{
   background: linear-gradient(135deg, #ef4444, var(--red));
   transform: none;
 }
@@ -166,43 +190,116 @@ const handlePrimaryAction = () => {
   display:flex; align-items:center; gap:6px;
   padding:6px 10px;
   border-radius:999px;
-  background: var(--panel-bg); /* 与面板一致 */
+  background: transparent;
   color: var(--text);
   font-weight:600; font-variant-numeric: tabular-nums;
-  /* 无边框，无阴影，保持扁平 */
 }
 .time .clk{ width:15px; height:15px; stroke-width:1.6; opacity:.85; }
 .time .t{ font-size:13px; letter-spacing:.02em; }
-.time {
-  background: transparent;
-}
-/* 波形：与主背景一致、无边框、柔光条形 */
-.wave{
-  flex:1; min-width:240px; height:44px;
-  display:flex; align-items:flex-end; gap:6px;
-  padding:0 8px;
-  border-radius:12px;
-  background: var(--panel-bg); /* 与面板一致 */
-  overflow:hidden;
-  /* 无边框、极轻蒙版增加质感 */
-  mask-image: radial-gradient(white 85%, transparent 100%);
-}
-.wave .bar{
-  --h: 12px; --d: 0ms;
-  flex:1; height:10px;
-  transform-origin:50% 100%;
-  transform:scaleY(calc(var(--h)/12));
-  border-radius:999px;
-  background:
-    linear-gradient(180deg, rgba(37,99,235,0.80), rgba(99,102,241,0.38), rgba(255,255,255,0.18));
-  box-shadow: 0 3px 8px rgba(37,99,235,0.14);
-  filter: saturate(1.02) brightness(1.03);
-  opacity:.9;
-  transition:transform .25s cubic-bezier(.2,.7,.25,1) var(--d), opacity .2s ease var(--d);
-}
-.wave:not(.on) .bar{ transform:scaleY(.3); opacity:.45; }
 
-/* 仅错误/不可用提示（不显示“连接中”） */
+/* 波形容器 - 中心对称布局 */
+.wave-wrapper{
+  flex:1; 
+  min-width:240px; 
+  height:50px;
+  position: relative;
+  padding:0 10px;
+  border-radius:12px;
+  background: var(--panel-bg);
+  overflow:hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 波形容器 */
+.wave{
+  width: 100%;
+  height: 100%;
+  display:flex; 
+  align-items:center;
+  justify-content: space-between;
+  gap: 2px; /* 更小的间距让频谱更密集 */
+  position: relative;
+  z-index: 2;
+}
+
+/* 频谱条 - 中心对称上下扩散 */
+.wave .bar{
+  --h: 10%;
+  --d: 0ms;
+  --opacity: 0.6;
+  flex: 1;
+  max-width: 3px; /* 更细的频谱条 */
+  min-width: 1.5px;
+  height: var(--h);
+  max-height: 48px; /* 增加最大高度 */
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(37,99,235,0.9) 0%,
+    rgba(99,102,241,0.8) 25%,
+    rgba(139,92,246,0.75) 50%,
+    rgba(99,102,241,0.8) 75%,
+    rgba(37,99,235,0.9) 100%
+  );
+  opacity: var(--opacity);
+  box-shadow: 
+    0 0 6px rgba(37,99,235,0.4),
+    0 0 12px rgba(99,102,241,0.2);
+  transition: 
+    height 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--d),
+    opacity 0.12s ease var(--d);
+  transform-origin: center center;
+  position: relative;
+}
+
+/* 录制状态下的动画 - 增强波动效果 */
+.wave.on .bar{
+  animation: pulse-bar 1s ease-in-out infinite;
+}
+
+@keyframes pulse-bar {
+  0%, 100% {
+    filter: brightness(1) saturate(1);
+    transform: scaleY(1);
+  }
+  50% {
+    filter: brightness(1.2) saturate(1.3);
+    transform: scaleY(1.05);
+  }
+}
+
+/* 非录制状态：显著降低高度 */
+.wave:not(.on) .bar{ 
+  height: calc(var(--h) * 0.2);
+  opacity: calc(var(--opacity) * 0.45);
+}
+
+/* 添加微妙的发光效果 */
+.wave.on::before{
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(37,99,235,0.08) 0%,
+    transparent 65%
+  );
+  pointer-events: none;
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* 仅错误/不可用提示 */
 .hint{
   display:inline-flex; align-items:center; gap:8px;
   padding:6px 10px; border-radius:10px; font-size:12.5px; font-weight:600;
@@ -213,12 +310,28 @@ const handlePrimaryAction = () => {
 .hint.err{ color:#b91c1c; }
 .hint.err .dot{ background:#b91c1c; }
 
-/* 实时转写（可选） */
+/* 实时转写 */
 .live{
   margin-top:8px; padding:8px 10px; border-radius:10px;
   background: var(--panel-bg);
   color: var(--text);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   font-size:13px;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .wave-wrapper {
+    min-width: 200px;
+  }
+  
+  .wave {
+    gap: 1.5px;
+  }
+  
+  .wave .bar {
+    max-width: 2.5px;
+    min-width: 1px;
+  }
 }
 </style>

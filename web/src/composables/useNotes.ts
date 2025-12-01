@@ -11,19 +11,19 @@ import {
 } from '@/services/api'
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteItem } from '@/types/notes'
 
-interface NotesState {
+interface NotebooksState {
   list: NotebookSummary[]
-  active: NotebookDetail | null
+  activeNotebook: NotebookDetail | null
   listLoading: boolean
-  noteLoading: boolean
+  activeLoading: boolean
   saving: boolean
 }
 
-const state = reactive<NotesState>({
+const notebooksState = reactive<NotebooksState>({
   list: [],
-  active: null,
+  activeNotebook: null,
   listLoading: false,
-  noteLoading: false,
+  activeLoading: false,
   saving: false,
 })
 
@@ -32,6 +32,11 @@ const drafts = useStorage<Record<string, { title: string; content: string }>>('n
 
 const sortNotebookNotes = (notes: NotebookNote[]): NotebookNote[] =>
   [...notes].sort((a, b) => a.seq - b.seq)
+
+const getNotebookSnapshot = (id: string): NotebookDetail | NotebookSummary | null => {
+  if (notebooksState.activeNotebook?.id === id) return notebooksState.activeNotebook
+  return notebooksState.list.find(item => item.id === id) ?? null
+}
 
 const toEditorNotes = (notebook: NotebookDetail | null): NoteItem[] => {
   if (!notebook) return []
@@ -53,100 +58,113 @@ const toEditorNotes = (notebook: NotebookDetail | null): NoteItem[] => {
 }
 
 const refreshEditorNotes = () => {
-  editorNotes.value = toEditorNotes(state.active)
+  editorNotes.value = toEditorNotes(notebooksState.activeNotebook)
 }
 
-const buildNotesPayload = (items: NoteItem[]): NotebookPayload['notes'] =>
-  items.map((item, index) => ({
+type NoteDraft = { id?: string | null; title: string; content: string; seq: number }
+
+const buildNotesPayload = (items: NoteDraft[]): NotebookPayload['notes'] =>
+  items.map(item => ({
+    id: item.id ?? undefined,
     title: item.title,
     content: item.content,
-    seq: index,
+    seq: item.seq,
   }))
 
-const fetchList = async () => {
-  state.listLoading = true
+const getNextSeq = (notes: NotebookNote[]): number =>
+  notes.reduce((max, note) => Math.max(max, note.seq), -1) + 1
+
+const fetchNotebookList = async () => {
+  notebooksState.listLoading = true
   try {
-    state.list = await listNotebooks()
+    notebooksState.list = await listNotebooks()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '加载笔记失败'
     message.error(msg)
-    state.list = []
+    notebooksState.list = []
     throw err
   } finally {
-    state.listLoading = false
+    notebooksState.listLoading = false
   }
 }
 
-const openNote = async (id: string) => {
-  state.noteLoading = true
+const openNotebook = async (id: string) => {
+  notebooksState.activeLoading = true
   try {
-    state.active = await getNotebook(id)
+    notebooksState.activeNotebook = await getNotebook(id)
     refreshEditorNotes()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '加载笔记详情失败'
     message.error(msg)
     throw err
   } finally {
-    state.noteLoading = false
+    notebooksState.activeLoading = false
   }
 }
 
-const createNewNote = async (payload?: NotebookPayload) => {
-  state.noteLoading = true
+const createNotebookWithFirstNote = async (payload?: NotebookPayload) => {
+  notebooksState.activeLoading = true
   try {
     const defaultPayload: NotebookPayload = {
       title: '未命名笔记',
       summary: '',
-      tags: [],
       notes: [{ title: '未命名笔记', content: '', seq: 0 }],
       ...payload,
     }
-    state.active = await createNotebook(defaultPayload)
-    await fetchList()
+    notebooksState.activeNotebook = await createNotebook(defaultPayload)
+    await fetchNotebookList()
     refreshEditorNotes()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建笔记失败'
     message.error(msg)
     throw err
   } finally {
-    state.noteLoading = false
+    notebooksState.activeLoading = false
   }
 }
 
-const saveActiveNote = async (
-  payload: { title?: string | null; content?: string | null; summary?: string | null; tags?: string[]; isArchived?: boolean },
+const saveNoteInActiveNotebook = async (
+  payload: { title?: string | null; content?: string | null; summary?: string | null; isArchived?: boolean },
   options: { noteId?: string | null } = {},
 ) => {
-  if (!state.active) return null
-  state.saving = true
+  if (!notebooksState.activeNotebook) return null
+  notebooksState.saving = true
   try {
-    const ordered = sortNotebookNotes(state.active.notes ?? [])
-    const items = ordered.map(note => ({
+    const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
+    const items: NoteDraft[] = ordered.map(note => ({
       id: note.id,
       title: note.title ?? '未命名笔记',
       content: note.content ?? '',
+      seq: note.seq,
     }))
 
     let targetIndex = 0
+    let targetSeq = items[0]?.seq ?? 0
     if (options.noteId) {
       const found = items.findIndex(note => note.id === options.noteId)
       if (found >= 0) {
         targetIndex = found
+        targetSeq = items[found].seq
       } else {
+        const nextSeq = getNextSeq(ordered)
         targetIndex = items.length
         items.push({
-          id: options.noteId,
+          id: options.noteId ?? undefined,
           title: payload.title ?? '未命名笔记',
           content: payload.content ?? '',
+          seq: nextSeq,
         })
+        targetSeq = nextSeq
       }
     } else if (!items.length) {
       items.push({
-        id: state.active.id,
+        id: undefined,
         title: payload.title ?? '未命名笔记',
         content: payload.content ?? '',
+        seq: 0,
       })
       targetIndex = 0
+      targetSeq = 0
     }
 
     if (items[targetIndex]) {
@@ -157,84 +175,132 @@ const saveActiveNote = async (
       }
     }
 
-    const updated = await updateNotebook(state.active.id, {
-      title: state.active.title,
-      summary: payload.summary ?? state.active.summary,
-      tags: payload.tags ?? state.active.tags,
-      is_archived: payload.isArchived ?? state.active.isArchived,
+    const updated = await updateNotebook(notebooksState.activeNotebook.id, {
+      title: notebooksState.activeNotebook.title,
+      summary: payload.summary ?? notebooksState.activeNotebook.summary,
+      is_archived: payload.isArchived ?? notebooksState.activeNotebook.isArchived,
+      color: notebooksState.activeNotebook.color,
+      openai_vector_store_id: notebooksState.activeNotebook.openaiVectorStoreId,
+      vector_store_expires_at: notebooksState.activeNotebook.vectorStoreExpiresAt,
       notes: buildNotesPayload(items),
     })
-    state.active = updated
-    await fetchList()
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
     refreshEditorNotes()
     message.success('笔记已保存')
-    return updated.notes?.find(note => note.seq === targetIndex) ?? null
+    const targetId = items[targetIndex]?.id
+    return updated.notes?.find(note => (targetId ? note.id === targetId : note.seq === targetSeq)) ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : '保存笔记失败'
     message.error(msg)
     throw err
   } finally {
-    state.saving = false
+    notebooksState.saving = false
   }
 }
 
-const addNoteToActive = async (payload?: { title?: string | null; content?: string | null }) => {
-  if (!state.active) return null
-  state.saving = true
+const addNoteToActiveNotebook = async (payload?: { title?: string | null; content?: string | null }) => {
+  if (!notebooksState.activeNotebook) return null
+  notebooksState.saving = true
   try {
-    const ordered = sortNotebookNotes(state.active.notes ?? [])
-    const items = ordered.map(note => ({
+    const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
+    const items: NoteDraft[] = ordered.map(note => ({
       id: note.id,
       title: note.title ?? '未命名笔记',
       content: note.content ?? '',
+      seq: note.seq,
     }))
-    const nextIndex = items.length
+    const nextSeq = getNextSeq(ordered)
     items.push({
-      id: `temp-${Date.now()}`,
+      id: undefined,
       title: payload?.title ?? '新建笔记',
       content: payload?.content ?? '',
+      seq: nextSeq,
     })
 
-    const updated = await updateNotebook(state.active.id, {
-      title: state.active.title,
-      summary: state.active.summary,
-      tags: state.active.tags,
-      is_archived: state.active.isArchived,
+    const updated = await updateNotebook(notebooksState.activeNotebook.id, {
+      title: notebooksState.activeNotebook.title,
+      summary: notebooksState.activeNotebook.summary,
+      is_archived: notebooksState.activeNotebook.isArchived,
+      color: notebooksState.activeNotebook.color,
+      openai_vector_store_id: notebooksState.activeNotebook.openaiVectorStoreId,
+      vector_store_expires_at: notebooksState.activeNotebook.vectorStoreExpiresAt,
       notes: buildNotesPayload(items),
     })
-    state.active = updated
-    await fetchList()
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
     refreshEditorNotes()
     message.success('已创建新的笔记页')
-    return updated.notes?.find(note => note.seq === nextIndex) ?? null
+    return updated.notes?.find(note => note.seq === nextSeq) ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建新笔记页失败'
     message.error(msg)
     throw err
   } finally {
-    state.saving = false
+    notebooksState.saving = false
+  }
+}
+
+const removeNoteFromActiveNotebook = async (noteId: string) => {
+  if (!notebooksState.activeNotebook) return
+  if (!notebooksState.activeNotebook.notes?.some(note => note.id === noteId)) return
+  notebooksState.saving = true
+  try {
+    const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
+    const items: NoteDraft[] = ordered
+      .filter(note => note.id !== noteId)
+      .map(note => ({
+        id: note.id,
+        title: note.title ?? '未命名笔记',
+        content: note.content ?? '',
+        seq: note.seq,
+      }))
+
+    const updated = await updateNotebook(notebooksState.activeNotebook.id, {
+      title: notebooksState.activeNotebook.title,
+      summary: notebooksState.activeNotebook.summary,
+      is_archived: notebooksState.activeNotebook.isArchived,
+      color: notebooksState.activeNotebook.color,
+      openai_vector_store_id: notebooksState.activeNotebook.openaiVectorStoreId,
+      vector_store_expires_at: notebooksState.activeNotebook.vectorStoreExpiresAt,
+      notes: buildNotesPayload(items),
+    })
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
+    refreshEditorNotes()
+    clearDraft(noteId)
+    message.success('笔记已删除')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '删除笔记失败'
+    message.error(msg)
+    throw err
+  } finally {
+    notebooksState.saving = false
   }
 }
 
 const updateActiveNotebookTitle = async (title: string) => {
-  if (!state.active) return
-  state.saving = true
+  if (!notebooksState.activeNotebook) return
+  notebooksState.saving = true
   try {
-    const ordered = sortNotebookNotes(state.active.notes ?? [])
-    const items = ordered.map(note => ({
+    const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
+    const items: NoteDraft[] = ordered.map(note => ({
       id: note.id,
       title: note.title ?? '未命名笔记',
       content: note.content ?? '',
+      seq: note.seq,
     }))
-    const updated = await updateNotebook(state.active.id, {
+    const updated = await updateNotebook(notebooksState.activeNotebook.id, {
       title,
-      summary: state.active.summary,
-      tags: state.active.tags,
-      is_archived: state.active.isArchived,
+      summary: notebooksState.activeNotebook.summary,
+      is_archived: notebooksState.activeNotebook.isArchived,
+      color: notebooksState.activeNotebook.color,
+      openai_vector_store_id: notebooksState.activeNotebook.openaiVectorStoreId,
+      vector_store_expires_at: notebooksState.activeNotebook.vectorStoreExpiresAt,
       notes: buildNotesPayload(items),
     })
-    state.active = updated
-    await fetchList()
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
     refreshEditorNotes()
     message.success('笔记本标题已更新')
   } catch (err) {
@@ -242,15 +308,24 @@ const updateActiveNotebookTitle = async (title: string) => {
     message.error(msg)
     throw err
   } finally {
-    state.saving = false
+    notebooksState.saving = false
   }
 }
 
-const renameNote = async (noteId: string, title: string) => {
-  state.noteLoading = true
+const renameNotebook = async (noteId: string, title: string) => {
+  notebooksState.activeLoading = true
   try {
-    const updated = await updateNotebook(noteId, { title })
-    state.list = state.list.map(note =>
+    const existing = notebooksState.list.find(note => note.id === noteId)
+    const source = existing ?? notebooksState.activeNotebook
+    const updated = await updateNotebook(noteId, {
+      title,
+      summary: source?.summary ?? null,
+      is_archived: source?.isArchived,
+      color: source?.color ?? null,
+      openai_vector_store_id: source?.openaiVectorStoreId ?? null,
+      vector_store_expires_at: source?.vectorStoreExpiresAt ?? null,
+    })
+    notebooksState.list = notebooksState.list.map(note =>
       note.id === noteId
         ? {
             ...note,
@@ -258,18 +333,22 @@ const renameNote = async (noteId: string, title: string) => {
             summary: updated.summary,
             updatedAt: updated.updatedAt,
             isArchived: updated.isArchived,
-            tags: updated.tags,
-          }
+            color: updated.color,
+            openaiVectorStoreId: updated.openaiVectorStoreId,
+            vectorStoreExpiresAt: updated.vectorStoreExpiresAt,
+        }
         : note,
     )
-    if (state.active?.id === noteId) {
-      state.active = {
-        ...state.active,
+    if (notebooksState.activeNotebook?.id === noteId) {
+      notebooksState.activeNotebook = {
+        ...notebooksState.activeNotebook,
         title: updated.title,
         summary: updated.summary,
         updatedAt: updated.updatedAt,
         isArchived: updated.isArchived,
-        tags: updated.tags,
+        color: updated.color,
+        openaiVectorStoreId: updated.openaiVectorStoreId,
+        vectorStoreExpiresAt: updated.vectorStoreExpiresAt,
       }
       refreshEditorNotes()
     }
@@ -277,7 +356,7 @@ const renameNote = async (noteId: string, title: string) => {
     if (draft) {
       drafts.value = {
         ...drafts.value,
-        [noteId]: { ...draft, title: updated.title },
+        [noteId]: { ...draft, title: updated.title ?? '' },
       }
     }
     message.success('笔记标题已更新')
@@ -286,34 +365,95 @@ const renameNote = async (noteId: string, title: string) => {
     message.error(msg)
     throw err
   } finally {
-    state.noteLoading = false
+    notebooksState.activeLoading = false
   }
 }
 
-const removeNote = async (noteId: string) => {
-  state.noteLoading = true
+const removeNotebook = async (noteId: string) => {
+  notebooksState.activeLoading = true
   try {
     await deleteNotebookRequest(noteId)
-    state.list = state.list.filter(note => note.id !== noteId)
-    if (state.active?.id === noteId) {
-      state.active = null
+    notebooksState.list = notebooksState.list.filter(note => note.id !== noteId)
+    if (notebooksState.activeNotebook?.id === noteId) {
+      notebooksState.activeNotebook = null
       refreshEditorNotes()
     }
     clearDraft(noteId)
-    await fetchList()
+    await fetchNotebookList()
     message.success('笔记已删除')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '删除笔记失败'
     message.error(msg)
     throw err
   } finally {
-    state.noteLoading = false
+    notebooksState.activeLoading = false
   }
 }
 
-const clearActiveNote = () => {
-  state.active = null
+const updateNotebookColor = async (noteId: string, color: string) => {
+  notebooksState.activeLoading = true
+  try {
+    const snapshot = getNotebookSnapshot(noteId)
+    const payload: NotebookPayload = {
+      title: snapshot?.title ?? null,
+      summary: snapshot?.summary ?? null,
+      is_archived: snapshot?.isArchived ?? false,
+      color,
+      openai_vector_store_id: snapshot?.openaiVectorStoreId ?? null,
+      vector_store_expires_at: snapshot?.vectorStoreExpiresAt ?? null,
+    }
+    const updated = await updateNotebook(noteId, payload)
+    notebooksState.list = notebooksState.list.map(note =>
+      note.id === noteId
+        ? {
+            ...note,
+            title: updated.title,
+            summary: updated.summary,
+            updatedAt: updated.updatedAt,
+            isArchived: updated.isArchived,
+            color: updated.color,
+            openaiVectorStoreId: updated.openaiVectorStoreId,
+            vectorStoreExpiresAt: updated.vectorStoreExpiresAt,
+        }
+        : note,
+    )
+    if (notebooksState.activeNotebook?.id === noteId) {
+      notebooksState.activeNotebook = updated
+      refreshEditorNotes()
+    }
+    message.success('笔记颜色已更新')
+    return updated
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '更新笔记颜色失败'
+    message.error(msg)
+    throw err
+  } finally {
+    notebooksState.activeLoading = false
+  }
+}
+
+const clearActiveNotebook = () => {
+  notebooksState.activeNotebook = null
   refreshEditorNotes()
+}
+
+const reloadActiveNotebook = async () => {
+  if (!notebooksState.activeNotebook?.id) return null
+  notebooksState.activeLoading = true
+  try {
+    const id = notebooksState.activeNotebook.id
+    const updated = await getNotebook(id)
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
+    refreshEditorNotes()
+    return updated
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '刷新笔记失败'
+    message.error(msg)
+    throw err
+  } finally {
+    notebooksState.activeLoading = false
+  }
 }
 
 const getDraft = (noteId: string) => drafts.value?.[noteId] ?? null
@@ -327,25 +467,34 @@ const clearDraft = (noteId: string) => {
   drafts.value = next
 }
 
-export const useNotes = () => {
-  const list = computed(() => state.list)
-  const active = computed(() => state.active)
+export const useNotebookStore = () => {
+  const list = computed(() => notebooksState.list)
+  const active = computed(() => notebooksState.activeNotebook)
 
   return {
-    state: readonly(state),
+    // 状态
+    notebooksState: readonly(notebooksState),
     notesForEditor: readonly(editorNotes),
-    list,
-    active,
-    fetchList,
-    openNote,
-    createNewNote,
-    saveActiveNote,
-    addNoteToActive,
+    notebookList: list,
+    activeNotebook: active,
+
+    // Notebook 相关（新命名）
+    fetchNotebookList,
+    openNotebook,
+    createNotebookWithFirstNote,
+    renameNotebook,
+    removeNotebook,
+    clearActiveNotebook,
+    reloadActiveNotebook,
     updateActiveNotebookTitle,
-    renameNote,
-    removeNote,
-    clearActiveNote,
-    refreshEditorNotes,
+
+    // Note 相关（新命名）
+    saveNoteInActiveNotebook,
+    addNoteToActiveNotebook,
+    removeNoteFromActiveNotebook,
+    updateNotebookColor,
+
+    // 草稿相关
     getDraft,
     setDraft,
     clearDraft,

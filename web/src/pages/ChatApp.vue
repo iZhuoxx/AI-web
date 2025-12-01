@@ -234,16 +234,12 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   const text = state.message.trim()
   if (!text && !imageFiles.value.length && !genericFiles.value.length) return
 
-  if (hasPendingUploads.value) {
-    await ensureAudioTranscriptions()
-  }
+  await ensureUploads()
+  await ensureAudioTranscriptions()
   if (hasPendingUploads.value) {
     antdMessage.info('仍有文件处理中，请稍后再试')
     return
   }
-
-  await ensureUploads()
-  await ensureAudioTranscriptions()
 
   const imagesDataUrls: string[] = []
   for (const file of imageFiles.value) {
@@ -391,10 +387,10 @@ async function handlePrimaryAction() {
                       <input
                         type="file"
                         multiple
-                        accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
-                        style="display:none"
-                        @change="handleAttachmentSelection"
-                      />
+                    accept="image/*,.c,.cpp,.cs,.css,.csv,.doc,.docx,.gif,.go,.html,.java,.jpeg,.jpg,.js,.json,.md,.pdf,.php,.pkl,.png,.pptx,.py,.rb,.tar,.tex,.ts,.txt,.webp,.xlsx,.xml,.zip,.mp3"
+                    style="display:none"
+                    @change="handleAttachmentSelection"
+                  />
                       <PaperClipOutlined />
                     </label>
                     <button
@@ -466,7 +462,7 @@ async function handlePrimaryAction() {
                   <input
                     type="file"
                     multiple
-                    accept="image/*,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.htm,.py,.js,.ts,.pdf,application/json,application/xml,application/x-yaml,application/javascript,application/x-python,application/rtf,application/pdf,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,.webm"
+                    accept="image/*,.c,.cpp,.cs,.css,.csv,.doc,.docx,.gif,.go,.html,.java,.jpeg,.jpg,.js,.json,.md,.pdf,.php,.pkl,.png,.pptx,.py,.rb,.tar,.tex,.ts,.txt,.webp,.xlsx,.xml,.zip,.mp3"
                     style="display:none"
                     @change="handleAttachmentSelection"
                   />
@@ -551,7 +547,7 @@ async function handlePrimaryAction() {
   flex-direction: column; 
   width: 100%; 
   height: 100vh;
-  background: #f7f7f8; 
+  background: #fff; 
   overflow: hidden;
 }
 
@@ -589,7 +585,7 @@ async function handlePrimaryAction() {
 }
 
 #main-scroll::-webkit-scrollbar-track {
-  background: #f7f7f8;
+  background: #fff;
 }
 
 #main-scroll::-webkit-scrollbar-thumb {
@@ -604,7 +600,7 @@ async function handlePrimaryAction() {
 /* Firefox */
 #main-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db #f7f7f8;
+  scrollbar-color: #d1d5db #fff;
 }
 
 #main { 
@@ -619,7 +615,7 @@ async function handlePrimaryAction() {
 .composer-wrapper {
   flex-shrink: 0;
   width: 100%;
-  background: #f7f7f8;
+  background: #fff;
   border-top: 1px solid rgba(229, 231, 235, 0.5);
   position: relative;
   z-index: 5;
@@ -703,9 +699,11 @@ async function handlePrimaryAction() {
 }
 
 .container--empty {
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 20px;
+  padding-top: clamp(120px, 26vh, 240px);
+  padding-bottom: clamp(140px, 22vh, 240px);
 }
 
 /* Chat container without scrollbar */
@@ -757,7 +755,7 @@ async function handlePrimaryAction() {
 .composer-stage--empty {
   /* When empty, composer is centered with the welcome message */
   padding: 0 16px;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
 .container {
@@ -772,11 +770,12 @@ async function handlePrimaryAction() {
 }
 
 .container--empty {
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 20px;
   min-height: 100vh;
-  padding-bottom: 80px; /* Add space to account for header */
+  padding-top: clamp(120px, 28vh, 260px);
+  padding-bottom: clamp(150px, 24vh, 260px); /* Add space to account for header while keeping content lower */
 }
 
 .container--empty > .chat-container--empty {

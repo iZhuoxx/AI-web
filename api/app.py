@@ -9,8 +9,13 @@ from .routes import responses as responses_router
 from .routes import files as files_router
 from .routes import audio as audio_router
 from .routes import auth as auth_router
-from .routes import notes as notes_router
+from .routes import notebooks as notebooks_router
 from .routes import attachments as attachments_router
+from .routes import notebook_folders as notebook_folders_router
+from .routes import flashcards as flashcards_router
+from .routes import flashcard_folders as flashcard_folders_router
+from .routes import quizzes as quizzes_router
+from .routes import mindmaps as mindmaps_router
 
 SERVE_SPA = os.getenv("SERVE_SPA", "false").lower() == "true"
 
@@ -58,8 +63,13 @@ app.include_router(responses_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(audio_router.router, prefix="/api")
 app.include_router(auth_router.router, prefix="/api")
-app.include_router(notes_router.router, prefix="/api")
+app.include_router(notebooks_router.router, prefix="/api")
 app.include_router(attachments_router.router, prefix="/api")
+app.include_router(notebook_folders_router.router, prefix="/api")
+app.include_router(flashcard_folders_router.router, prefix="/api")
+app.include_router(flashcards_router.router, prefix="/api")
+app.include_router(quizzes_router.router, prefix="/api")
+app.include_router(mindmaps_router.router, prefix="/api")
 
 if SERVE_SPA:
     FRONTEND_DIST = (Path(__file__).resolve().parent.parent / "web" / "dist").resolve()

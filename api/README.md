@@ -63,8 +63,8 @@ New REST endpoints (all prefixed with `/api`):
 - `POST /auth/register` – email registration (requires CSRF header).
 - `POST /auth/login` / `POST /auth/logout`.
 - `GET /auth/me` – session info with memberships.
-- `GET|POST|PUT|DELETE /notes` – CRUD for user notes.
-- `POST /notes/{note_id}/messages` – append chat entries to a note.
+- `GET|POST|PUT|DELETE /notebooks` – CRUD for user notebooks (each contains multiple notes).
+- `POST /notebooks/{notebook_id}/messages` – append chat entries to a notebook.
 - `POST /attachments/presign-upload` – returns S3 form data and creates an attachment row.
 - `GET /attachments/{attachment_id}/download-url` – presigned download links.
 

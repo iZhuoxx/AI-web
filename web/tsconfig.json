@@ -3,7 +3,7 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "node10",
     "strict": true,
     "jsx": "preserve",
     "resolveJsonModule": true,
@@ -17,7 +17,7 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    } 
   },
   "include": [
     "src/**/*.ts",

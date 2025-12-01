@@ -1,7 +1,9 @@
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteAttachment } from '@/types/notes'
+import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || '/api'
 const CSRF_HEADER = 'X-CSRF-Token'
+const INTERNAL_TOKEN = import.meta.env.VITE_INTERNAL_TOKEN as string | undefined
 
 let csrfToken: string | null = null
 let csrfPromise: Promise<string | null> | null = null
@@ -46,26 +48,45 @@ interface ApiNotebookNote {
 
 interface ApiNoteAttachment {
   id: string
-  kind: string
-  object_key: string
+  filename: string | null
   mime: string | null
   bytes: number | null
   sha256: string | null
+  s3_object_key: string | null
+  s3_url: string | null
+  external_url: string | null
+  openai_file_id: string | null
+  openai_file_purpose: string | null
+  enable_file_search: boolean
   summary: string | null
   meta: Record<string, unknown> | null
+  transcription_status: string
+  transcription_lang: string | null
+  transcription_duration_sec: number | null
   created_at: string
+  updated_at: string
+}
+
+interface ApiNotebookFolderRef {
+  id: string
+  name: string
+  description: string | null
+  color: string | null
 }
 
 interface ApiNotebook {
   id: string
   title: string | null
   summary: string | null
+  color: string | null
+  openai_vector_store_id: string | null
+  vector_store_expires_at: string | null
   created_at: string
   updated_at: string
   is_archived: boolean
-  tags: string[]
   notes: ApiNotebookNote[]
   attachments: ApiNoteAttachment[]
+  folders: ApiNotebookFolderRef[]
 }
 
 const mapNotebookNote = (note: ApiNotebookNote): NotebookNote => ({
@@ -77,36 +98,50 @@ const mapNotebookNote = (note: ApiNotebookNote): NotebookNote => ({
 
 const mapAttachment = (attachment: ApiNoteAttachment): NoteAttachment => ({
   id: attachment.id,
-  kind: attachment.kind,
-  objectKey: attachment.object_key,
+  filename: attachment.filename,
   mime: attachment.mime,
-  bytes: attachment.bytes ?? undefined,
-  sha256: attachment.sha256 ?? undefined,
-  summary: attachment.summary ?? null,
+  bytes: attachment.bytes,
+  sha256: attachment.sha256,
+  s3ObjectKey: attachment.s3_object_key,
+  s3Url: attachment.s3_url,
+  externalUrl: attachment.external_url,
+  openaiFileId: attachment.openai_file_id,
+  openaiFilePurpose: attachment.openai_file_purpose,
+  enableFileSearch: attachment.enable_file_search,
+  summary: attachment.summary,
   meta: attachment.meta ?? null,
+  transcriptionStatus: attachment.transcription_status,
+  transcriptionLang: attachment.transcription_lang,
+  transcriptionDurationSec: attachment.transcription_duration_sec,
   createdAt: attachment.created_at,
+  updatedAt: attachment.updated_at,
 })
 
 const mapNotebookDetail = (notebook: ApiNotebook): NotebookDetail => ({
   id: notebook.id,
-  title: notebook.title ?? '未命名笔记',
+  title: notebook.title,
   summary: notebook.summary,
+  color: notebook.color,
+  openaiVectorStoreId: notebook.openai_vector_store_id,
+  vectorStoreExpiresAt: notebook.vector_store_expires_at,
   createdAt: notebook.created_at,
   updatedAt: notebook.updated_at,
   isArchived: notebook.is_archived,
-  tags: notebook.tags ?? [],
   notes: (notebook.notes ?? []).map(mapNotebookNote).sort((a, b) => a.seq - b.seq),
   attachments: (notebook.attachments ?? []).map(mapAttachment),
+  folders: notebook.folders ?? [],
 })
 
 const mapNotebookSummary = (notebook: ApiNotebook): NotebookSummary => ({
   id: notebook.id,
-  title: notebook.title ?? '未命名笔记',
+  title: notebook.title,
   summary: notebook.summary,
+  color: notebook.color,
+  openaiVectorStoreId: notebook.openai_vector_store_id,
+  vectorStoreExpiresAt: notebook.vector_store_expires_at,
   createdAt: notebook.created_at,
   updatedAt: notebook.updated_at,
   isArchived: notebook.is_archived,
-  tags: notebook.tags ?? [],
 })
 
 export const ensureCsrfToken = async (force = false): Promise<string | null> => {
@@ -204,6 +239,7 @@ export const logoutUser = async (): Promise<void> => {
 }
 
 export interface NotebookNotePayload {
+  id?: string | null
   title?: string | null
   content?: string | null
   seq: number
@@ -213,32 +249,35 @@ export interface NotebookPayload {
   title?: string | null
   summary?: string | null
   is_archived?: boolean
-  tags?: string[]
+  color?: string | null
+  openai_vector_store_id?: string | null
+  vector_store_expires_at?: string | null
+  folder_ids?: string[]
   notes?: NotebookNotePayload[]
 }
 
 export const listNotebooks = async (): Promise<NotebookSummary[]> => {
-  const data = await apiFetch<ApiNotebook[]>('/notes', { method: 'GET', skipCsrf: true })
+  const data = await apiFetch<ApiNotebook[]>('/notebooks', { method: 'GET', skipCsrf: true })
   return data.map(mapNotebookSummary)
 }
 
 export const getNotebook = async (id: string): Promise<NotebookDetail> => {
-  const data = await apiFetch<ApiNotebook>(`/notes/${id}`, { method: 'GET', skipCsrf: true })
+  const data = await apiFetch<ApiNotebook>(`/notebooks/${id}`, { method: 'GET', skipCsrf: true })
   return mapNotebookDetail(data)
 }
 
 export const createNotebook = async (payload: NotebookPayload): Promise<NotebookDetail> => {
-  const data = await apiFetch<ApiNotebook>('/notes', { method: 'POST', body: payload })
+  const data = await apiFetch<ApiNotebook>('/notebooks', { method: 'POST', body: payload })
   return mapNotebookDetail(data)
 }
 
 export const updateNotebook = async (id: string, payload: NotebookPayload): Promise<NotebookDetail> => {
-  const data = await apiFetch<ApiNotebook>(`/notes/${id}`, { method: 'PUT', body: payload })
+  const data = await apiFetch<ApiNotebook>(`/notebooks/${id}`, { method: 'PUT', body: payload })
   return mapNotebookDetail(data)
 }
 
 export const deleteNotebook = async (id: string): Promise<void> => {
-  await apiFetch<void>(`/notes/${id}`, { method: 'DELETE' })
+  await apiFetch<void>(`/notebooks/${id}`, { method: 'DELETE' })
 }
 
 interface AttachmentUploadResponse {
@@ -254,14 +293,12 @@ export const presignAttachmentUpload = async (payload: {
   notebookId: string
   filename: string
   contentType?: string
-  kind?: string
   bytes?: number
 }): Promise<{ attachmentId: string; objectKey: string; upload: { url: string; fields: Record<string, string> } }> => {
   const body = {
     notebook_id: payload.notebookId,
     filename: payload.filename,
     content_type: payload.contentType,
-    kind: payload.kind,
     bytes: payload.bytes,
   }
   const data = await apiFetch<AttachmentUploadResponse>('/attachments/presign-upload', { method: 'POST', body })
@@ -285,4 +322,102 @@ export const getAttachmentDownloadUrl = async (
     skipCsrf: true,
   })
   return { url: data.url, expiresIn: data.expires_in }
+}
+
+export const updateAttachment = async (
+  attachmentId: string,
+  payload: { filename?: string | null },
+): Promise<void> => {
+  await apiFetch<void>(`/attachments/${attachmentId}`, {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export const deleteAttachment = async (attachmentId: string): Promise<void> => {
+  await apiFetch<void>(`/attachments/${attachmentId}`, { method: 'DELETE' })
+}
+
+interface OpenAIFileResponse {
+  id: string
+  object: string
+  bytes: number
+  created_at: number
+  expires_at?: number
+  filename: string
+  purpose: string
+}
+
+export const uploadOpenAIFile = async (
+  file: File,
+  options?: { purpose?: string; expiresAfterAnchor?: string; expiresAfterSeconds?: number },
+): Promise<OpenAIFileResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('purpose', options?.purpose ?? 'user_data')
+  if (options?.expiresAfterAnchor) {
+    formData.append('expires_after[anchor]', options.expiresAfterAnchor)
+  }
+  if (typeof options?.expiresAfterSeconds === 'number') {
+    formData.append('expires_after[seconds]', String(options.expiresAfterSeconds))
+  }
+  const headers = INTERNAL_TOKEN ? { 'X-API-KEY': INTERNAL_TOKEN } : undefined
+  return apiFetch<OpenAIFileResponse>('/files/', {
+    method: 'POST',
+    body: formData,
+    ...(headers ? { headers } : {}),
+  })
+}
+
+export const linkAttachmentToOpenAI = async (
+  attachmentId: string,
+  openaiFileId: string,
+): Promise<{ id: string; openai_file_id: string }> => {
+  return apiFetch<{ id: string; openai_file_id: string }>(`/attachments/${attachmentId}/link-openai`, {
+    method: 'POST',
+    body: { openai_file_id: openaiFileId },
+  })
+}
+
+export interface AudioTranscriptionResponse {
+  text?: string
+  confidence?: number
+  duration?: number
+  language?: string
+  model?: string
+  response_format?: string
+}
+
+export const transcribeAudio = async (
+  file: File,
+  options?: {
+    model?: string
+    responseFormat?: string
+    language?: string
+    temperature?: number
+    prompt?: string
+    minConfidence?: number
+  },
+): Promise<AudioTranscriptionResponse> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('model', options?.model ?? DEFAULT_AUDIO_MODEL)
+  formData.append('response_format', options?.responseFormat ?? 'json')
+  if (options?.language) formData.append('language', options.language)
+  if (typeof options?.temperature === 'number') {
+    formData.append('temperature', String(options.temperature))
+  }
+  if (options?.prompt) formData.append('prompt', options.prompt)
+  if (typeof options?.minConfidence === 'number') {
+    formData.append('min_confidence', String(options.minConfidence))
+  }
+
+  const headers = INTERNAL_TOKEN ? { 'X-API-KEY': INTERNAL_TOKEN } : undefined
+
+  return apiFetch<AudioTranscriptionResponse>(TRANSCRIBE_ENDPOINT, {
+    method: 'POST',
+    body: formData,
+    skipCsrf: true,
+    ...(headers ? { headers } : {}),
+  })
 }

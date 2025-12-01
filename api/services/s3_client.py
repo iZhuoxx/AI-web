@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import boto3
 from botocore.client import BaseClient
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from api.settings import settings
 
@@ -62,3 +63,15 @@ def create_presigned_download(key: str, expires_in: int = 900) -> str:
         Params={"Bucket": settings.AWS_S3_BUCKET, "Key": key},
         ExpiresIn=expires_in,
     )
+
+
+def delete_object(key: str) -> None:
+    """Delete an object from S3 (or compatible storage)."""
+
+    client = get_s3_client()
+    if not settings.AWS_S3_BUCKET:
+        raise RuntimeError("AWS_S3_BUCKET must be configured to use uploads")
+    try:
+        client.delete_object(Bucket=settings.AWS_S3_BUCKET, Key=key)
+    except ClientError as exc:
+        raise RuntimeError(f"Failed to delete S3 object '{key}': {exc}") from exc

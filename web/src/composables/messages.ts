@@ -1,6 +1,13 @@
 import { useStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
-import type { TMessage, TFileInMessage } from '@/types'
+import type { TMessage, TFileInMessage, ResponseUIState } from '@/types'
+
+const createInitialUiState = (): ResponseUIState => ({
+  phase: 'waiting',
+  statusKey: null,
+  statusText: null,
+  hasTextStarted: false,
+})
 
 type ToolConfig = Record<string, any>
 
@@ -64,7 +71,7 @@ function createMessagesStore(storageKey: string) {
       time: dayjs().format('HH:mm'),
       images: [],
       files: [],
-      meta: { loading: true },
+      meta: { loading: true, uiState: createInitialUiState() },
     })
   }
 
@@ -73,8 +80,21 @@ function createMessagesStore(storageKey: string) {
     if (!list.length) return
     const last = list[list.length - 1]
     if (last.type !== 0) return
-    if (last.meta?.loading) {
-      last.meta = { ...(last.meta || {}), loading: false }
+    const wasLoading = Boolean(last.meta?.loading)
+    const currentUiState =
+      (last.meta?.uiState as Partial<ResponseUIState> | undefined) ?? createInitialUiState()
+    last.meta = {
+      ...(last.meta || {}),
+      loading: false,
+      uiState: {
+        ...currentUiState,
+        phase: 'streaming',
+        statusKey: null,
+        statusText: null,
+        hasTextStarted: true,
+      },
+    }
+    if (wasLoading) {
       last.msg = ''
     }
     last.msg += delta

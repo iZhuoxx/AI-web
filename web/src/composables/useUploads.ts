@@ -1,58 +1,34 @@
-// src/composables/useUploads.ts
 import { ref } from 'vue'
 import type { TFileInMessage } from '@/types'
-import {
-  DEFAULT_AUDIO_MODEL,
-  TRANSCRIBE_ENDPOINT,
-  isAudioFile,
-} from '@/constants/audio'
+import { uploadOpenAIFile, transcribeAudio } from '@/services/api'
 
 export type GenericItem = {
   name: string
   size: number
   type: string
   file?: File
-  viewUrl?: string
   text?: string
   truncated?: boolean
   fileId?: string
-  purpose?: 'vision' | 'assistants'
-  kind: 'text' | 'file' | 'audio'
+  kind: 'file' | 'audio'
   status: 'pending'|'ok'|'error'
   error?: string
 }
 
-const INTERNAL_TOKEN = import.meta.env.VITE_INTERNAL_TOKEN as string | undefined
-
-const TEXTUAL_MIME_PREFIXES = ['text/']
-const TEXTUAL_MIME_TYPES = new Set([
-  'application/json',
-  'application/xml',
-  'application/x-yaml',
-  'application/yaml',
-  'application/javascript',
-  'application/x-javascript',
-  'application/typescript',
-  'application/x-python',
-  'application/x-python-code',
-  'application/rtf',
+const ALLOWED_FILE_EXTS = new Set([
+  'c','cpp','cs','css','csv','doc','docx','gif','go','html','java','jpeg','jpg','js','json',
+  'md','pdf','php','pkl','png','pptx','py','rb','tar','tex','ts','txt','webp','xlsx','xml','zip',
 ])
 
-const TEXT_EXTS = new Set(['txt','md','markdown','csv','tsv','json','yaml','yml','xml','html','htm','py','js','ts'])
-function isTextLike(file: File): boolean {
-  const mime = file.type || ''
-  if (TEXTUAL_MIME_PREFIXES.some(prefix => mime.startsWith(prefix))) return true
-  if (TEXTUAL_MIME_TYPES.has(mime)) return true
-  const ext = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : ''
-  if (ext && TEXT_EXTS.has(ext)) return true
-  return false
+function getExt(file: File): string {
+  const ext = file.name.includes('.') ? file.name.split('.').pop() || '' : ''
+  return ext.toLowerCase()
 }
 
-function isPdf(file: File): boolean {
+function isMp3(file: File): boolean {
   const mime = (file.type || '').toLowerCase()
-  if (mime === 'application/pdf') return true
-  const ext = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : ''
-  return ext === 'pdf'
+  if (mime === 'audio/mpeg' || mime === 'audio/mp3') return true
+  return getExt(file) === 'mp3'
 }
 
 export function useUploads() {
@@ -86,21 +62,19 @@ export function useUploads() {
   async function addGenericFiles(files: File[]) {
     const others = files.filter(f => !/^image\//.test(f.type))
     for (const f of others) {
-      if (isAudioFile(f)) {
-        const audioItem: GenericItem = {
+      if (isMp3(f)) {
+        genericFiles.value.push({
           name: f.name,
           size: f.size,
           type: f.type || 'audio/mpeg',
           file: f,
           status: 'pending',
           kind: 'audio',
-        }
-        genericFiles.value.push(audioItem)
-        queueAudioTranscription(audioItem)
+        })
         continue
       }
-      const pdf = isPdf(f)
-      if (!pdf && !isTextLike(f)) {
+      const ext = getExt(f)
+      if (!ALLOWED_FILE_EXTS.has(ext)) {
         console.warn('忽略不支持的文件', f.name)
         continue
       }
@@ -109,61 +83,92 @@ export function useUploads() {
         size: f.size,
         type: f.type || 'application/octet-stream',
         file: f,
-        // 为前端预览生成一个临时 blob URL（刷新页面会失效）
-        viewUrl: URL.createObjectURL(f),
         status: 'pending',
-        kind: pdf ? 'file' : 'text',
+        kind: 'file',
       })
     }
     await ensureUploads()
   }
   function removeGenericFile(idx: number) {
-    const it = genericFiles.value[idx]
-    if (it?.viewUrl) URL.revokeObjectURL(it.viewUrl)
     genericFiles.value.splice(idx, 1)
   }
 
   async function ensureUploads() {
     for (const it of genericFiles.value) {
-      if (it.kind === 'audio') continue
+      if (it.kind === 'audio') {
+        queueAudioTranscription(it)
+        continue
+      }
       if (it.status !== 'pending' || !it.file) continue
       try {
-        const fd = new FormData()
-        fd.append('file', it.file as File)
-
-        const r = await fetch('/api/files/', {
-          method: 'POST',
-          body: fd,
-          credentials: 'include',
-          headers: { 'X-API-KEY': INTERNAL_TOKEN ?? '' },
+        const resp = await uploadOpenAIFile(it.file as File, {
+          purpose: 'assistants',
+          expiresAfterAnchor: 'created_at',
+          expiresAfterSeconds: 2592000,
         })
-        if (!r.ok) {
-          const text = await r.text().catch(()=> '')
-          throw new Error(`upload failed: HTTP ${r.status}${text?` - ${text}`:''}`)
+        if (!resp?.id) {
+          throw new Error('empty file id in response')
         }
-        const data = await r.json().catch(()=> ({}))
-        if (typeof data?.text === 'string' && data.text.trim()) {
-          it.text = data.text
-          it.truncated = Boolean(data?.truncated)
-          it.kind = 'text'
-          it.status = 'ok'
-          it.file = undefined
-        } else if (data?.file_id) {
-          it.fileId = String(data.file_id)
-          if (data?.purpose === 'vision' || data?.purpose === 'assistants') {
-            it.purpose = data.purpose
-          }
-          it.kind = 'file'
-          it.status = 'ok'
-          it.file = undefined
-        } else {
-          throw new Error('empty payload in response')
-        }
+        it.fileId = String(resp.id)
+        it.kind = it.kind ?? 'file'
+        it.status = 'ok'
+        it.file = undefined
       } catch (e) {
         console.error('file upload error:', e)
         it.status = 'error'
       }
     }
+  }
+
+  async function transcribeAudioRequest(file: File): Promise<string> {
+    const data = await transcribeAudio(file, { responseFormat: 'json' })
+    const text = (data?.text || '').trim()
+    if (!text) {
+      throw new Error('transcription returned empty text')
+    }
+    return text
+  }
+
+  function queueAudioTranscription(it: GenericItem) {
+    if (!it.file || audioJobs.has(it) || it.status === 'ok') return
+    it.status = 'pending'
+    const job = transcribeAudioRequest(it.file)
+      .then(text => {
+        it.text = text
+        it.truncated = false
+        it.status = 'ok'
+        it.error = undefined
+        it.file = undefined
+        it.kind = 'file'
+      })
+      .catch((err: any) => {
+        console.error('audio transcription error', err)
+        it.status = 'error'
+        it.error = err?.message || String(err)
+      })
+      .finally(() => {
+        audioJobs.delete(it)
+      })
+    audioJobs.set(it, job)
+  }
+
+  function ensureAudioJobs() {
+    for (const it of genericFiles.value) {
+      if (it.kind === 'audio' && it.file) {
+        queueAudioTranscription(it)
+      }
+    }
+  }
+
+  async function waitForAudioJobs() {
+    if (!audioJobs.size) return
+    const jobs = Array.from(audioJobs.values())
+    await Promise.allSettled(jobs)
+  }
+
+  async function ensureAudioTranscriptions() {
+    ensureAudioJobs()
+    await waitForAudioJobs()
   }
 
   // 粘贴 & 拖拽
@@ -206,100 +211,22 @@ export function useUploads() {
   function resetAll() {
     imageFiles.value = []
     imagePreviews.value = []
-    // 回收本地 URL，避免内存泄漏
-    genericFiles.value.forEach(it => it.viewUrl && URL.revokeObjectURL(it.viewUrl))
     genericFiles.value = []
-  }
-
-  async function transcribeAudioRequest(file: File): Promise<string> {
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('model', DEFAULT_AUDIO_MODEL)
-    fd.append('response_format', 'text')
-
-    const headers: Record<string, string> = {}
-    if (INTERNAL_TOKEN) {
-      headers['X-API-KEY'] = INTERNAL_TOKEN
-    }
-
-    const res = await fetch(TRANSCRIBE_ENDPOINT, {
-      method: 'POST',
-      body: fd,
-      credentials: 'include',
-      headers,
-    })
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      throw new Error(errText || `transcription failed: HTTP ${res.status}`)
-    }
-
-    const data = await res.json().catch(() => ({})) as { text?: string }
-    const text = (data?.text || '').trim()
-    if (!text) {
-      throw new Error('transcription returned empty text')
-    }
-    return text
-  }
-
-  function queueAudioTranscription(it: GenericItem) {
-    if (!it.file || audioJobs.has(it)) return
-    it.status = 'pending'
-    const job = transcribeAudioRequest(it.file)
-      .then(text => {
-        it.text = text
-        it.truncated = false
-        it.status = 'ok'
-        it.error = undefined
-        it.file = undefined
-        it.kind = 'text'
-      })
-      .catch((err: any) => {
-        console.error('audio transcription error', err)
-        it.status = 'error'
-        it.error = err?.message || String(err)
-      })
-      .finally(() => {
-        audioJobs.delete(it)
-      })
-    audioJobs.set(it, job)
-  }
-
-  function ensureAudioJobs() {
-    for (const it of genericFiles.value) {
-      if (it.kind === 'audio' && it.file) {
-        queueAudioTranscription(it)
-      }
-    }
-  }
-
-  async function waitForAudioJobs() {
-    if (!audioJobs.size) return
-    const jobs = Array.from(audioJobs.values())
-    await Promise.allSettled(jobs)
-  }
-
-  async function ensureAudioTranscriptions() {
-    ensureAudioJobs()
-    await waitForAudioJobs()
+    audioJobs.clear()
   }
 
   /**
    生成消息中可用的文件数组
-   * - 附带提取后的纯文本
-   * - 保留临时 viewUrl（仅用于当前会话内展示）
    */
   function filesForChat(): TFileInMessage[] {
     return genericFiles.value
-      .filter(it => it.status === 'ok' && (typeof it.text === 'string' || it.fileId))
+      .filter(it => it.status === 'ok' && (it.fileId || typeof it.text === 'string'))
       .map<TFileInMessage>(it => ({
         name: it.name,
         type: it.type,
         text: it.text,
         truncated: it.truncated,
         fileId: it.fileId,
-        purpose: it.purpose,
-        viewUrl: it.viewUrl,
       }))
   }
 
