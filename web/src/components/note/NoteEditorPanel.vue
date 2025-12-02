@@ -31,145 +31,41 @@
         <a-tag v-if="isGenerating" class="status-tag" color="processing">AI 正在生成...</a-tag>
         <a-tag v-else-if="isSaving" class="status-tag" color="default">保存中...</a-tag>
         <a-tag v-else-if="showSavedIndicator" class="status-tag" color="success">已保存</a-tag>
-      </div>
-    </header>
 
-    <section class="note-editor__body">
-      <div class="format-toolbar">
-        <div class="format-toolbar__left">
-          <!-- 段落样式：H1 图标按钮 + 下拉菜单（Body / H1 / H2 / H3） -->
-          <a-dropdown
-            :trigger="['click']"
-            :get-popup-container="getToolbarPopupContainer"
+        <div class="note-header__toolbar" v-if="editorInstance">
+          <!-- 撤销 -->
+          <button
+            class="toolbar-btn"
+            type="button"
+            aria-label="撤销"
+            :disabled="!canUndo"
+            @click="undo"
           >
-            <template #overlay>
-              <a-menu :selectable="false" @click="handleBlockStyleSelect">
-                <a-menu-item v-for="item in blockStyleMenuItems" :key="item.key">
-                  <div :class="['block-style-item', `block-style-item--${item.key}`]">
-                    {{ item.label }}
-                  </div>
-                </a-menu-item>
-              </a-menu>
-            </template>
-            <button
-              class="toolbar-btn block-style-btn"
-              type="button"
-              aria-label="段落样式"
-              @mousedown.prevent
-            >
-              <Heading1Icon class="icon" />
-              <ChevronDownIcon class="dropdown-icon" />
-            </button>
-          </a-dropdown>
+            <UndoIcon class="icon" />
+          </button>
 
-          <!-- 列表 -->
-          <a-dropdown
-            :trigger="['click']"
-            :get-popup-container="getToolbarPopupContainer"
+          <!-- 重做 -->
+          <button
+            class="toolbar-btn"
+            type="button"
+            aria-label="重做"
+            :disabled="!canRedo"
+            @click="redo"
           >
-            <template #overlay>
-              <a-menu :selectable="false" @click="handleListSelect">
-                <a-menu-item v-for="item in listMenuItems" :key="item.key">
-                  {{ item.label }}
-                </a-menu-item>
-              </a-menu>
-            </template>
-            <button class="toolbar-btn" type="button" aria-label="列表样式" @mousedown.prevent>
-              <ListIcon class="icon" />
-              <ChevronDownIcon class="dropdown-icon" />
-            </button>
-          </a-dropdown>
-
-          <!-- 文本颜色 -->
-          <a-dropdown
-            :trigger="['click']"
-            :get-popup-container="getToolbarPopupContainer"
-          >
-            <template #overlay>
-              <div class="color-dropdown">
-                <button
-                  v-for="color in textColorPalette"
-                  :key="color"
-                  type="button"
-                  class="color-dropdown__swatch"
-                  :style="{ backgroundColor: color }"
-                  @mousedown.prevent
-                  @click="handleTextColorSelect(color)"
-                />
-              </div>
-            </template>
-            <button class="toolbar-btn color-picker-btn" type="button" aria-label="文字颜色" @mousedown.prevent>
-              <span class="color-preview" :style="{ backgroundColor: currentTextColor }" />
-              <ChevronDownIcon class="dropdown-icon" />
-            </button>
-          </a-dropdown>
-
-          <!-- 高亮 -->
-          <div class="highlight-control">
-            <button
-              class="toolbar-btn highlight-btn"
-              type="button"
-              aria-label="应用高亮"
-              @mousedown.prevent
-              @click="handleHighlightButtonClick"
-            >
-              <HighlighterIcon class="icon" />
-              <span class="highlight-color-indicator" :style="{ backgroundColor: currentHighlightColor }" />
-            </button>
-            <a-dropdown
-              :trigger="['click']"
-              :get-popup-container="getToolbarPopupContainer"
-            >
-              <template #overlay>
-                <div class="color-dropdown">
-                  <button
-                    v-for="color in highlightColorPalette"
-                    :key="color"
-                    type="button"
-                    class="color-dropdown__swatch color-dropdown__swatch--highlight"
-                    :style="{ backgroundColor: color }"
-                    @mousedown.prevent
-                    @click="handleHighlightColorSelect(color)"
-                  />
-                </div>
-              </template>
-              <button
-                class="toolbar-btn highlight-dropdown-btn"
-                type="button"
-                aria-label="选择高亮颜色"
-                @mousedown.prevent
-              >
-                <ChevronDownIcon class="dropdown-icon" />
-              </button>
-            </a-dropdown>
-          </div>
-
-          <!-- 加粗 / 斜体 / 链接 -->
-          <button class="toolbar-btn" type="button" aria-label="加粗" @mousedown.prevent @click="applyTextCommand('bold')">
-            <span class="text-control text-control--bold">B</span>
+            <RedoIcon class="icon" />
           </button>
-          <button class="toolbar-btn" type="button" aria-label="斜体" @mousedown.prevent @click="applyTextCommand('italic')">
-            <span class="text-control text-control--italic">I</span>
-          </button>
-          <button class="toolbar-btn" type="button" aria-label="插入链接" @mousedown.prevent @click="openLinkModal">
-            <Link2Icon class="icon" />
-          </button>
-        </div>
 
-        <div class="format-toolbar__right">
           <!-- 导出 -->
-          <a-dropdown
-            :trigger="['click']"
-            :get-popup-container="getToolbarPopupContainer"
-          >
+          <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
             <template #overlay>
               <a-menu :selectable="false" @click="handleExportClick">
-                <a-menu-item v-for="item in exportMenuItems" :key="item.key">
-                  {{ item.label }}
-                </a-menu-item>
+                <a-menu-item key="markdown">导出 Markdown</a-menu-item>
+                <a-menu-item key="html">导出 HTML</a-menu-item>
+                <a-menu-item key="pdf">导出 PDF</a-menu-item>
+                <a-menu-item key="txt">导出 TXT</a-menu-item>
               </a-menu>
             </template>
-            <button class="toolbar-btn" type="button" aria-label="导出" @mousedown.prevent>
+            <button class="toolbar-btn" type="button" aria-label="导出">
               <DownloadIcon class="icon" />
             </button>
           </a-dropdown>
@@ -180,25 +76,242 @@
             class="toolbar-btn"
             type="button"
             :aria-label="isFullscreenComputed ? '退出全屏' : '全屏编辑'"
-            @mousedown.prevent
             @click="emit('toggle-fullscreen')"
           >
             <component :is="isFullscreenComputed ? Minimize2Icon : Maximize2Icon" class="icon" />
           </button>
         </div>
       </div>
+    </header>
+
+    <section class="note-editor__body">
+      <BubbleMenu
+        v-if="editorInstance"
+        :editor="editorInstance"
+        :tippy-options="{ maxWidth: 'none', duration: 120, animation: 'shift-away', offset: [0, 8], interactive: true }"
+        :should-show="shouldShowBubbleMenu"
+      >
+        <div class="bubble-toolbar">
+          <div class="bubble-toolbar__group">
+            <!-- 段落样式 -->
+            <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+              <template #overlay>
+                <a-menu :selectable="false" @click="handleHeadingSelect">
+                  <a-menu-item key="paragraph">
+                    <div class="block-style-item block-style-item--body">正文</div>
+                  </a-menu-item>
+                  <a-menu-item key="h1">
+                    <div class="block-style-item block-style-item--h1">标题 1</div>
+                  </a-menu-item>
+                  <a-menu-item key="h2">
+                    <div class="block-style-item block-style-item--h2">标题 2</div>
+                  </a-menu-item>
+                  <a-menu-item key="h3">
+                    <div class="block-style-item block-style-item--h3">标题 3</div>
+                  </a-menu-item>
+                  <a-menu-item key="h4">
+                    <div class="block-style-item block-style-item--h4">标题 4</div>
+                  </a-menu-item>
+                  <a-menu-item key="h5">
+                    <div class="block-style-item block-style-item--h5">标题 5</div>
+                  </a-menu-item>
+                </a-menu>
+              </template>
+              <button class="toolbar-btn bubble-btn block-style-btn" type="button" aria-label="段落样式">
+                <Heading1Icon class="icon" />
+                <ChevronDownIcon class="dropdown-icon" />
+              </button>
+            </a-dropdown>
+
+            <!-- 列表 -->
+            <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+              <template #overlay>
+                <a-menu :selectable="false" @click="handleListSelect">
+                  <a-menu-item key="bulletList">项目符号列表</a-menu-item>
+                  <a-menu-item key="orderedList">编号列表</a-menu-item>
+                  <a-menu-item key="taskList">待办列表</a-menu-item>
+                </a-menu>
+              </template>
+              <button class="toolbar-btn bubble-btn" type="button" aria-label="列表样式">
+                <ListIcon class="icon" />
+                <ChevronDownIcon class="dropdown-icon" />
+              </button>
+            </a-dropdown>
+
+            <!-- 文本 / 高亮颜色 -->
+            <div class="color-merge-btn">
+              <button
+                class="toolbar-btn bubble-btn color-merge-btn__chip-btn"
+                :class="{ 'is-active': isHighlightActive }"
+                type="button"
+                aria-label="应用当前高亮"
+                @click="toggleCurrentHighlight"
+              >
+                <span
+                  class="color-merge-btn__chip"
+                  :style="{
+                    backgroundColor: currentHighlightColor || '#fffbe6',
+                    color: currentTextColor,
+                    borderColor: currentHighlightColor ? 'rgba(0,0,0,0.16)' : 'rgba(0,0,0,0.22)',
+                  }"
+                >
+                  A
+                </span>
+              </button>
+
+              <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+                <template #overlay>
+                  <div class="color-merge-dropdown">
+                    <div class="color-merge-dropdown__section">
+                      <div class="color-merge-dropdown__title">字体颜色</div>
+                      <div class="color-merge-dropdown__swatches">
+                        <button
+                          v-for="color in textColorPalette"
+                          :key="color"
+                          type="button"
+                          class="color-merge-dropdown__item"
+                          :class="{ 'is-selected': currentTextColor === color }"
+                          @click="setTextColor(color)"
+                        >
+                          <span class="color-merge-dropdown__letter" :style="{ color }">A</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="color-merge-dropdown__section">
+                      <div class="color-merge-dropdown__title">背景颜色</div>
+                      <div class="color-merge-dropdown__swatches">
+                        <button
+                          type="button"
+                          class="color-merge-dropdown__item"
+                          :class="{ 'is-selected': !currentHighlightColor }"
+                          @click="clearHighlight"
+                        >
+                          <span class="color-merge-dropdown__none">无</span>
+                        </button>
+                        <button
+                          v-for="color in highlightColorPalette"
+                          :key="color"
+                          type="button"
+                          class="color-merge-dropdown__item"
+                          :class="{ 'is-selected': currentHighlightColor === color }"
+                          @click="setHighlightColor(color)"
+                        >
+                          <span class="color-merge-dropdown__swatch" :style="{ backgroundColor: color }" />
+                        </button>
+                      </div>
+                    </div>
+                    <button type="button" class="color-merge-dropdown__reset" @click="resetTextAndHighlight">
+                      恢复默认
+                    </button>
+                  </div>
+                </template>
+                <button class="toolbar-btn bubble-btn color-merge-btn__arrow" type="button" aria-label="选择文字和高亮颜色">
+                  <ChevronDownIcon class="dropdown-icon dropdown-icon--light" />
+                </button>
+              </a-dropdown>
+            </div>
+          </div>
+
+          <div class="bubble-toolbar__group">
+            <!-- 加粗 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isBoldActive }"
+              type="button"
+              aria-label="加粗"
+              @click="toggleBold"
+            >
+              <span class="text-control text-control--bold">B</span>
+            </button>
+
+            <!-- 斜体 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isItalicActive }"
+              type="button"
+              aria-label="斜体"
+              @click="toggleItalic"
+            >
+              <span class="text-control text-control--italic">I</span>
+            </button>
+
+            <!-- 下划线 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isUnderlineActive }"
+              type="button"
+              aria-label="下划线"
+              @click="toggleUnderline"
+            >
+              <span class="text-control text-control--underline">U</span>
+            </button>
+
+            <!-- 删除线 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isStrikeActive }"
+              type="button"
+              aria-label="删除线"
+              @click="toggleStrike"
+            >
+              <span class="text-control text-control--strike">S</span>
+            </button>
+
+            <!-- 代码 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isCodeActive }"
+              type="button"
+              aria-label="行内代码"
+              @click="toggleCode"
+            >
+              <CodeIcon class="icon" />
+            </button>
+
+            <!-- 链接 -->
+            <button class="toolbar-btn bubble-btn" type="button" aria-label="插入链接" @click="openLinkModal">
+              <Link2Icon class="icon" />
+            </button>
+
+            <!-- 引用 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isBlockquoteActive }"
+              type="button"
+              aria-label="引用"
+              @click="toggleBlockquote"
+            >
+              <QuoteIcon class="icon" />
+            </button>
+
+            <!-- 代码块 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              :class="{ 'is-active': isCodeBlockActive }"
+              type="button"
+              aria-label="代码块"
+              @click="toggleCodeBlock"
+            >
+              <BracesIcon class="icon" />
+            </button>
+
+            <!-- 水平线 -->
+            <button
+              class="toolbar-btn bubble-btn"
+              type="button"
+              aria-label="分隔线"
+              @click="setHorizontalRule"
+            >
+              <MinusIcon class="icon" />
+            </button>
+          </div>
+        </div>
+      </BubbleMenu>
 
       <div class="editor-divider"></div>
 
-      <div
-        ref="editorRef"
-        class="note-editor__surface"
-        :data-placeholder="contentPlaceholder"
-        contenteditable="true"
-        @input="handleEditorInput"
-        @mouseup="handleEditorMouseUp"
-        @keyup="handleEditorKeyup"
-      ></div>
+      <!-- Tiptap 编辑器 -->
+      <editor-content v-if="editorInstance" :editor="editorInstance" class="tiptap-editor" />
     </section>
 
     <!-- 链接弹窗 -->
@@ -225,141 +338,457 @@
 <script setup lang="ts">
 import type { MenuProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { BubbleMenu } from '@tiptap/vue-3/menus'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import { TextStyle } from '@tiptap/extension-text-style'
+import { Color } from '@tiptap/extension-color'
+import Highlight from '@tiptap/extension-highlight'
+import Link from '@tiptap/extension-link'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import Placeholder from '@tiptap/extension-placeholder'
+import { Markdown } from 'tiptap-markdown'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
   DownloadIcon,
-  HighlighterIcon,
   Link2Icon,
   ListIcon,
   Maximize2Icon,
   Minimize2Icon,
   Heading1Icon,
+  CodeIcon,
+  QuoteIcon,
+  BracesIcon,
+  MinusIcon,
+  UndoIcon,
+  RedoIcon,
 } from 'lucide-vue-next'
 import type { ActiveNoteForEditor } from '@/types/notes'
-
-type SimpleMenuItem = {
-  key: string
-  label: string
-}
-
-const listMenuItems: SimpleMenuItem[] = [
-  { key: 'unordered', label: '项目符号列表' },
-  { key: 'ordered', label: '编号列表' },
-]
-
-const exportMenuItems: SimpleMenuItem[] = [
-  { key: 'pdf', label: '导出 PDF' },
-  { key: 'txt', label: '导出 TXT' },
-]
-
-/**
- * 段落样式：Body / Head1 / Head2 / Head3
- * 所有字号、行高、行间距都在这里统一定义
- */
-type BlockStyleKey = 'body' | 'h1' | 'h2' | 'h3'
-
-interface BlockStyleDef {
-  key: BlockStyleKey
-  label: string
-  fontSize: number
-  lineHeight: number
-  marginTop: number
-  marginBottom: number
-  fontWeight?: number | string
-}
-
-const blockStyleDefs: BlockStyleDef[] = [
-  { key: 'body', label: 'Body', fontSize: 15, lineHeight: 1.7, marginTop: 4, marginBottom: 4 },
-  { key: 'h1', label: 'Head 1', fontSize: 28, lineHeight: 1.3, marginTop: 20, marginBottom: 12, fontWeight: 700 },
-  { key: 'h2', label: 'Head 2', fontSize: 22, lineHeight: 1.35, marginTop: 16, marginBottom: 8, fontWeight: 600 },
-  { key: 'h3', label: 'Head 3', fontSize: 18, lineHeight: 1.4, marginTop: 12, marginBottom: 6, fontWeight: 600 },
-]
-
-const blockStyleMap: Record<BlockStyleKey, BlockStyleDef> = blockStyleDefs.reduce((acc, def) => {
-  acc[def.key] = def
-  return acc
-}, {} as Record<BlockStyleKey, BlockStyleDef>)
-
-const blockStyleMenuItems = blockStyleDefs.map(def => ({
-  key: def.key,
-  label: def.label,
-}))
-
-// 颜色配置
-const textColorPalette = ['#111111', '#1d4ed8', '#0ea5e9', '#16a34a', '#eab308', '#ef4444', '#f97316', '#9333ea']
-const highlightColorPalette = [
-  '#fef3c7',
-  '#fde68a',
-  '#fcd34d',
-  '#d9f99d',
-  '#bae6fd',
-  '#fbcfe8',
-  '#f5d0fe',
-  '#fecaca',
-]
-const defaultTextColor = textColorPalette[0]
-const defaultHighlightColor = highlightColorPalette[1] || '#fde68a'
-
-const getToolbarPopupContainer = (triggerNode?: HTMLElement): HTMLElement => {
-  if (triggerNode?.parentElement) {
-    return triggerNode.parentElement
-  }
-  return triggerNode ?? document.body
-}
-
-const contentPlaceholder =
-  'AI 生成的内容会出现在这里，也可以直接记录课堂笔记...'
 
 const props = defineProps<{
   note: ActiveNoteForEditor | null
   isGenerating: boolean
   isFullscreen?: boolean
-  showSyncButton?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'back'): void
   (e: 'toggle-fullscreen'): void
   (e: 'user-edit'): void
-  (e: 'request-sync'): void
   (e: 'change', payload: { title: string; content: string }): void
   (e: 'save', payload: { title: string; content: string }): void
 }>()
 
+// 颜色配置
+const textColorPalette = ['#111111', '#1d4ed8', '#0ea5e9', '#16a34a', '#eab308', '#ef4444', '#f97316', '#9333ea']
+const highlightColorPalette = ['#fef3c7', '#fde68a', '#fcd34d', '#d9f99d', '#bae6fd', '#fbcfe8', '#f5d0fe', '#fecaca']
+const currentTextColor = ref('#111111')
+const currentHighlightColor = ref<string | null>('#fde68a')
+
+const getToolbarPopupContainer = (triggerNode?: HTMLElement): HTMLElement => {
+  return triggerNode?.parentElement ?? document.body
+}
+
+const shouldShowBubbleMenu = ({ state, editor }: { state: any; editor: any }) => {
+  const { selection } = state
+  if (selection.empty) return false
+  if (!editor?.view?.hasFocus?.()) return false
+  if (editor?.isActive?.('codeBlock')) return false
+  return true
+}
+
+// 笔记状态
 const noteTitle = ref('未命名笔记')
 const noteTitleInput = ref('')
 const noteContent = ref('')
-const userEdited = ref(false)
 const currentNoteId = ref<string | null>(null)
-
-const isEditingTitle = ref(false)
-const titleInputRef = ref<HTMLInputElement | null>(null)
-const editorRef = ref<HTMLDivElement | null>(null)
-
-const linkModalVisible = ref(false)
-const linkForm = reactive({ label: '', url: '' })
-
+const userEdited = ref(false)
 const isSaving = ref(false)
 const showSavedIndicator = ref(false)
 const autoSaveTimer = ref<number | null>(null)
+const pendingContent = ref<string | null>(null)
 
-const currentTextColor = ref(defaultTextColor)
-const currentHighlightColor = ref(defaultHighlightColor)
+// 标题编辑
+const isEditingTitle = ref(false)
+const titleInputRef = ref<HTMLInputElement | null>(null)
 
-const cachedSelectionRange = ref<Range | null>(null)
-const currentBlockStyle = ref<BlockStyleKey>('body')
+// 链接弹窗
+const linkModalVisible = ref(false)
+const linkForm = reactive({ label: '', url: '' })
 
 const showFullscreenToggle = computed(() => typeof props.isFullscreen === 'boolean')
 const isFullscreenComputed = computed(() => props.isFullscreen === true)
 
-const emitChange = () => emit('change', { title: noteTitle.value, content: noteContent.value })
+// Editor 实例（用于 editor-content 组件）
+const editorInstance = computed(() => editor.value ?? undefined)
 
-const updateEditorHtml = (html: string) => {
-  if (editorRef.value && editorRef.value.innerHTML !== html) {
-    editorRef.value.innerHTML = html
+// 工具栏按钮状态（避免模板类型错误）
+const isBoldActive = computed(() => editor.value?.isActive('bold') ?? false)
+const isItalicActive = computed(() => editor.value?.isActive('italic') ?? false)
+const isUnderlineActive = computed(() => editor.value?.isActive('underline') ?? false)
+const isStrikeActive = computed(() => editor.value?.isActive('strike') ?? false)
+const isCodeActive = computed(() => editor.value?.isActive('code') ?? false)
+const isBlockquoteActive = computed(() => editor.value?.isActive('blockquote') ?? false)
+const isCodeBlockActive = computed(() => editor.value?.isActive('codeBlock') ?? false)
+const isHighlightActive = computed(() => editor.value?.isActive('highlight') ?? false)
+const canUndo = computed(() => editor.value?.can().undo() ?? false)
+const canRedo = computed(() => editor.value?.can().redo() ?? false)
+const isApplyingContent = ref(false)
+
+// 编辑器操作方法（避免模板类型错误）
+const toggleBold = () => editor.value?.chain().focus().toggleBold().run()
+const toggleItalic = () => editor.value?.chain().focus().toggleItalic().run()
+const toggleUnderline = () => editor.value?.chain().focus().toggleUnderline().run()
+const toggleStrike = () => editor.value?.chain().focus().toggleStrike().run()
+const toggleCode = () => editor.value?.chain().focus().toggleCode().run()
+const toggleBlockquote = () => editor.value?.chain().focus().toggleBlockquote().run()
+const toggleCodeBlock = () => editor.value?.chain().focus().toggleCodeBlock().run()
+const setHorizontalRule = () => editor.value?.chain().focus().setHorizontalRule().run()
+const undo = () => editor.value?.chain().focus().undo().run()
+const redo = () => editor.value?.chain().focus().redo().run()
+const applyContentToEditor = (content: string) => {
+  pendingContent.value = content
+  if (!editor.value) return
+  isApplyingContent.value = true
+  const target = pendingContent.value ?? ''
+  // tiptap-markdown 重写了 setContent，会把传入字符串当作 Markdown 解析
+  editor.value.commands.setContent(target || '')
+  pendingContent.value = null
+  nextTick(() => {
+    isApplyingContent.value = false
+  })
+}
+
+// 创建 Tiptap 编辑器
+const editor = useEditor({
+  extensions: [
+    StarterKit.configure({
+      heading: {
+        levels: [1, 2, 3, 4, 5],
+      },
+      codeBlock: {
+        HTMLAttributes: {
+          class: 'tiptap-code-block',
+        },
+      },
+    }),
+    Underline,
+    TextStyle,
+    Color,
+    Highlight.configure({
+      multicolor: true,
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        class: 'tiptap-link',
+      },
+    }),
+    TaskList.configure({
+      HTMLAttributes: {
+        class: 'tiptap-task-list',
+      },
+    }),
+    TaskItem.configure({
+      nested: true,
+      HTMLAttributes: {
+        class: 'tiptap-task-item',
+      },
+    }),
+    Placeholder.configure({
+      placeholder: 'AI 生成的内容会出现在这里，也可以直接记录课堂笔记...',
+    }),
+    Markdown.configure({
+      html: true,
+      transformPastedText: true,
+      transformCopiedText: true,
+    }),
+  ],
+  editorProps: {
+    attributes: {
+      class: 'tiptap-content',
+    },
+  },
+  onUpdate: ({ editor }) => {
+    if (isApplyingContent.value) return
+    // 使用类型断言访问 markdown 扩展
+    const markdownStorage = (editor.storage as any).markdown
+    noteContent.value = markdownStorage?.getMarkdown?.() || editor.getHTML()
+    markUserEdit()
+  },
+})
+
+const markUserEdit = () => {
+  userEdited.value = true
+  emit('user-edit')
+  emit('change', { title: noteTitle.value, content: noteContent.value })
+}
+
+// 工具栏操作
+const handleHeadingSelect: NonNullable<MenuProps['onClick']> = ({ key }) => {
+  if (!editor.value) return
+  
+  if (key === 'paragraph') {
+    editor.value.chain().focus().setParagraph().run()
+  } else {
+    const level = parseInt(String(key).replace('h', '')) as 1 | 2 | 3 | 4 | 5
+    editor.value.chain().focus().setHeading({ level }).run()
   }
+}
+
+const handleListSelect: NonNullable<MenuProps['onClick']> = ({ key }) => {
+  if (!editor.value) return
+  
+  switch (key) {
+    case 'bulletList':
+      editor.value.chain().focus().toggleBulletList().run()
+      break
+    case 'orderedList':
+      editor.value.chain().focus().toggleOrderedList().run()
+      break
+    case 'taskList':
+      editor.value.chain().focus().toggleTaskList().run()
+      break
+  }
+}
+
+const setTextColor = (color: string) => {
+  currentTextColor.value = color
+  editor.value?.chain().focus().setColor(color).run()
+}
+
+const setHighlightColor = (color: string) => {
+  currentHighlightColor.value = color
+  editor.value?.chain().focus().setHighlight({ color }).run()
+}
+
+const toggleCurrentHighlight = () => {
+  if (!editor.value) return
+  if (editor.value.isActive('highlight')) {
+    clearHighlight()
+    return
+  }
+  const color = currentHighlightColor.value || '#fde68a'
+  editor.value.chain().focus().setHighlight({ color }).run()
+}
+
+const clearHighlight = () => {
+  currentHighlightColor.value = null
+  editor.value?.chain().focus().unsetHighlight().run()
+}
+
+const resetTextAndHighlight = () => {
+  currentTextColor.value = '#111111'
+  currentHighlightColor.value = '#fde68a'
+  editor.value?.chain().focus().unsetColor().unsetHighlight().run()
+}
+
+// 链接
+const openLinkModal = () => {
+  if (!editor.value) return
+  
+  const { from, to } = editor.value.state.selection
+  const text = editor.value.state.doc.textBetween(from, to)
+  
+  // 如果已经是链接，获取链接地址
+  const attrs = editor.value.getAttributes('link')
+  
+  linkForm.label = text
+  linkForm.url = attrs.href || ''
+  linkModalVisible.value = true
+}
+
+const closeLinkModal = () => {
+  linkModalVisible.value = false
+  linkForm.label = ''
+  linkForm.url = ''
+}
+
+const applyLink = () => {
+  if (!linkForm.url.trim()) {
+    message.warning('请输入链接地址')
+    return
+  }
+
+  const url = linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`
+  
+  if (!editor.value) return
+  
+  if (linkForm.label.trim()) {
+    // 插入带文字的链接
+    editor.value
+      .chain()
+      .focus()
+      .insertContent(`<a href="${url}" target="_blank" rel="noopener noreferrer">${linkForm.label}</a>`)
+      .run()
+  } else {
+    // 为选中文字添加链接
+    editor.value.chain().focus().setLink({ href: url }).run()
+  }
+  
+  closeLinkModal()
+}
+
+// 导出
+const handleExportClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
+  const safeTitle = (noteTitle.value || 'note').replace(/[\\/:*?"<>|]/g, '_')
+  
+  switch (key) {
+    case 'markdown':
+      exportMarkdown(safeTitle)
+      break
+    case 'html':
+      exportHTML(safeTitle)
+      break
+    case 'pdf':
+      exportPDF(safeTitle)
+      break
+    case 'txt':
+      exportTXT(safeTitle)
+      break
+  }
+}
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const exportMarkdown = (filename: string) => {
+  if (!editor.value) return
+  
+  // 使用类型断言访问 markdown 扩展
+  const markdownStorage = (editor.value.storage as any).markdown
+  const markdown = markdownStorage?.getMarkdown?.() || editor.value.getText()
+  
+  const blob = new Blob([markdown], { type: 'text/markdown' })
+  downloadBlob(blob, `${filename}.md`)
+  message.success('已导出 Markdown 文件')
+}
+
+const exportHTML = (filename: string) => {
+  const html = editor.value?.getHTML() || ''
+  const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${noteTitle.value}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      padding: 40px;
+      line-height: 1.8;
+      color: #1f2937;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 28px; font-weight: 700; margin: 20px 0 12px; }
+    h2 { font-size: 22px; font-weight: 600; margin: 16px 0 8px; }
+    h3 { font-size: 18px; font-weight: 600; margin: 12px 0 6px; }
+    p { margin: 0.85em 0; }
+    a { color: #2563eb; text-decoration: underline; }
+    code { background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 4px; }
+    pre { background: #0d1117; color: #e6edf3; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    blockquote { border-left: 4px solid #d1d5db; padding-left: 16px; color: #6b7280; margin: 1em 0; }
+    ul, ol { margin: 0.85em 0; padding-left: 2em; }
+  </style>
+</head>
+<body>
+  ${html}
+</body>
+</html>`
+  const blob = new Blob([fullHtml], { type: 'text/html' })
+  downloadBlob(blob, `${filename}.html`)
+  message.success('已导出 HTML 文件')
+}
+
+const exportTXT = (filename: string) => {
+  const text = editor.value?.getText() || ''
+  const blob = new Blob([text], { type: 'text/plain' })
+  downloadBlob(blob, `${filename}.txt`)
+  message.success('已导出 TXT 文件')
+}
+
+const exportPDF = (filename: string) => {
+  const html = editor.value?.getHTML() || ''
+  const printWindow = window.open('', '_blank')
+  
+  if (!printWindow) {
+    message.error('浏览器阻止了弹窗')
+    return
+  }
+  
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${filename}</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            padding: 40px;
+            line-height: 1.8;
+            color: #1f2937;
+          }
+          h1 { font-size: 28px; font-weight: 700; margin: 20px 0 12px; page-break-after: avoid; }
+          h2 { font-size: 22px; font-weight: 600; margin: 16px 0 8px; page-break-after: avoid; }
+          h3 { font-size: 18px; font-weight: 600; margin: 12px 0 6px; page-break-after: avoid; }
+          p { margin: 0.85em 0; }
+          a { color: #2563eb; text-decoration: underline; }
+          code { background: rgba(175, 184, 193, 0.2); padding: 2px 6px; border-radius: 4px; }
+          pre { 
+            background: #f5f5f5; 
+            padding: 16px; 
+            border-radius: 8px; 
+            overflow-x: auto;
+            page-break-inside: avoid;
+          }
+          blockquote { 
+            border-left: 4px solid #d1d5db; 
+            padding-left: 16px; 
+            color: #6b7280; 
+            margin: 1em 0;
+            page-break-inside: avoid;
+          }
+          ul, ol { margin: 0.85em 0; padding-left: 2em; }
+          @media print {
+            body { padding: 20px; }
+          }
+        </style>
+      </head>
+      <body>${html}</body>
+    </html>
+  `)
+  
+  printWindow.document.close()
+  printWindow.focus()
+  
+  setTimeout(() => {
+    printWindow.print()
+    message.success('已打开打印对话框')
+  }, 250)
+}
+
+// 笔记加载
+const loadNote = (note: ActiveNoteForEditor) => {
+  currentNoteId.value = note.id
+  noteTitle.value = note.title || '未命名笔记'
+  noteTitleInput.value = noteTitle.value
+  noteContent.value = note.content || ''
+  userEdited.value = false
+  applyContentToEditor(noteContent.value)
+  emit('change', { title: noteTitle.value, content: noteContent.value })
 }
 
 const resetNoteState = () => {
@@ -368,23 +797,13 @@ const resetNoteState = () => {
   noteContent.value = ''
   currentNoteId.value = null
   userEdited.value = false
-  updateEditorHtml('')
-  emitChange()
-}
-
-const loadNote = (note: ActiveNoteForEditor) => {
-  currentNoteId.value = note.id
-  noteTitle.value = note.title || '未命名笔记'
-  noteTitleInput.value = noteTitle.value
-  noteContent.value = note.content || ''
-  userEdited.value = false
-  updateEditorHtml(noteContent.value)
-  emitChange()
+  applyContentToEditor('')
+  emit('change', { title: noteTitle.value, content: noteContent.value })
 }
 
 watch(
   () => props.note,
-  newNote => {
+  (newNote) => {
     if (!newNote) {
       resetNoteState()
       return
@@ -393,7 +812,16 @@ watch(
       loadNote(newNote)
     }
   },
-  { immediate: true, deep: true },
+  { immediate: true, deep: true }
+)
+
+watch(
+  () => editor.value,
+  (instance) => {
+    if (instance && pendingContent.value !== null) {
+      applyContentToEditor(pendingContent.value)
+    }
+  },
 )
 
 // 自动保存
@@ -401,18 +829,28 @@ const performSave = async () => {
   if (!userEdited.value) return
   isSaving.value = true
   showSavedIndicator.value = false
+  
   try {
-    emit('save', { title: noteTitle.value, content: noteContent.value })
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // 发送保存事件并等待父组件处理
+    const saveData = { title: noteTitle.value, content: noteContent.value }
+    emit('save', saveData)
+    
+    // 等待一小段时间让父组件有时间处理
+    // 注意：这里假设父组件会同步或快速处理保存
+    // 如果需要更可靠的保存确认，应该由父组件调用一个回调
+    await new Promise(resolve => setTimeout(resolve, 300))
+    
     userEdited.value = false
     isSaving.value = false
     showSavedIndicator.value = true
+    
     setTimeout(() => {
       showSavedIndicator.value = false
     }, 3000)
-  } catch {
+  } catch (error) {
     isSaving.value = false
     message.error('保存失败')
+    console.error('Save error:', error)
   }
 }
 
@@ -431,274 +869,6 @@ watch([noteTitle, noteContent], () => {
   }
 })
 
-const syncEditorContent = () => {
-  noteContent.value = editorRef.value?.innerHTML ?? ''
-}
-
-const markUserEdit = () => {
-  userEdited.value = true
-  emit('user-edit')
-  emitChange()
-}
-
-// 在编辑器为空或没有有效选区时，创建一行 block 并应用样式，
-// 同时把光标移动到这行的末尾
-const ensureEmptyEditorBlock = (key: BlockStyleKey): HTMLElement | null => {
-  const editor = editorRef.value
-  if (!editor) return null
-
-  // 如果已经有 block，就直接用第一个
-  let block = editor.querySelector<HTMLElement>('p,div,li')
-  if (!block) {
-    block = document.createElement('p')
-    block.innerHTML = '' // 不放 &nbsp;，方便后续输入
-    editor.appendChild(block)
-  }
-
-  applyBlockStyleToBlock(block, key)
-
-  // 把光标放到这一行末尾
-  const range = document.createRange()
-  range.selectNodeContents(block)
-  range.collapse(false)
-
-  const selection = window.getSelection()
-  if (selection) {
-    selection.removeAllRanges()
-    selection.addRange(range)
-  }
-
-  cachedSelectionRange.value = range.cloneRange()
-  currentBlockStyle.value = key
-  syncEditorContent()
-  markUserEdit()
-
-  return block
-}
-
-
-// 把一个段落元素设置成指定的样式，并清理内部 font-size，保证一行字号统一
-const applyBlockStyleToBlock = (block: HTMLElement, key: BlockStyleKey) => {
-  const def = blockStyleMap[key]
-  if (!def) return
-
-  block.dataset.blockStyle = key
-  block.style.fontSize = `${def.fontSize}px`
-  block.style.lineHeight = String(def.lineHeight)
-  block.style.fontWeight = def.fontWeight ? String(def.fontWeight) : ''
-  block.style.marginTop = `${def.marginTop}px`
-  block.style.marginBottom = `${def.marginBottom}px`
-
-  // 删除子元素上的 font-size，让这一行使用统一字号
-  const withFontSize = block.querySelectorAll<HTMLElement>('*')
-  withFontSize.forEach(el => {
-    if (el.style.fontSize) {
-      el.style.removeProperty('font-size')
-      if (!el.getAttribute('style') || el.getAttribute('style')!.trim() === '') {
-        el.removeAttribute('style')
-      }
-    }
-  })
-}
-
-/**
- * 统一编辑器中每个块级行的样式：
- * - 根据 data-block-style 重新应用对应的段落样式
- * - 如果没有 data-block-style，当作 body
- * 这样在“删除行首导致两行合并”时，合并后的整行会统一使用上一行的样式，
- * 同时清掉第二行内容原本携带的 font-size。
- */
-const normalizeEditorBlocks = () => {
-  const editor = editorRef.value
-  if (!editor) return
-
-  const blocks = editor.querySelectorAll<HTMLElement>('p,div,li')
-  blocks.forEach(block => {
-    let key = (block.dataset.blockStyle as BlockStyleKey) || 'body'
-    if (!block.dataset.blockStyle) {
-      block.dataset.blockStyle = key
-    }
-    applyBlockStyleToBlock(block, key)
-  })
-}
-
-// 选区缓存 + 当前段落样式更新
-const cacheSelectionRange = () => {
-  const selection = window.getSelection()
-  const editor = editorRef.value
-  if (!selection || selection.rangeCount === 0 || !editor) return
-  const range = selection.getRangeAt(0)
-  if (!editor.contains(range.startContainer)) return
-
-  cachedSelectionRange.value = range.cloneRange()
-
-  let node: Node | null = range.startContainer
-  while (node && node !== editor) {
-    if (node instanceof HTMLElement && ['P', 'DIV', 'LI'].includes(node.tagName)) {
-      const key = (node.dataset.blockStyle as BlockStyleKey) || 'body'
-      currentBlockStyle.value = key
-      break
-    }
-    node = node.parentNode
-  }
-}
-
-const restoreSelectionRange = () => {
-  const selection = window.getSelection()
-  const editor = editorRef.value
-  if (!selection || !cachedSelectionRange.value || !editor) return
-  if (!editor.contains(cachedSelectionRange.value.commonAncestorContainer)) return
-  selection.removeAllRanges()
-  selection.addRange(cachedSelectionRange.value)
-}
-
-/// 段落样式应用：
-// - 光标（无选区）→ 作用于光标所在的那一整行
-// - 有选区 → 作用于所有被选中覆盖到的行
-const applyBlockStyle = (key: BlockStyleKey) => {
-  const editor = editorRef.value
-  if (!editor) return
-
-  editor.focus()
-
-  let selection = window.getSelection()
-
-  // 1）没有选区或者 range 数量为 0：典型场景是编辑器刚刚被点击、还没有真实内容
-  if (!selection || selection.rangeCount === 0) {
-    ensureEmptyEditorBlock(key)
-    return
-  }
-
-  // 先尝试恢复缓存选区（避免 execCommand / 点击按钮时丢失光标）
-  restoreSelectionRange()
-  selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) {
-    ensureEmptyEditorBlock(key)
-    return
-  }
-
-  const range = selection.getRangeAt(0)
-
-  // 选区不在编辑器内：也当成空编辑器处理
-  if (!editor.contains(range.commonAncestorContainer)) {
-    ensureEmptyEditorBlock(key)
-    return
-  }
-
-  const blocks: HTMLElement[] = []
-
-  if (range.collapsed) {
-    // 光标模式：找到所在段落
-    let node: Node | null = range.startContainer
-    while (node && node !== editor) {
-      if (node instanceof HTMLElement && ['P', 'DIV', 'LI'].includes(node.tagName)) {
-        blocks.push(node)
-        break
-      }
-      node = node.parentNode
-    }
-
-    // 没有找到块（典型场景：第一行是直接挂在 editor 上的文本节点）
-    if (blocks.length === 0) {
-      const p = document.createElement('p')
-
-      // 把编辑器现有子节点全部挪进这个 p 里，保证"这一行"真的有块容器
-      while (editor.firstChild) {
-        p.appendChild(editor.firstChild)
-      }
-      editor.appendChild(p)
-      blocks.push(p)
-
-      // ⭐ 重置光标到这一行末尾，避免光标跳到开头
-      const newRange = document.createRange()
-      newRange.selectNodeContents(p)
-      newRange.collapse(false)
-      const sel = window.getSelection()
-      if (sel) {
-        sel.removeAllRanges()
-        sel.addRange(newRange)
-      }
-      cachedSelectionRange.value = newRange.cloneRange()
-    }
-  } else {
-    // 选中多行：找所有与选区相交的段落
-    const allBlocks = editor.querySelectorAll<HTMLElement>('p,div,li')
-    allBlocks.forEach(el => {
-      const blockRange = document.createRange()
-      blockRange.selectNodeContents(el)
-      if (
-        range.compareBoundaryPoints(Range.END_TO_START, blockRange) < 0 &&
-        range.compareBoundaryPoints(Range.START_TO_END, blockRange) > 0
-      ) {
-        blocks.push(el)
-      }
-    })
-    if (blocks.length === 0) {
-      const p = document.createElement('p')
-      p.innerHTML = '&nbsp;'
-      editor.appendChild(p)
-      blocks.push(p)
-    }
-  }
-
-  blocks.forEach(block => applyBlockStyleToBlock(block, key))
-
-  currentBlockStyle.value = key
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-// 文本颜色
-const applyTextColor = (color: string) => {
-  const editor = editorRef.value
-  if (!editor) return
-  currentTextColor.value = color
-  editor.focus()
-  restoreSelectionRange()
-
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
-
-  document.execCommand('foreColor', false, color)
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-const handleTextColorSelect = (color: string) => {
-  applyTextColor(color)
-}
-
-// 高亮
-const applyHighlight = (color: string) => {
-  const editor = editorRef.value
-  if (!editor) return
-  editor.focus()
-  restoreSelectionRange()
-
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
-
-  if (!document.execCommand('hiliteColor', false, color)) {
-    document.execCommand('backColor', false, color)
-  }
-
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-const handleHighlightButtonClick = () => {
-  applyHighlight(currentHighlightColor.value)
-}
-
-const handleHighlightColorSelect = (color: string) => {
-  currentHighlightColor.value = color
-  applyHighlight(color)
-}
-
-// 工具栏事件
 const handleBack = async () => {
   if (userEdited.value) {
     await performSave()
@@ -706,22 +876,7 @@ const handleBack = async () => {
   emit('back')
 }
 
-const handleListSelect: NonNullable<MenuProps['onClick']> = ({ key }) => {
-  const editor = editorRef.value
-  if (!editor) return
-  editor.focus()
-  restoreSelectionRange()
-  const cmd = String(key) === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList'
-  document.execCommand(cmd, false)
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-const handleBlockStyleSelect: NonNullable<MenuProps['onClick']> = ({ key }) => {
-  applyBlockStyle(key as BlockStyleKey)
-}
-
+// 标题编辑
 const beginTitleEdit = () => {
   if (isEditingTitle.value) return
   isEditingTitle.value = true
@@ -748,172 +903,41 @@ const cancelTitleEdit = () => {
   noteTitleInput.value = noteTitle.value
 }
 
-const handleEditorInput = () => {
-  normalizeEditorBlocks()   // 保证每次输入后，整行字号统一
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-const handleEditorMouseUp = () => {
-  cacheSelectionRange()
-}
-
-const handleEditorKeyup = () => {
-  cacheSelectionRange()
-}
-
-const applyTextCommand = (command: string) => {
-  const editor = editorRef.value
-  if (!editor) return
-  editor.focus()
-  restoreSelectionRange()
-  document.execCommand(command, false)
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
-}
-
-// 链接
-const openLinkModal = () => {
-  cacheSelectionRange()
-  const selection = window.getSelection()
-  linkForm.label = selection?.toString() ?? ''
-  linkForm.url = ''
-  linkModalVisible.value = true
-}
-
-const closeLinkModal = () => {
-  linkModalVisible.value = false
-  linkForm.label = ''
-  linkForm.url = ''
-}
-
-const normalizeUrl = (url: string) => {
-  const value = url.trim()
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
-  return `https://${value}`
-}
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, ch => {
-    switch (ch) {
-      case '&': return '&amp;'
-      case '<': return '&lt;'
-      case '>': return '&gt;'
-      case '"': return '&quot;'
-      case "'": return '&#39;'
-      default: return ch
+// 插入 Markdown（供外部调用，用于 AI 回复）
+const insertMarkdown = (markdown: string) => {
+  if (!editor.value) return
+  
+  // 在当前位置插入 Markdown 内容
+  editor.value.commands.insertContent('\n\n' + markdown)
+  
+  // 滚动到编辑器底部
+  nextTick(() => {
+    const editorElement = document.querySelector('.tiptap-editor')
+    if (editorElement) {
+      editorElement.scrollTop = editorElement.scrollHeight
     }
   })
-
-const applyLink = () => {
-  const url = normalizeUrl(linkForm.url)
-  if (!url) {
-    message.warning('请输入有效的链接地址')
-    return
-  }
-  const text = linkForm.label.trim() || url
-  const editor = editorRef.value
-  if (!editor) return
-  editor.focus()
-  restoreSelectionRange()
-  const safeLabel = escapeHtml(text)
-  document.execCommand(
-    'insertHTML',
-    false,
-    `<a href="${url}" target="_blank" rel="noopener noreferrer" class="note-editor__link">${safeLabel}</a>`,
-  )
-  closeLinkModal()
-  syncEditorContent()
-  markUserEdit()
-  cacheSelectionRange()
 }
 
-// 导出
-const triggerDownload = (blob: Blob, filename: string) => {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-type ExportFormat = 'pdf' | 'txt'
-
-const handleExportClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
-  exportNote(key === 'pdf' ? 'pdf' : 'txt')
-}
-
-const exportNote = (format: ExportFormat) => {
-  const safeTitle = (noteTitle.value || 'notes').replace(/[\\/:*?"<>|]/g, '_')
-  if (format === 'txt') {
-    const plain = editorRef.value?.innerText ?? ''
-    const blob = new Blob([plain], { type: 'text/plain;charset=utf-8' })
-    triggerDownload(blob, `${safeTitle}.txt`)
-    message.success('已导出 TXT 文件')
-    return
-  }
-
-  const printWindow = window.open('', '_blank', 'width=900,height=700')
-  if (!printWindow) {
-    message.error('浏览器阻止了弹窗，无法导出 PDF')
-    return
-  }
-
-  const html = `
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${safeTitle}</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        padding: 40px;
-        line-height: 1.6;
-        color: #111;
-      }
-      a { color: #1677ff; text-decoration: none; }
-    </style>
-  </head>
-  <body>${noteContent.value}</body>
-</html>`
-  printWindow.document.open()
-  printWindow.document.write(html)
-  printWindow.document.close()
-  printWindow.focus()
-  printWindow.print()
-  message.success('已打开打印对话框，可选择「保存为 PDF」完成导出')
-}
-
-onMounted(() => {
-  updateEditorHtml(noteContent.value)
-  nextTick(() => {
-    normalizeEditorBlocks() // 初始化时也统一一遍行样式
-    cacheSelectionRange()
-  })
+// 暴露方法
+defineExpose({
+  insertMarkdown,
 })
 
 onBeforeUnmount(() => {
+  editor.value?.destroy()
   if (autoSaveTimer.value !== null) {
     clearTimeout(autoSaveTimer.value)
   }
-  if (editorRef.value) {
-    editorRef.value.innerHTML = ''
-  }
 })
 </script>
-
 
 <style scoped>
 .note-editor-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 20px 24px;
+  padding: 12px 16px 16px;
   background: #fff;
   overflow: visible;
 }
@@ -921,8 +945,8 @@ onBeforeUnmount(() => {
 .note-editor__header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: 10px;
+  padding-bottom: 8px;
   flex-shrink: 0;
 }
 
@@ -961,7 +985,7 @@ onBeforeUnmount(() => {
 }
 
 .note-title__label {
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 8px;
   font-size: 16px;
   font-weight: 500;
@@ -992,7 +1016,7 @@ onBeforeUnmount(() => {
   inset: 0;
   width: 100%;
   height: 100%;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -1006,7 +1030,8 @@ onBeforeUnmount(() => {
 .note-header__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .status-tag {
@@ -1014,62 +1039,48 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.note-header__toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
+}
+
 .note-editor__body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-top: 4px;
+  margin-top: 0;
   min-height: 0;
   overflow: visible;
 }
 
-.format-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 10;
-}
-
-.format-toolbar__left,
-.format-toolbar__right {
+.bubble-toolbar {
   display: flex;
   align-items: center;
-  gap: 1px;
-  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
-/* 段落样式按钮：只显示 H1 图标 + 下拉箭头 */
+.bubble-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .block-style-btn {
   min-width: 40px;
   padding: 0 6px;
 }
 
-/* 下拉项的演示样式（保证视觉层级一致） */
 .block-style-item {
   padding: 4px 8px;
-}
-
-.block-style-item--body {
   font-size: 15px;
-}
-
-.block-style-item--h1 {
-  font-size: 26px;
-  font-weight: 700;
-}
-
-.block-style-item--h2 {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.block-style-item--h3 {
-  font-size: 17px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .toolbar-btn {
@@ -1085,12 +1096,17 @@ onBeforeUnmount(() => {
   color: #111;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bubble-btn {
+  height: 30px;
 }
 
 .toolbar-btn:disabled {
   color: rgba(0, 0, 0, 0.35);
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .toolbar-btn:hover:not(:disabled) {
@@ -1099,6 +1115,12 @@ onBeforeUnmount(() => {
 
 .toolbar-btn:active:not(:disabled) {
   background: #e8e8e8;
+}
+
+.toolbar-btn.is-active {
+  background: #e3f2fd;
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.2);
 }
 
 .dropdown-icon {
@@ -1123,141 +1145,133 @@ onBeforeUnmount(() => {
   font-style: italic;
 }
 
-.color-picker-btn {
-  min-width: 44px;
+.text-control--underline {
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+.text-control--strike {
+  font-size: 14px;
+  text-decoration: line-through;
+}
+
+.color-merge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.color-merge-btn__chip-btn,
+.color-merge-btn__arrow {
+  padding: 0 6px;
+}
+
+.color-merge-btn__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  background: #fffbe6;
+}
+
+.dropdown-icon--light {
+  color: #888;
+}
+
+.color-merge-dropdown {
+  padding: 12px 14px;
+  min-width: 230px;
+  display: grid;
+  gap: 12px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+.color-merge-dropdown__section {
+  display: grid;
+  gap: 8px;
+}
+
+.color-merge-dropdown__title {
+  font-size: 13px;
+  color: #666;
+}
+
+.color-merge-dropdown__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
   gap: 6px;
 }
 
-.color-preview {
-  width: 18px;
-  height: 18px;
+.color-merge-dropdown__item {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.color-merge-dropdown__item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.color-merge-dropdown__item.is-selected {
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.color-merge-dropdown__letter {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.color-merge-dropdown__swatch {
+  width: 22px;
+  height: 14px;
   border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 
-.highlight-control {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  transition: background 0.2s ease;
+.color-merge-dropdown__none {
+  font-size: 12px;
+  color: #666;
 }
 
-.highlight-control:hover {
-  background: #f5f5f5;
-}
-
-.highlight-control:active {
-  background: #e8e8e8;
-}
-
-.highlight-btn {
-  flex-direction: column;
-  padding: 4px 8px 6px;
-  gap: 4px;
-  border-radius: 0;
-  border-top-left-radius: 6px;
-  border-bottom-left-radius: 6px;
-}
-
-.highlight-control:hover .highlight-btn,
-.highlight-control:hover .highlight-dropdown-btn {
-  background: transparent;
-}
-
-.highlight-control:not(:hover) .highlight-btn:hover,
-.highlight-control:not(:hover) .highlight-dropdown-btn:hover {
-  background: #f5f5f5;
-}
-
-.highlight-btn .icon {
-  width: 18px;
-  height: 18px;
-}
-
-.highlight-color-indicator {
-  width: 20px;
-  height: 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-}
-
-.highlight-dropdown-btn {
-  width: 24px;
-  min-width: 24px;
-  padding: 0 6px;
-  border-radius: 0;
-  border-top-right-radius: 6px;
-  border-bottom-right-radius: 6px;
-  border-left: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.color-dropdown {
-  padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(4, 28px);
-  gap: 6px;
-}
-
-.color-dropdown__swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+.color-merge-dropdown__reset {
+  margin-top: 2px;
+  width: 100%;
+  height: 32px;
+  border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background: transparent;
+  background: #f7f7f7;
+  color: #444;
   cursor: pointer;
-  padding: 0;
-  transition: transform 0.15s ease;
+  transition: background 0.2s ease, transform 0.12s ease;
 }
 
-.color-dropdown__swatch:hover {
-  transform: scale(1.05);
-}
-
-.color-dropdown__swatch:active {
-  transform: scale(0.98);
-}
-
-.color-dropdown__swatch--highlight {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+.color-merge-dropdown__reset:hover {
+  background: #f0f4ff;
+  transform: translateY(-1px);
 }
 
 .editor-divider {
   height: 1px;
   background: rgba(5, 5, 5, 0.06);
-  margin: 12px 0;
+  margin: 4px 0 10px;
   flex-shrink: 0;
-}
-
-/* 编辑区：基础行高给个默认值，具体每个段落由 blockStyle 覆盖 */
-.note-editor__surface {
-  flex: 1;
-  min-height: 0;
-  border: none;
-  outline: none;
-  padding: 8px 0 20px;
-  line-height: 1.7;
-  color: #111;
-  overflow-y: auto;
-  font-size: 15px;
-}
-
-.note-editor__surface:focus {
-  outline: none;
-}
-
-.note-editor__surface:empty:before {
-  content: attr(data-placeholder);
-  color: rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-
-.note-editor__surface a,
-.note-editor__surface .note-editor__link {
-  color: #2563eb;
-  text-decoration: underline;
 }
 
 .icon {
@@ -1265,21 +1279,230 @@ onBeforeUnmount(() => {
   height: 16px;
 }
 
+/* Tiptap 编辑器样式 */
+.tiptap-editor {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:deep(.tiptap-content) {
+  outline: none;
+  padding: 8px 0 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 18px;
+  line-height: 1.75;
+  color: #1f2937;
+  min-height: 100%;
+}
+
+/* 占位符 */
+:deep(.tiptap-content p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  height: 0;
+}
+
+/* 段落和标题 */
+:deep(.tiptap-content p) {
+  margin: 0.65em 0;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+:deep(.tiptap-content h1) {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 20px;
+  margin-bottom: 12px;
+  color: #111827;
+}
+
+:deep(.tiptap-content h2) {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  color: #111827;
+}
+
+:deep(.tiptap-content h3) {
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  color: #111827;
+}
+
+:deep(.tiptap-content h4) {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  color: #111827;
+}
+
+:deep(.tiptap-content h5) {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  color: #111827;
+}
+
+/* 列表 */
+:deep(.tiptap-content ul),
+:deep(.tiptap-content ol) {
+  margin: 0.65em 0;
+  padding-left: 2em;
+  line-height: 1.65;
+}
+
+:deep(.tiptap-content li) {
+  margin: 0.35em 0;
+}
+
+/* 待办列表 */
+:deep(.tiptap-task-list) {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.4em 0;
+}
+
+:deep(.tiptap-task-item) {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.25em 0;
+}
+
+:deep(.tiptap-task-item > label) {
+  flex: 0 0 auto;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+:deep(.tiptap-task-item > div) {
+  flex: 1;
+}
+
+:deep(.tiptap-task-item input[type="checkbox"]) {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  position: relative;
+  top: 0;
+}
+
+/* 文本样式 */
+:deep(.tiptap-content strong) {
+  font-weight: 600;
+  color: #111827;
+}
+
+:deep(.tiptap-content em) {
+  font-style: italic;
+}
+
+:deep(.tiptap-content u) {
+  text-decoration: underline;
+}
+
+:deep(.tiptap-content s) {
+  text-decoration: line-through;
+}
+
+/* 链接 */
+:deep(.tiptap-content a),
+:deep(.tiptap-link) {
+  color: #2563eb;
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.3);
+  text-underline-offset: 2px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+:deep(.tiptap-content a:hover),
+:deep(.tiptap-link:hover) {
+  color: #1d4ed8;
+  text-decoration-color: rgba(29, 78, 216, 0.5);
+}
+
+/* 代码 */
+:deep(.tiptap-content code) {
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+  background: rgba(175, 184, 193, 0.2);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  color: #1f2937;
+}
+
+:deep(.tiptap-content pre) {
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1.2em 0;
+}
+
+:deep(.tiptap-content pre code) {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 0.875em;
+  line-height: 1.6;
+}
+
+/* 高亮 */
+:deep(.tiptap-content mark) {
+  background-color: #fde68a;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+/* 引用 */
+:deep(.tiptap-content blockquote) {
+  border-left: 4px solid #d1d5db;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* 水平线 */
+:deep(.tiptap-content hr) {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 2em 0;
+}
+
 /* 滚动条样式 */
-.note-editor__surface::-webkit-scrollbar {
+.tiptap-editor::-webkit-scrollbar {
   width: 8px;
 }
 
-.note-editor__surface::-webkit-scrollbar-track {
+.tiptap-editor::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.note-editor__surface::-webkit-scrollbar-thumb {
+.tiptap-editor::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.1);
   border-radius: 4px;
 }
 
-.note-editor__surface::-webkit-scrollbar-thumb:hover {
+.tiptap-editor::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.15);
 }
 </style>

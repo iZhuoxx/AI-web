@@ -494,6 +494,7 @@ watch(recordingError, (value) => {
 
 const handleEditorChange = (payload: { title: string; content: string }) => {
   if (!selectedNoteId.value) return
+  if (syncingFromStore.value) return
   editorDraft.title = payload.title
   editorDraft.content = payload.content
   if (activeNoteForEditor.value) {
