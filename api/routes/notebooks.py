@@ -200,10 +200,12 @@ def update_notebook(
     if payload.notes is not None:
         existing_notes = {str(note.id): note for note in notebook.notes}
         updated_notes: list[models.Note] = []
+        incoming_ids: set[str] = set()
 
-        # 使用前端传递的顺序重新分配 seq，避免更新时的唯一约束冲突
         for idx, note_payload in enumerate(payload.notes):
             payload_id = str(note_payload.id) if note_payload.id is not None else None
+            if payload_id:
+                incoming_ids.add(payload_id)
             if payload_id and payload_id in existing_notes:
                 note = existing_notes[payload_id]
                 note.title = note_payload.title
@@ -217,9 +219,9 @@ def update_notebook(
                 )
             updated_notes.append(note)
 
-        # 两阶段重排，先写入临时 seq 以避开唯一约束，再写入最终 seq
+        # 两阶段重排，先把现存的所有笔记（包括将被删除的）移到临时 seq，再写入最终 seq
         temp_offset = 1_000_000
-        for i, note in enumerate(updated_notes):
+        for i, note in enumerate(notebook.notes):
             note.seq = temp_offset + i
         db.flush()
 
@@ -268,9 +270,10 @@ async def generate_note_title(
         "标题不要使用引号、句号或多余的标点，并保持与内容语言一致。"
     )
 
+    # Responses API 需要使用 input_text 而不是 text
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
-        {"role": "user", "content": [{"type": "text", "text": content}]},
+        {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "input_text", "text": content}]},
     ]
 
     request_payload = {
