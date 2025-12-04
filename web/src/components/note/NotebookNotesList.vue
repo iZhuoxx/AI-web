@@ -22,34 +22,65 @@
         <p>笔记本中还没有笔记</p>
         <p class="hint">点击右上角「新增笔记」开始创建</p>
       </div>
-      <ul v-else class="notes-list">
-        <li
-          v-for="note in notes"
-          :key="note.id"
-          :class="['note-item', { active: note.id === selectedId }]"
-          @click="$emit('select', note.id)"
-        >
-          <div class="item-main">
-            <FileTextIcon class="item-icon" />
-            <div class="item-title">{{ resolveTitle(note.title) }}</div>
-          </div>
-          <div class="item-actions">
-            <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-actions-dropdown">
-              <button class="more-btn" type="button" @click.stop>
-                <MoreVerticalIcon class="more-icon" />
+      <Draggable
+        v-else
+        v-model="workingNotes"
+        tag="ul"
+        class="notes-list"
+        item-key="id"
+        :animation="220"
+        :ghost-class="'note-item--ghost'"
+        :chosen-class="'note-item--chosen'"
+        :drag-class="'note-item--dragging'"
+        :handle="'.drag-handle'"
+        :fallback-on-body="true"
+        :force-fallback="true"
+        :fallback-class="'note-item--fallback'"
+        :swap-threshold="0.55"
+        :move="handleMove"
+        @start="onDragStart"
+        @change="onListChange"
+        @end="onDragEnd"
+      >
+        <template #item="{ element }: { element: NoteItem }">
+          <li
+            :key="element.id"
+            :data-id="element.id"
+            :class="['note-item', { active: element.id === selectedId, pending: element.isPlaceholder }]"
+            @click="!element.isPlaceholder && $emit('select', element.id)"
+          >
+            <div class="item-main">
+              <button
+                v-if="!element.isPlaceholder"
+                class="drag-handle"
+                type="button"
+                title="拖拽调整排序"
+                @click.stop
+              >
+                <GripVerticalIcon class="drag-icon" />
               </button>
-              <template #overlay>
-                <a-menu @click="onMenuClick(note, $event)">
-                  <a-menu-item key="delete">
-                    <Trash2Icon class="menu-icon" />
-                    <span>删除</span>
-                  </a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
-          </div>
-        </li>
-      </ul>
+              <Loader2Icon v-if="element.isPlaceholder" class="item-icon spin" />
+              <FileTextIcon v-else class="item-icon" />
+              <div class="item-title">{{ resolveTitle(element.title) }}</div>
+            </div>
+            <div v-if="!element.isPlaceholder" class="item-actions">
+              <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-actions-dropdown">
+                <button class="more-btn" type="button" @click.stop>
+                  <MoreVerticalIcon class="more-icon" />
+                </button>
+                <template #overlay>
+                  <a-menu @click="onMenuClick(element, $event)">
+                    <a-menu-item key="delete">
+                      <Trash2Icon class="menu-icon" />
+                      <span>删除</span>
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
+          </li>
+        </template>
+      </Draggable>
     </a-spin>
   </a-card>
   <a-modal
@@ -89,9 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { BotIcon, FileTextIcon, MoreVerticalIcon, PlusIcon, Trash2Icon } from 'lucide-vue-next'
+import { computed, reactive, ref, watch } from 'vue'
+import { BotIcon, FileTextIcon, GripVerticalIcon, Loader2Icon, MoreVerticalIcon, PlusIcon, Trash2Icon } from 'lucide-vue-next'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
+import Draggable from 'vuedraggable'
+import type { SortableEvent } from 'sortablejs'
 import type { NoteItem } from '@/types/notes'
 import { useNotebookStore } from '@/composables/useNotes'
 
@@ -102,14 +135,19 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'select', noteId: string): void
   (e: 'create'): void
   (e: 'ai-report'): void
+  (e: 'reorder', orderedIds: string[]): void
+  (e: 'reorder-preview', orderedIds: string[] | null): void
 }>()
 
 const notebookStore = useNotebookStore()
 const loading = computed(() => props.loading === true)
+const draggingId = ref<string | null>(null)
+const dragStartOrder = ref<string[]>([])
+const workingNotes = ref<NoteItem[]>([])
 
 const resolveTitle = (value: string) => value?.trim() || '未命名笔记'
 
@@ -146,6 +184,61 @@ const handleDeleteConfirm = async () => {
   } finally {
     deleteModal.loading = false
   }
+}
+
+const syncWorkingNotes = (next: ReadonlyArray<NoteItem>) => {
+  workingNotes.value = [...next]
+}
+
+watch(
+  () => props.notes,
+  (next) => syncWorkingNotes(next),
+  { immediate: true, deep: true },
+)
+
+const collectOrderedIds = (source: ReadonlyArray<NoteItem> = workingNotes.value) =>
+  source.filter(note => !note.isPlaceholder).map(note => note.id)
+
+type DragMoveEvent = {
+  draggedContext?: { element?: NoteItem }
+  relatedContext?: { element?: NoteItem }
+}
+
+type DragStartEvent = SortableEvent & { item?: HTMLElement | null }
+
+const handleMove = (event: DragMoveEvent) => {
+  const dragged: NoteItem | undefined = event?.draggedContext?.element
+  const related: NoteItem | undefined = event?.relatedContext?.element
+  if (dragged?.isPlaceholder || related?.isPlaceholder) return false
+  return true
+}
+
+const onDragStart = (event: DragStartEvent) => {
+  const rawId = event.item?.dataset?.id
+  draggingId.value = rawId ?? null
+  dragStartOrder.value = collectOrderedIds(props.notes)
+}
+
+const onListChange = () => {
+  if (!draggingId.value) return
+  const orderedIds = collectOrderedIds()
+  emit('reorder-preview', orderedIds)
+}
+
+const onDragEnd = () => {
+  const orderedIds = collectOrderedIds()
+  const initialOrder = dragStartOrder.value
+  draggingId.value = null
+  dragStartOrder.value = []
+  if (!orderedIds.length) {
+    emit('reorder-preview', null)
+    return
+  }
+  if (orderedIds.join('|') === initialOrder.join('|')) {
+    emit('reorder-preview', null)
+    return
+  }
+  emit('reorder', orderedIds)
 }
 </script>
 
@@ -267,7 +360,8 @@ const handleDeleteConfirm = async () => {
   padding: 10px 12px;
   cursor: pointer;
   border-radius: 12px;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  user-select: none;
 }
 
 .note-item:hover {
@@ -278,12 +372,73 @@ const handleDeleteConfirm = async () => {
   background: rgba(37, 99, 235, 0.12);
 }
 
+.note-item.pending {
+  cursor: default;
+  background: #f8fafc;
+}
+
+.note-item.pending .item-title {
+  color: #1d4ed8;
+}
+
+.note-item.pending .item-icon {
+  color: #1d4ed8;
+}
+
+.note-item--ghost {
+  opacity: 0.45;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px dashed rgba(37, 99, 235, 0.35);
+}
+
+.note-item--dragging {
+  cursor: grabbing !important;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+}
+
+.note-item--chosen {
+  transform: scale(1.01);
+}
+
+:global(.note-item--fallback) {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .item-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
+}
+
+.drag-handle {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  border-radius: 8px;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.drag-icon {
+  width: 16px;
+  height: 16px;
+  color: #9ca3af;
 }
 
 .item-icon {
@@ -292,6 +447,15 @@ const handleDeleteConfirm = async () => {
   margin-top: 1px;
   color: #2563eb;
   flex-shrink: 0;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .item-title {

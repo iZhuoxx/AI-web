@@ -3,6 +3,10 @@
 import type { TMessage, ResponseUIState } from '@/types'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { ref, computed } from 'vue'
+import { message as antdMessage } from 'ant-design-vue'
+import { Copy, ThumbsUp, ThumbsDown, Volume2, FilePlus2, Loader2 } from 'lucide-vue-next'
+import { generateNoteTitle } from '@/services/api'
+import { useNotebookStore } from '@/composables/useNotes'
 
 type CitationPayload = {
   fileId: string
@@ -230,6 +234,78 @@ const lightboxVisible = ref(false)
 const lightboxSrc = ref<string>('')
 function openLightbox(src: string) { lightboxSrc.value = src; lightboxVisible.value = true }
 function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = '' }
+
+const notebookStore = useNotebookStore()
+const isCopying = ref(false)
+const isCreatingNote = ref(false)
+
+const copyMarkdown = async () => {
+  if (isCopying.value) return
+  const text = (props.message.msg || '').trim()
+  if (!text) {
+    antdMessage.warning('暂无可复制的文本')
+    return
+  }
+  isCopying.value = true
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      const markdownBlob = new Blob([text], { type: 'text/markdown' })
+      const plainBlob = new Blob([text], { type: 'text/plain' })
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/markdown': markdownBlob,
+          'text/plain': plainBlob,
+        }),
+      ])
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      throw new Error('当前环境不支持复制')
+    }
+    antdMessage.success('已复制 Markdown')
+  } catch (err: any) {
+    const msg = err?.message || '复制失败，请稍后再试'
+    antdMessage.error(msg)
+  } finally {
+    isCopying.value = false
+  }
+}
+
+const createNoteFromReply = async () => {
+  if (isCreatingNote.value) return
+  const text = (props.message.msg || '').trim()
+  if (!text) {
+    antdMessage.warning('暂无可保存的回复内容')
+    return
+  }
+  const activeNotebookId = notebookStore.activeNotebook.value?.id
+  if (!activeNotebookId) {
+    antdMessage.warning('请先选择一个笔记本再保存笔记')
+    return
+  }
+  isCreatingNote.value = true
+  const pendingId = notebookStore.addPendingNotePlaceholder('AI 笔记生成中…')
+  try {
+    const title = (await generateNoteTitle(text)) || 'AI 生成笔记'
+    if (pendingId) notebookStore.updatePendingNotePlaceholder(pendingId, title)
+    const created = await notebookStore.addNoteToActiveNotebook(
+      { title, content: text },
+      {
+        successMessage: `已创建并保存到笔记：《${title}》`,
+        suppressErrorToast: true,
+      },
+    )
+    if (!created) {
+      antdMessage.error('未能创建笔记，请稍后再试')
+    }
+  } catch (err: any) {
+    const msg = err?.message || '创建笔记失败，请稍后再试'
+    antdMessage.error(msg)
+  } finally {
+    if (pendingId) notebookStore.removePendingNotePlaceholder(pendingId)
+    isCreatingNote.value = false
+  }
+}
 </script>
 
 <template>
@@ -303,6 +379,40 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
             <span class="file-icon" v-html="getFileIcon(f.type)"></span>
             <span class="file-name">{{ f.name }}</span>
           </div>
+        </div>
+
+        <div v-if="!showWaitingSpinner && !shouldShowStatusText" class="ai-actions">
+          <button
+            class="action-btn"
+            type="button"
+            :disabled="isCopying"
+            title="复制 Markdown 到剪贴板"
+            aria-label="复制回复"
+            @click="copyMarkdown"
+          >
+            <Copy class="action-icon" :size="18" />
+          </button>
+          <button class="action-btn" type="button" disabled title="点赞（即将上线）" aria-label="点赞">
+            <ThumbsUp class="action-icon" :size="18" />
+          </button>
+          <button class="action-btn" type="button" disabled title="点踩（即将上线）" aria-label="点踩">
+            <ThumbsDown class="action-icon" :size="18" />
+          </button>
+          <button class="action-btn" type="button" disabled title="朗读（即将上线）" aria-label="朗读">
+            <Volume2 class="action-icon" :size="18" />
+          </button>
+          <button
+            class="action-btn primary"
+            type="button"
+            :class="{ loading: isCreatingNote }"
+            :disabled="isCreatingNote"
+            :title="isCreatingNote ? '正在创建笔记…' : '创建并添加至 Note'"
+            aria-label="创建并添加至 Note"
+            @click="createNoteFromReply"
+          >
+            <Loader2 v-if="isCreatingNote" class="action-icon spin" :size="18" />
+            <FilePlus2 v-else class="action-icon" :size="18" />
+          </button>
         </div>
       </div>
     </template>
@@ -708,6 +818,71 @@ function closeLightbox() { lightboxVisible.value = false; lightboxSrc.value = ''
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+}
+
+.ai-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 2px;
+  color: #6b7280;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  border-color: #d5dbe8;
+  color: #111827;
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.action-btn.primary {
+  border-color: #e5e7eb;
+  color: #6b7280;
+  background: #fff;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background: #f8fafc;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.action-btn.primary.loading {
+  cursor: wait;
+  opacity: 0.8;
+}
+
+.action-icon {
+  display: block;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Lightbox */

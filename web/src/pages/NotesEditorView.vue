@@ -69,24 +69,28 @@
             />
             <NotebookNotesList
               v-else
-              :notes="notebookNotes"
+              :notes="orderedNotebookNotes"
               :selected-id="selectedNoteId"
               :notebook-title="notebookTitle"
               :loading="noteLoading"
               @select="handleNoteSelected"
               @create="handleCreateNote"
+              @reorder="handleNoteReorder"
+              @reorder-preview="handleNoteReorderPreview"
             />
           </div>
           <div v-else class="editor-workspace" :style="workspaceStyles">
             <section class="editor-column">
               <NotebookNotesList
                 v-if="!selectedNoteId"
-                :notes="notebookNotes"
+                :notes="orderedNotebookNotes"
                 :selected-id="selectedNoteId"
                 :notebook-title="notebookTitle"
                 :loading="noteLoading"
                 @select="handleNoteSelected"
                 @create="handleCreateNote"
+                @reorder="handleNoteReorder"
+                @reorder-preview="handleNoteReorderPreview"
               />
               <div v-else class="editor-panel">
                 <NoteEditorPanel
@@ -309,7 +313,30 @@ const {
 const transcriptSegments = computed<TranscriptSegment[]>(() => segments.value)
 const recordingError = computed(() => errorMessage.value)
 const isGeneratingNotes = computed(() => isRecording.value && !isPaused.value)
+const localNotesOrder = ref<string[] | null>(null)
 const notebookNotes = computed(() => notebookStore.notesForEditor.value)
+const orderedNotebookNotes = computed(() => {
+  const base = notebookNotes.value
+  const order = localNotesOrder.value
+  if (!order || !order.length) return base
+  const map = new Map(base.map(n => [n.id, n]))
+  const used = new Set<string>()
+  const result = order
+    .map(id => {
+      const note = map.get(id)
+      if (note && !used.has(id)) {
+        used.add(id)
+        return note
+      }
+      return null
+    })
+    .filter((n): n is typeof base[number] => Boolean(n))
+
+  for (const note of base) {
+    if (!used.has(note.id)) result.push(note)
+  }
+  return result
+})
 const noteLoading = computed(() => notebookStore.notebooksState.activeLoading)
 const saving = computed(() => notebookStore.notebooksState.saving)
 const notebookTitle = computed(() => notebookStore.notebooksState.activeNotebook?.title || '未命名笔记本')
@@ -692,6 +719,26 @@ const handleChatMessagesChange = (value: boolean) => {
   chatHasMessages.value = value
 }
 
+const handleNoteReorder = async (orderedIds: string[]) => {
+  if (!orderedIds.length) return
+  localNotesOrder.value = orderedIds
+  try {
+    await notebookStore.reorderActiveNotebookNotes(orderedIds)
+    localNotesOrder.value = null
+  } catch {
+    // 错误由 store 提示
+    localNotesOrder.value = null
+  }
+}
+
+const handleNoteReorderPreview = (orderedIds: string[] | null) => {
+  localNotesOrder.value = orderedIds ?? null
+}
+
+watch(activeNotebookId, () => {
+  localNotesOrder.value = null
+})
+
 const handleCitationOpen = async (payload: CitationOpenPayload) => {
   if (!payload?.fileId) return
   activeTab.value = 'materials'
@@ -734,6 +781,19 @@ const handleMouseMove = (event: MouseEvent) => {
     leftPaneWidth.value = Math.min(72, Math.max(28, relative))
   }
 }
+
+watch(notebookNotes, (list) => {
+  if (localNotesOrder.value === null) return
+  const ids = list.map(n => n.id)
+  const next: string[] = []
+  for (const id of localNotesOrder.value) {
+    if (ids.includes(id) && !next.includes(id)) next.push(id)
+  }
+  for (const id of ids) {
+    if (!next.includes(id)) next.push(id)
+  }
+  localNotesOrder.value = next
+})
 
 const waitForOngoingSave = async () => {
   if (!notebookStore.notebooksState.saving) return

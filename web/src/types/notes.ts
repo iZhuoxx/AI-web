@@ -10,6 +10,7 @@ export type NoteItem = {
   id: string
   title: string
   content: string
+  isPlaceholder?: boolean
 }
 
 export interface ActiveNoteForEditor {

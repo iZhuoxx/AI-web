@@ -266,6 +266,15 @@ export const getNotebook = async (id: string): Promise<NotebookDetail> => {
   return mapNotebookDetail(data)
 }
 
+export const generateNoteTitle = async (content: string): Promise<string> => {
+  const data = await apiFetch<{ title?: string }>(`/notebooks/title`, {
+    method: 'POST',
+    body: { content },
+  })
+  if (typeof data?.title === 'string' && data.title.trim()) return data.title.trim()
+  return ''
+}
+
 export const createNotebook = async (payload: NotebookPayload): Promise<NotebookDetail> => {
   const data = await apiFetch<ApiNotebook>('/notebooks', { method: 'POST', body: payload })
   return mapNotebookDetail(data)

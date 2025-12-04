@@ -28,10 +28,16 @@ const notebooksState = reactive<NotebooksState>({
 })
 
 const editorNotes = ref<NoteItem[]>([])
+const pendingNotes = ref<NoteItem[]>([])
 const drafts = useStorage<Record<string, { title: string; content: string }>>('notes-editor-drafts', {})
 
 const sortNotebookNotes = (notes: NotebookNote[]): NotebookNote[] =>
   [...notes].sort((a, b) => a.seq - b.seq)
+
+const makeFreshSeqGenerator = () => {
+  const base = Date.now() * 1000 + Math.floor(Math.random() * 1000)
+  return (idx: number) => -base + idx
+}
 
 const getNotebookSnapshot = (id: string): NotebookDetail | NotebookSummary | null => {
   if (notebooksState.activeNotebook?.id === id) return notebooksState.activeNotebook
@@ -60,6 +66,7 @@ const toEditorNotes = (notebook: NotebookDetail | null): NoteItem[] => {
 const refreshEditorNotes = () => {
   editorNotes.value = toEditorNotes(notebooksState.activeNotebook)
 }
+const notesForEditor = computed<NoteItem[]>(() => [...pendingNotes.value, ...editorNotes.value])
 
 type NoteDraft = { id?: string | null; title: string; content: string; seq: number }
 
@@ -91,6 +98,7 @@ const fetchNotebookList = async () => {
 const openNotebook = async (id: string) => {
   notebooksState.activeLoading = true
   try {
+    pendingNotes.value = []
     notebooksState.activeNotebook = await getNotebook(id)
     refreshEditorNotes()
   } catch (err) {
@@ -114,6 +122,7 @@ const createNotebookWithFirstNote = async (payload?: NotebookPayload) => {
     notebooksState.activeNotebook = await createNotebook(defaultPayload)
     await fetchNotebookList()
     refreshEditorNotes()
+    pendingNotes.value = []
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建笔记失败'
     message.error(msg)
@@ -199,24 +208,28 @@ const saveNoteInActiveNotebook = async (
   }
 }
 
-const addNoteToActiveNotebook = async (payload?: { title?: string | null; content?: string | null }) => {
+const addNoteToActiveNotebook = async (
+  payload?: { title?: string | null; content?: string | null },
+  options?: { successMessage?: string | null; suppressErrorToast?: boolean },
+) => {
   if (!notebooksState.activeNotebook) return null
   notebooksState.saving = true
   try {
     const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
-    const items: NoteDraft[] = ordered.map(note => ({
-      id: note.id,
-      title: note.title ?? '未命名笔记',
-      content: note.content ?? '',
-      seq: note.seq,
-    }))
-    const nextSeq = getNextSeq(ordered)
-    items.push({
-      id: undefined,
-      title: payload?.title ?? '新建笔记',
-      content: payload?.content ?? '',
-      seq: nextSeq,
-    })
+    const items: NoteDraft[] = [
+      {
+        id: undefined,
+        title: payload?.title ?? '新建笔记',
+        content: payload?.content ?? '',
+        seq: 0,
+      },
+      ...ordered.map((note, idx) => ({
+        id: note.id,
+        title: note.title ?? '未命名笔记',
+        content: note.content ?? '',
+        seq: idx + 1,
+      })),
+    ]
 
     const updated = await updateNotebook(notebooksState.activeNotebook.id, {
       title: notebooksState.activeNotebook.title,
@@ -230,15 +243,45 @@ const addNoteToActiveNotebook = async (payload?: { title?: string | null; conten
     notebooksState.activeNotebook = updated
     await fetchNotebookList()
     refreshEditorNotes()
-    message.success('已创建新的笔记页')
-    return updated.notes?.find(note => note.seq === nextSeq) ?? null
+    if (options?.successMessage !== null) {
+      message.success(options?.successMessage ?? '已创建新的笔记页')
+    }
+    return updated.notes?.find(note => note.seq === 0) ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建新笔记页失败'
-    message.error(msg)
+    if (!options?.suppressErrorToast) {
+      message.error(msg)
+    }
     throw err
   } finally {
     notebooksState.saving = false
   }
+}
+
+const addPendingNotePlaceholder = (title: string) => {
+  if (!notebooksState.activeNotebook) return null
+  const id = `__pending-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+  pendingNotes.value = [
+    {
+      id,
+      title: title || '新建笔记',
+      content: '',
+      isPlaceholder: true,
+    },
+    ...pendingNotes.value,
+  ]
+  return id
+}
+
+const updatePendingNotePlaceholder = (id: string, title: string) => {
+  pendingNotes.value = pendingNotes.value.map(note =>
+    note.id === id ? { ...note, title: title || note.title } : note,
+  )
+}
+
+const removePendingNotePlaceholder = (id: string | null) => {
+  if (!id) return
+  pendingNotes.value = pendingNotes.value.filter(note => note.id !== id)
 }
 
 const removeNoteFromActiveNotebook = async (noteId: string) => {
@@ -249,11 +292,11 @@ const removeNoteFromActiveNotebook = async (noteId: string) => {
     const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
     const items: NoteDraft[] = ordered
       .filter(note => note.id !== noteId)
-      .map(note => ({
+      .map((note, idx) => ({
         id: note.id,
         title: note.title ?? '未命名笔记',
         content: note.content ?? '',
-        seq: note.seq,
+        seq: idx,
       }))
 
     const updated = await updateNotebook(notebooksState.activeNotebook.id, {
@@ -435,6 +478,62 @@ const updateNotebookColor = async (noteId: string, color: string) => {
 const clearActiveNotebook = () => {
   notebooksState.activeNotebook = null
   refreshEditorNotes()
+  pendingNotes.value = []
+}
+
+const reorderActiveNotebookNotes = async (orderedIds: string[]) => {
+  if (!notebooksState.activeNotebook) return null
+  notebooksState.saving = true
+  try {
+    const ordered = sortNotebookNotes(notebooksState.activeNotebook.notes ?? [])
+    const idToNote = new Map(ordered.map(note => [note.id, note]))
+    const used = new Set<string>()
+    const picked: NoteDraft[] = []
+
+    for (const rawId of orderedIds) {
+      const id = typeof rawId === 'string' ? rawId : ''
+      if (!id || used.has(id)) continue
+      const note = idToNote.get(id)
+      if (!note) continue
+      used.add(id)
+      picked.push({
+        id: note.id,
+        title: note.title ?? '未命名笔记',
+        content: note.content ?? '',
+        seq: picked.length,
+      })
+    }
+
+    for (const note of ordered) {
+      if (used.has(note.id)) continue
+      picked.push({
+        id: note.id,
+        title: note.title ?? '未命名笔记',
+        content: note.content ?? '',
+        seq: picked.length,
+      })
+    }
+
+    const updated = await updateNotebook(notebooksState.activeNotebook.id, {
+      title: notebooksState.activeNotebook.title,
+      summary: notebooksState.activeNotebook.summary,
+      is_archived: notebooksState.activeNotebook.isArchived,
+      color: notebooksState.activeNotebook.color,
+      openai_vector_store_id: notebooksState.activeNotebook.openaiVectorStoreId,
+      vector_store_expires_at: notebooksState.activeNotebook.vectorStoreExpiresAt,
+      notes: buildNotesPayload(picked),
+    })
+    notebooksState.activeNotebook = updated
+    await fetchNotebookList()
+    refreshEditorNotes()
+    return updated
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '更新排序失败'
+    message.error(msg)
+    throw err
+  } finally {
+    notebooksState.saving = false
+  }
 }
 
 const reloadActiveNotebook = async () => {
@@ -474,7 +573,7 @@ export const useNotebookStore = () => {
   return {
     // 状态
     notebooksState: readonly(notebooksState),
-    notesForEditor: readonly(editorNotes),
+    notesForEditor: readonly(notesForEditor),
     notebookList: list,
     activeNotebook: active,
 
@@ -493,6 +592,10 @@ export const useNotebookStore = () => {
     addNoteToActiveNotebook,
     removeNoteFromActiveNotebook,
     updateNotebookColor,
+    reorderActiveNotebookNotes,
+    addPendingNotePlaceholder,
+    updatePendingNotePlaceholder,
+    removePendingNotePlaceholder,
 
     // 草稿相关
     getDraft,

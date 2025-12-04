@@ -328,9 +328,7 @@ const handleFileChange = async (event: Event) => {
     if (!uploadResult.ok) throw new Error('上传文件到对象存储失败')
 
     const openAIFile = await uploadOpenAIFile(file, {
-      purpose: 'assistants',
-      expiresAfterAnchor: 'created_at',
-      expiresAfterSeconds: 2_592_000,
+      purpose: 'assistants'
     })
     if (!openAIFile?.id) {
       throw new Error('未能获取 OpenAI 文件 ID')

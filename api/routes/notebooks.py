@@ -6,12 +6,14 @@ import uuid
 from typing import List, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from api.dependencies import get_current_user, require_csrf
 from api.db.database import get_db
 from api.db import models
+from api.services import openai_client
 from api.schemas import (
     AttachmentOut,
     NotebookCreate,
@@ -23,6 +25,14 @@ from api.schemas import (
 
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
+
+
+class TitleGenerateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=12000)
+
+
+class TitleGenerateResponse(BaseModel):
+    title: str
 
 
 def _notebook_query(user_id: uuid.UUID) -> Select[tuple[models.Notebook]]:
@@ -188,33 +198,33 @@ def update_notebook(
     notebook.vector_store_expires_at = payload.vector_store_expires_at
 
     if payload.notes is not None:
-        seq_values: set[int] = set()
-        for note_payload in payload.notes:
-            if note_payload.seq in seq_values:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Duplicate note sequence values are not allowed",
-                )
-            seq_values.add(note_payload.seq)
-
         existing_notes = {str(note.id): note for note in notebook.notes}
         updated_notes: list[models.Note] = []
 
-        for note_payload in payload.notes:
+        # 使用前端传递的顺序重新分配 seq，避免更新时的唯一约束冲突
+        for idx, note_payload in enumerate(payload.notes):
             payload_id = str(note_payload.id) if note_payload.id is not None else None
             if payload_id and payload_id in existing_notes:
                 note = existing_notes[payload_id]
                 note.title = note_payload.title
                 note.content = note_payload.content
-                note.seq = note_payload.seq
             else:
                 note = models.Note(
                     id=note_payload.id,
                     title=note_payload.title,
                     content=note_payload.content,
-                    seq=note_payload.seq,
+                    seq=idx,
                 )
             updated_notes.append(note)
+
+        # 两阶段重排，先写入临时 seq 以避开唯一约束，再写入最终 seq
+        temp_offset = 1_000_000
+        for i, note in enumerate(updated_notes):
+            note.seq = temp_offset + i
+        db.flush()
+
+        for i, note in enumerate(updated_notes):
+            note.seq = i
 
         notebook.notes[:] = sorted(updated_notes, key=lambda n: n.seq)
 
@@ -236,3 +246,78 @@ def delete_notebook(
     db.delete(notebook)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/title",
+    response_model=TitleGenerateResponse,
+    dependencies=[Depends(require_csrf)],
+)
+async def generate_note_title(
+    payload: TitleGenerateRequest,
+    user: models.User = Depends(get_current_user),
+) -> TitleGenerateResponse:
+    # 用户鉴权由依赖处理，这里只需确认内容有效
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="内容不能为空")
+
+    system_prompt = (
+        "你是一名笔记标题助手。请为给定内容生成一个简短且清晰的标题，"
+        "总长度不超过15个字符（中英文均按单字符计数），能够准确概括核心含义。"
+        "标题不要使用引号、句号或多余的标点，并保持与内容语言一致。"
+    )
+
+    messages = [
+        {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+        {"role": "user", "content": [{"type": "text", "text": content}]},
+    ]
+
+    request_payload = {
+        "model": "gpt-4.1-nano",
+        "input": messages,
+        "max_output_tokens": 80,
+        "temperature": 0.3,
+    }
+
+    try:
+        data = await openai_client.responses_complete(request_payload, timeout=20.0)
+    except Exception as exc:  # pragma: no cover - 网络异常兜底
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"请求标题生成失败：{exc}")
+
+    def _extract_text(payload: dict) -> str:
+        """Try to pull the first text reply from Responses or ChatCompletions style payloads."""
+        if not isinstance(payload, dict):
+            return ""
+
+        output = payload.get("output") or []
+        if isinstance(output, list) and output:
+            first = output[0]
+            if isinstance(first, dict):
+                content_list = first.get("content") or []
+                for item in content_list:
+                    if isinstance(item, dict):
+                        text_val = item.get("text")
+                        if isinstance(text_val, str):
+                            return text_val
+
+        choices = payload.get("choices") or []
+        if choices and isinstance(choices[0], dict):
+            message = choices[0].get("message") or {}
+            if isinstance(message, dict):
+                content_text = message.get("content")
+                if isinstance(content_text, str):
+                    return content_text
+        return ""
+
+    raw_title = _extract_text(data)
+
+    title = (raw_title or "").strip()
+    if not title:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="生成标题失败：模型未返回结果")
+
+    # 确保长度限制，避免过长标题
+    if len(title) > 15:
+        title = title[:15]
+
+    return TitleGenerateResponse(title=title)

@@ -10,7 +10,7 @@ from api.settings import settings
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_COMP_URL = "https://api.openai.com/v1/completions"
-OPENAI_CHAT_COMP_URL = "https://api.openai.com/v1/chat/completions"
+# OPENAI_CHAT_COMP_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_AUDIO_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
 OPENAI_REALTIME_TRANSCRIBE_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
 # OPENAI_REALTIME_TRANSCRIBE_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime"
@@ -80,6 +80,38 @@ async def responses_stream(payload: Dict[str, Any]) -> AsyncIterator[str]:
             #                 print("[OpenAI stream log write error]", e)
             #             except Exception:
             #                 pass
+
+
+async def responses_complete(payload: Dict[str, Any], *, timeout: float = 60.0) -> Dict[str, Any]:
+    """
+    Call the OpenAI Responses API once and return the parsed JSON body.
+    Forces non-streaming mode so callers get the full reply in one shot.
+    """
+    data = {**(payload or {})}
+    data.pop("stream", None)
+    data.setdefault("stream", False)
+
+    async with create_client(timeout=timeout) as client:
+        try:
+            response = await client.post(
+                OPENAI_RESPONSES_URL,
+                json=data,
+                headers=get_headers(),
+            )
+            body_bytes = await response.aread()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"OpenAI responses request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        detail = body_bytes.decode(errors="ignore").strip()
+        raise RuntimeError(
+            f"OpenAI responses request failed (HTTP {response.status_code}): {detail[:500]}"
+        )
+
+    try:
+        return json.loads(body_bytes.decode("utf-8"))
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("Failed to parse OpenAI responses payload") from exc
 
 
 async def transcribe_audio(
