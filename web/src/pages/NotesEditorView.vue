@@ -1033,7 +1033,7 @@ onBeforeUnmount(() => {
   height: 100%;
   background: #fff;
   border-radius: 22px;
-  padding: 14px 18px 18px;
+  padding: 10px 12px 12px;
   border: none;
   box-shadow: none;
   min-height: 0;
@@ -1290,6 +1290,7 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+/* 默认滚动条样式 */
 .editor-workspace :deep(*) {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
@@ -1308,6 +1309,41 @@ onBeforeUnmount(() => {
 
 .editor-workspace :deep(::-webkit-scrollbar-thumb:hover) {
   background: rgba(148, 163, 184, 0.6);
+}
+
+/* Tiptap 编辑器专用滚动条样式 - 统一管理 */
+.editor-workspace :deep(.tiptap-editor-wrapper) {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.25s ease;
+}
+
+.editor-workspace :deep(.tiptap-editor-wrapper::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+.editor-workspace :deep(.tiptap-editor-wrapper::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+.editor-workspace :deep(.tiptap-editor-wrapper::-webkit-scrollbar-thumb) {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.25s ease;
+}
+
+/* 只在滚动时显示滚动条 */
+.editor-workspace :deep(.tiptap-editor-wrapper.is-scrolling::-webkit-scrollbar-thumb) {
+  background: rgba(148, 163, 184, 0.3);
+}
+
+.editor-workspace :deep(.tiptap-editor-wrapper.is-scrolling::-webkit-scrollbar-thumb:hover) {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.editor-workspace :deep(.tiptap-editor-wrapper.is-scrolling) {
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
 }
 
 @media (max-width: 1200px) {

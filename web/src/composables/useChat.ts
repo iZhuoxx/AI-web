@@ -482,42 +482,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     const systemPrompt = s.systemPrompt || ''
     const temperature = typeof s.temperature === 'number' ? s.temperature : 0.7
     const maxOutputTokens = typeof s.maxTokens === 'number' ? s.maxTokens : undefined
-
-    // 构建 input
-    const input: any[] = []
-
-    if (systemPrompt) {
-      input.push({ role: 'system', content: [{ type: 'input_text', text: systemPrompt }] })
-    }
-
-    const userContent: any[] = []
-    if (content) userContent.push({ type: 'input_text', text: content })
-    for (const url of imagesDataUrls) {
-      userContent.push({ type: 'input_image', image_url: url })
-    }
-    for (const f of files) {
-      if (f.fileId) userContent.push({ type: 'input_file', file_id: f.fileId })
-      if (f.text) {
-        const label = f.truncated ? `[截断] ${f.name}` : f.name
-        userContent.push({ type: 'input_text', text: `【文件：${label}】\n${f.text}` })
-      }
-    }
-    input.push({ role: 'user', content: userContent })
-
-    // 构建 body
-    const body: Record<string, any> = { model: selectedModel, input }
-
-    if (!selectedModel.includes('gpt-5')) {
-      body.temperature = Number(temperature)
-    }
-
-    if (typeof maxOutputTokens === 'number') {
-      body.max_output_tokens = maxOutputTokens
-    }
-
-    // Tools
     const effectiveTools = resolveEffectiveTools(tools)
-    body.tools = effectiveTools
     const includeSet = new Set<string>(resolveIncludes())
 
     if (effectiveTools) {
@@ -530,14 +495,25 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
       }
     }
 
-    if (includeSet.size) {
-      body.include = Array.from(includeSet)
+    const lastCompletedResponseId = messagesStore.lastCompletedResponseId?.value ?? null
+
+    const body: Record<string, any> = {
+      model: selectedModel,
+      text: content,
+      images: imagesDataUrls.slice(),
+      files,
+      system_prompt: systemPrompt || undefined,
+      tools: effectiveTools ?? undefined,
+      includes: includeSet.size ? Array.from(includeSet) : undefined,
+      previous_response_id: lastCompletedResponseId || undefined,
     }
 
-    // Previous response ID
-    const lastCompletedResponseId = messagesStore.lastCompletedResponseId?.value ?? null
-    if (lastCompletedResponseId) {
-      body.previous_response_id = lastCompletedResponseId
+    if (!selectedModel.includes('gpt-5')) {
+      body.temperature = Number(temperature)
+    }
+
+    if (typeof maxOutputTokens === 'number') {
+      body.max_output_tokens = maxOutputTokens
     }
 
     return body

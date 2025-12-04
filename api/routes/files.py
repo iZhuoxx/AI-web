@@ -3,11 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Form, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from starlette.background import BackgroundTask
 from typing import Dict, Any
 from api.settings import settings
 from api.services import openai_client
-from api.services.utils import get_headers
 import mimetypes
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -22,47 +20,6 @@ def _check_auth(request: Request):
 def _validate_file_id(file_id: str) -> None:
     if not isinstance(file_id, str) or not file_id.strip():
         raise HTTPException(status_code=500, detail="Upload ok but missing file id")
-
-
-OPENAI_FILES_URL = "https://api.openai.com/v1/files"
-
-
-async def _upload_to_openai(
-    filename: str,
-    content: bytes,
-    mime: str,
-    purpose: str,
-    extra_form: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    files = {"file": (filename, content, mime)}
-    data: Dict[str, Any] = {"purpose": purpose}
-    if extra_form:
-        data.update(extra_form)
-    headers = get_headers()
-    headers.pop("Content-Type", None)
-    async with openai_client.create_client(timeout=60.0) as client:
-        r = await client.post(
-            "https://api.openai.com/v1/files",
-            data=data,
-            files=files,
-            headers=headers,
-        )
-        if r.status_code >= 400:
-            body_bytes = await r.aread()
-            body_text = body_bytes.decode(errors="ignore")
-            print("[Files API error]", r.status_code, body_text)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Upload to Files API failed: HTTP {r.status_code} - {body_text}",
-            )
-
-        try:
-            resp = r.json()
-        except ValueError as exc:
-            raise HTTPException(status_code=500, detail="Failed to parse Files API response") from exc
-        file_id = resp.get("id")
-        _validate_file_id(file_id)
-        return resp
 
 
 # Supported formats: 
@@ -112,32 +69,19 @@ async def upload_file(
     if not content:
         raise HTTPException(status_code=422, detail="File contains no data")
 
-    payload = await _upload_to_openai(filename, content, ctype, normalized_purpose, extra_form or None)
+    try:
+        payload = await openai_client.upload_file_to_openai(
+            filename=filename,
+            content=content,
+            mime=ctype,
+            purpose=normalized_purpose,
+            extra_form=extra_form or None,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    _validate_file_id(payload.get("id"))
     return JSONResponse(payload)
-
-
-async def _forward_files_request(
-    method: str,
-    url: str,
-    *,
-    params: Dict[str, Any] | None = None,
-) -> JSONResponse:
-    headers = get_headers()
-    async with openai_client.create_client(timeout=60.0) as client:
-        request_args: Dict[str, Any] = {"headers": headers}
-        if params:
-            request_args["params"] = params
-        http_response = await client.request(method, url, **request_args)
-
-        if http_response.status_code >= 400:
-            body_bytes = await http_response.aread()
-            body_text = body_bytes.decode(errors="ignore")
-            raise HTTPException(
-                status_code=http_response.status_code,
-                detail=body_text or "OpenAI request failed",
-            )
-
-        return JSONResponse(content=http_response.json())
 
 
 @router.get("")
@@ -167,47 +111,42 @@ async def list_files(
                 detail=f"purpose must be one of: {', '.join(sorted(ALLOWED_PURPOSES))}",
             )
         params["purpose"] = normalized_purpose
-    return await _forward_files_request("GET", OPENAI_FILES_URL, params=params or None)
+    try:
+        content = await openai_client.list_files(**params)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(content=content)
 
 
 @router.get("/{file_id}")
 async def get_file_metadata(request: Request, file_id: str):
     _check_auth(request)
-    return await _forward_files_request("GET", f"{OPENAI_FILES_URL}/{file_id}")
+    try:
+        data = await openai_client.retrieve_file(file_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(content=data)
 
 
 @router.delete("/{file_id}")
 async def delete_file(request: Request, file_id: str):
     _check_auth(request)
-    return await _forward_files_request("DELETE", f"{OPENAI_FILES_URL}/{file_id}")
+    try:
+        data = await openai_client.delete_file_async(file_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(content=data)
 
 
 @router.get("/{file_id}/content")
 async def get_file_content(request: Request, file_id: str):
     _check_auth(request)
-    headers = get_headers()
-    async with openai_client.create_client(timeout=120.0) as client:
-        request_obj = client.build_request(
-            "GET",
-            f"{OPENAI_FILES_URL}/{file_id}/content",
-            headers=headers,
-        )
-        resp = await client.send(request_obj, stream=True)
-        if resp.status_code >= 400:
-            body_text = (await resp.aread()).decode(errors="ignore")
-            await resp.aclose()
-            raise HTTPException(
-                status_code=resp.status_code,
-                detail=body_text or "Failed to fetch file content",
-            )
+    try:
+        iterator, media_type = await openai_client.stream_file_content(file_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        async def chunk_iter():
-            async for chunk in resp.aiter_bytes():
-                yield chunk
-
-        media_type = resp.headers.get("content-type", "application/octet-stream")
-        return StreamingResponse(
-            chunk_iter(),
-            media_type=media_type,
-            background=BackgroundTask(resp.aclose),
-        )
+    return StreamingResponse(
+        iterator,
+        media_type=media_type,
+    )

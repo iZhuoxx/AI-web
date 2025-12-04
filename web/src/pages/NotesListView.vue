@@ -96,11 +96,11 @@
                         <BgColorsOutlined />
                         <span>更改颜色</span>
                       </a-menu-item>
-                <a-menu-divider />
-                <a-menu-item key="delete">
-                  <DeleteOutlined />
-                  <span>删除</span>
-                </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item key="delete">
+                        <DeleteOutlined />
+                        <span>删除</span>
+                      </a-menu-item>
                     </a-menu>
                   </template>
                 </a-dropdown>
@@ -109,7 +109,7 @@
             </div>
           </div>
 
-          <div v-if="isSearching && !notebooks.length" class="notes-list-view__placeholder notes-list-view__placeholder--surface">
+          <div v-if="isSearching && !notebooks.length" class="notes-list-view__placeholder notes-list-view__placeholder--empty">
             <a-empty description="没有找到相关笔记，换个关键词试试？" />
           </div>
 
@@ -477,11 +477,12 @@ const handleColorSelect = async (color: string) => {
 </script>
 
 <style scoped>
+/* ==================== 基础布局 ==================== */
 .notes-page {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #f7f7f8;
+  background: #ffffff;
 }
 
 .page-content {
@@ -489,213 +490,251 @@ const handleColorSelect = async (color: string) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 40px 60px;
+  padding: 48px 80px;
   box-sizing: border-box;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
 }
 
+/* ==================== 加载和占位状态 ==================== */
 .notes-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 16px;
   color: #5f6368;
-  border-radius: 8px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 48px 24px;
 }
 
 .notes-placeholder--center {
   flex: 1;
-  background: #fff;
+  background: #ffffff;
   border: 1px solid #e8eaed;
 }
 
 .placeholder-text {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
 }
 
+/* ==================== 笔记列表视图 ==================== */
 .notes-list-view {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 40px;
   height: 100%;
 }
 
-/* Header Styles - Simple and Advanced */
+/* ==================== 头部样式 ==================== */
 .notes-list-view__header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e8eaed;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
 }
 
 .header-content h2 {
   margin: 0;
-  font-size: 32px;
-  font-weight: 400;
-  color: #202124;
-  letter-spacing: -0.5px;
+  font-size: 36px;
+  font-weight: 300;
+  color: #1a1a1a;
+  letter-spacing: -0.8px;
 }
 
 .header-subtitle {
-  margin: 4px 0 0;
-  color: #5f6368;
+  margin: 8px 0 0;
+  color: #666666;
   font-size: 14px;
   font-weight: 400;
+  letter-spacing: 0.3px;
 }
 
-/* Compact Search Box */
+/* ==================== 搜索框 ==================== */
 .header-actions {
   display: flex;
   align-items: center;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
 }
 
 .search-container {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   position: relative;
 }
 
 .search-container.is-expanded {
-  width: 280px;
+  width: 320px;
 }
 
 .search-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: 1px solid #dadce0;
-  background: #fff;
-  color: #5f6368;
-  font-size: 16px;
+  border: 1px solid #e0e0e0;
+  background: #ffffff;
+  color: #666666;
+  font-size: 17px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .search-icon-btn:hover {
-  background: #f8f9fa;
-  border-color: #c0c4cc;
+  background: #fafafa;
+  border-color: #d0d0d0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
 }
 
 .search-icon-btn:active {
-  background: #f1f3f4;
+  background: #f5f5f5;
+  transform: translateY(0);
 }
 
 .search-input {
   width: 100%;
   height: 100%;
-  border-radius: 18px !important;
-  border: 1px solid #dadce0 !important;
-  background: #fff !important;
+  border-radius: 20px !important;
+  border: 1px solid #e0e0e0 !important;
+  background: #ffffff !important;
   transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .search-input:hover {
-  border-color: #c0c4cc !important;
+  border-color: #d0d0d0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .search-input:focus-within {
   border-color: #1a73e8 !important;
-  box-shadow: 0 1px 4px rgba(26, 115, 232, 0.25);
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.25);
 }
 
 .search-input :deep(.ant-input-affix-wrapper) {
   border: none !important;
   background: transparent !important;
-  padding: 0 12px !important;
+  padding: 0 16px !important;
   height: 100%;
 }
 
 .search-input :deep(.ant-input-prefix) {
-  color: #5f6368;
-  margin-right: 8px;
-  font-size: 16px;
+  color: #666666;
+  margin-right: 10px;
+  font-size: 17px;
 }
 
 .search-input :deep(.ant-input) {
   background: transparent;
-  font-size: 14px;
-  color: #202124;
+  font-size: 15px;
+  color: #1a1a1a;
+  font-weight: 400;
 }
 
 .search-input :deep(.ant-input::placeholder) {
-  color: #80868b;
+  color: #999999;
 }
 
 .search-input :deep(.ant-input-clear-icon) {
-  color: #5f6368;
+  color: #666666;
 }
 
+/* ==================== 占位符和空状态 ==================== */
 .notes-list-view__placeholder {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e8eaed;
-  border-radius: 8px;
-  background: #fff;
-  color: #5f6368;
+  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #666666;
+  min-height: 400px;
 }
 
-.notes-list-view__placeholder--surface {
-  background: #f8f9fa;
-  border: 1px solid #e8eaed;
+.notes-list-view__placeholder--empty {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
 }
 
 .notes-list-view__empty-hint {
-  margin-top: 40px;
+  margin-top: 60px;
   text-align: center;
-  color: #5f6368;
+  color: #666666;
 }
 
 .notes-list-view__empty-hint h3 {
-  margin: 0 0 8px;
-  font-size: 20px;
+  margin: 0 0 12px;
+  font-size: 22px;
   font-weight: 400;
-  color: #202124;
+  color: #1a1a1a;
+  letter-spacing: -0.3px;
 }
 
 .notes-list-view__empty-hint p {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
+  color: #666666;
 }
 
-/* Constant Size Grid - Smaller notebooks */
+/* ==================== 笔记网格 ==================== */
 .notes-list-view__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 200px);
-  gap: 16px;
-  padding: 8px 0;
+  grid-template-columns: repeat(auto-fill, 220px);
+  gap: 20px;
+  padding: 12px 0;
   overflow: auto;
 }
 
-/* Note Cards - Constant Size with Google-inspired Colors */
+/* ==================== 笔记卡片 ==================== */
 .notes-list-view__card {
-  width: 200px;
-  height: 200px;
-  border-radius: 8px;
-  padding: 16px;
+  width: 220px;
+  height: 220px;
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  border: 1px solid #e8eaed;
-  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  gap: 12px;
+  border: 1px solid #e8e8e8;
+  transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.notes-list-view__card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
 }
 
 .notes-list-view__card:hover {
-  border-color: #d0d3d7;
+  border-color: #d0d0d0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.notes-list-view__card:hover::before {
+  opacity: 1;
 }
 
 .notes-list-view__card:focus-visible {
@@ -703,57 +742,78 @@ const handleColorSelect = async (color: string) => {
   outline-offset: 2px;
 }
 
-/* Color Variants - Google Keep Style */
+/* ==================== 卡片颜色变体 ==================== */
 .card-color--yellow {
-  background: #fff8e1;
+  background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
+  border-color: #f5e6b3;
 }
 
 .card-color--blue {
-  background: #e3f2fd;
+  background: linear-gradient(135deg, #f5f9ff 0%, #e3f2fd 100%);
+  border-color: #b3d9ff;
 }
 
 .card-color--green {
-  background: #e8f5e9;
+  background: linear-gradient(135deg, #f5fdf7 0%, #e8f5e9 100%);
+  border-color: #b3e6b8;
 }
 
 .card-color--purple {
-  background: #f3e5f5;
+  background: linear-gradient(135deg, #faf5fd 0%, #f3e5f5 100%);
+  border-color: #e0b3f0;
 }
 
 .card-color--pink {
-  background: #fce4ec;
+  background: linear-gradient(135deg, #fff5f8 0%, #fce4ec 100%);
+  border-color: #ffb3c9;
 }
 
 .card-color--orange {
-  background: #ffe0b2;
+  background: linear-gradient(135deg, #fff9f0 0%, #ffe0b2 100%);
+  border-color: #ffcc80;
 }
 
-/* Create Card */
+.card-color--yellow:hover { border-color: #e6d199; }
+.card-color--blue:hover { border-color: #99c7ff; }
+.card-color--green:hover { border-color: #99d99e; }
+.card-color--purple:hover { border-color: #cc99e0; }
+.card-color--pink:hover { border-color: #ff99b8; }
+.card-color--orange:hover { border-color: #ffb366; }
+
+/* ==================== 创建卡片 ==================== */
 .notes-list-view__card--create {
-  background: #fff;
-  border: 1px solid #e8eaed;
+  background: #ffffff;
+  border: 2px dashed #d0d0d0;
   align-items: center;
   text-align: center;
-  gap: 12px;
+  gap: 16px;
   justify-content: center;
+  box-shadow: none;
+}
+
+.notes-list-view__card--create::before {
+  display: none;
 }
 
 .notes-list-view__card--create:hover {
   border-color: #1a73e8;
-  background: #f8f9fa;
+  border-style: solid;
+  background: linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%);
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.15);
 }
 
 .notes-list-view__card--create h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
-  color: #202124;
+  color: #1a1a1a;
+  letter-spacing: -0.2px;
 }
 
 .notes-list-view__card--create p {
   margin: 0;
-  font-size: 13px;
-  color: #5f6368;
+  font-size: 14px;
+  color: #666666;
 }
 
 .notes-list-view__card--create.is-loading {
@@ -762,67 +822,82 @@ const handleColorSelect = async (color: string) => {
 }
 
 .create-card__icon {
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1f3f4;
-  color: #5f6368;
+  background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%);
+  color: #666666;
+  transition: all 0.25s ease;
+}
+
+.notes-list-view__card--create:hover .create-card__icon {
+  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+  color: #ffffff;
+  transform: scale(1.1);
 }
 
 .create-card__icon .anticon {
-  font-size: 24px;
+  font-size: 28px;
 }
 
+/* ==================== 激活状态 ==================== */
 .notes-list-view__card.is-active {
   border-color: #1a73e8;
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.25);
 }
 
+/* ==================== 卡片头部 ==================== */
 .card-header {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   align-items: flex-start;
 }
 
 .card-header__info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
 
 .card-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
-  color: #202124;
+  color: #1a1a1a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.2px;
 }
 
 .card-header span {
   font-size: 12px;
-  color: #5f6368;
+  color: #999999;
+  font-weight: 400;
 }
 
+/* ==================== 卡片摘要 ==================== */
 .card-summary {
   margin: 0;
-  color: #202124;
+  color: #4a4a4a;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   flex: 1;
   display: -webkit-box;
   line-clamp: 5;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  letter-spacing: 0.1px;
 }
 
+/* ==================== 卡片菜单按钮 ==================== */
 .card-menu {
   display: inline-flex;
   align-items: center;
@@ -831,188 +906,197 @@ const handleColorSelect = async (color: string) => {
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: transparent;
-  color: #5f6368;
+  background: rgba(255, 255, 255, 0.8);
+  color: #666666;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
   flex-shrink: 0;
+  backdrop-filter: blur(8px);
 }
 
 .card-menu:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .card-menu:active {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(240, 240, 240, 0.95);
 }
 
-/* Dropdown Menu */
+/* ==================== 下拉菜单 ==================== */
 :deep(.note-card-menu .ant-dropdown-menu) {
-  border-radius: 8px;
-  padding: 8px 0;
-  background: #fff;
-  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
-  border: none;
+  border-radius: 12px;
+  padding: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e8e8e8;
   min-width: 200px;
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item) {
-  padding: 8px 16px;
-  color: #202124;
+  padding: 10px 16px;
+  color: #1a1a1a;
   font-size: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item:hover) {
-  background: #f1f3f4;
-}
-
-:deep(.note-card-menu .ant-dropdown-menu-item-group-title) {
-  padding: 8px 16px;
-  color: #5f6368;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  background: #f5f5f5;
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item-divider) {
-  background: #e8eaed;
-  margin: 4px 0;
+  background: #f0f0f0;
+  margin: 8px 0;
 }
 
-/* Color Picker Modal */
+/* ==================== 颜色选择器模态框 ==================== */
 .note-modal--color :deep(.ant-modal-content) {
-  padding: 24px;
+  padding: 28px;
+  border-radius: 16px;
 }
 
 .note-modal__body--color {
-  gap: 20px;
+  gap: 24px;
 }
 
 .color-modal__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
-  color: #202124;
+  color: #1a1a1a;
   text-align: center;
+  letter-spacing: -0.2px;
 }
 
 .color-picker {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 16px;
   width: 100%;
 }
 
 .color-picker__item {
   width: 100%;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .color-picker__item:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .color-picker__item.is-selected {
   border-color: #1a73e8;
-  box-shadow: 0 0 0 1px #1a73e8;
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.3);
 }
 
-.color-picker__item--yellow { background: #fff8e1; }
-.color-picker__item--blue { background: #e3f2fd; }
-.color-picker__item--green { background: #e8f5e9; }
-.color-picker__item--purple { background: #f3e5f5; }
-.color-picker__item--pink { background: #fce4ec; }
-.color-picker__item--orange { background: #ffe0b2; }
+.color-picker__item--yellow { background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%); }
+.color-picker__item--blue { background: linear-gradient(135deg, #f5f9ff 0%, #e3f2fd 100%); }
+.color-picker__item--green { background: linear-gradient(135deg, #f5fdf7 0%, #e8f5e9 100%); }
+.color-picker__item--purple { background: linear-gradient(135deg, #faf5fd 0%, #f3e5f5 100%); }
+.color-picker__item--pink { background: linear-gradient(135deg, #fff5f8 0%, #fce4ec 100%); }
+.color-picker__item--orange { background: linear-gradient(135deg, #fff9f0 0%, #ffe0b2 100%); }
 
 .color-selected-icon {
   color: #1a73e8;
-  font-size: 24px;
+  font-size: 28px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
-/* Modal Styles */
+/* ==================== 模态框样式 ==================== */
 :deep(.note-modal.ant-modal) {
-  border-radius: 8px;
+  border-radius: 16px;
 }
 
 :deep(.note-modal .ant-modal-content) {
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
 .note-modal__body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-}
-
-.note-modal__body--delete {
   gap: 24px;
 }
 
+.note-modal__body--delete {
+  gap: 28px;
+}
+
 .note-modal__avatar {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1a73e8;
-  color: #fff;
-  font-size: 36px;
+  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+  color: #ffffff;
+  font-size: 40px;
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.3);
 }
 
 .note-modal__label {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
-  color: #202124;
+  color: #1a1a1a;
   align-self: flex-start;
+  letter-spacing: 0.1px;
 }
 
 .note-modal__input {
   width: 100%;
-  border-radius: 4px;
-  border: 1px solid #dadce0;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.3s ease;
 }
 
 .note-modal__input :deep(.ant-input) {
   border: none;
-  padding: 12px 16px;
-  font-size: 14px;
-  color: #202124;
+  padding: 14px 16px;
+  font-size: 15px;
+  color: #1a1a1a;
+}
+
+.note-modal__input:hover {
+  border-color: #d0d0d0;
 }
 
 .note-modal__input:focus-within {
   border-color: #1a73e8;
-  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
 }
 
 .note-modal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
 }
 
 .note-modal__btn {
-  border-radius: 4px !important;
+  border-radius: 8px !important;
   font-weight: 500 !important;
-  height: 36px !important;
-  padding: 0 24px !important;
+  height: 40px !important;
+  padding: 0 28px !important;
+  font-size: 15px !important;
+  transition: all 0.25s ease !important;
 }
 
 .note-modal__btn--ghost {
@@ -1022,57 +1106,75 @@ const handleColorSelect = async (color: string) => {
 }
 
 .note-modal__btn--ghost:hover {
-  background: rgba(26, 115, 232, 0.08) !important;
+  background: rgba(26, 115, 232, 0.1) !important;
 }
 
 .note-modal__btn--primary {
-  background: #1a73e8 !important;
+  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%) !important;
   border: none !important;
-  color: #fff !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
 }
 
 .note-modal__btn--primary:hover {
-  background: #1765cc !important;
+  background: linear-gradient(135deg, #1557b0 0%, #0d47a1 100%) !important;
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
+  transform: translateY(-1px);
 }
 
 .note-modal__btn--danger {
-  background: #d93025 !important;
+  background: linear-gradient(135deg, #d93025 0%, #b71c1c 100%) !important;
   border: none !important;
-  color: #fff !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(217, 48, 37, 0.3);
 }
 
 .note-modal__btn--danger:hover {
-  background: #c5221f !important;
+  background: linear-gradient(135deg, #c5221f 0%, #a11a14 100%) !important;
+  box-shadow: 0 4px 12px rgba(217, 48, 37, 0.4);
+  transform: translateY(-1px);
 }
 
 .note-modal__delete-title {
   margin: 0;
-  font-size: 16px;
-  color: #202124;
+  font-size: 17px;
+  color: #1a1a1a;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.6;
+  font-weight: 400;
 }
 
 .note-modal__note-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #f1f3f4;
-  color: #202124;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f5f5f5;
+  color: #1a1a1a;
   font-weight: 500;
+}
+
+/* ==================== 响应式设计 ==================== */
+@media (max-width: 1200px) {
+  .page-content {
+    padding: 40px 60px;
+  }
 }
 
 @media (max-width: 768px) {
   .page-content {
-    padding: 20px;
+    padding: 24px;
   }
 
   .notes-list-view__header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
+    gap: 20px;
+  }
+
+  .header-content h2 {
+    font-size: 28px;
   }
 
   .header-actions {
@@ -1085,6 +1187,7 @@ const handleColorSelect = async (color: string) => {
 
   .notes-list-view__grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
   }
 
   .notes-list-view__card {

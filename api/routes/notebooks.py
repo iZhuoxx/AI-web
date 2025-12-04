@@ -276,15 +276,14 @@ async def generate_note_title(
         {"role": "user", "content": [{"type": "input_text", "text": content}]},
     ]
 
-    request_payload = {
-        "model": "gpt-4.1-nano",
-        "input": messages,
-        "max_output_tokens": 80,
-        "temperature": 0.3,
-    }
-
     try:
-        data = await openai_client.responses_complete(request_payload, timeout=20.0)
+        data = await openai_client.responses_complete(
+            model="gpt-4.1-nano",
+            input=messages,
+            max_output_tokens=80,
+            temperature=0.3,
+            timeout=20.0,
+        )
     except Exception as exc:  # pragma: no cover - 网络异常兜底
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"请求标题生成失败：{exc}")
 

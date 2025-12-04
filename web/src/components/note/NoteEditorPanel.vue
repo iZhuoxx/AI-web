@@ -311,7 +311,16 @@
       <div class="editor-divider"></div>
 
       <!-- Tiptap 编辑器 -->
-      <editor-content v-if="editorInstance" :editor="editorInstance" class="tiptap-editor" />
+      <div 
+        ref="editorWrapperRef"
+        class="tiptap-editor-wrapper"
+        :class="{ 'is-scrolling': isEditorScrolling }"
+      >
+        <editor-content
+          v-if="editorInstance"
+          :editor="editorInstance"
+        />
+      </div>
     </section>
 
     <!-- 链接弹窗 -->
@@ -338,7 +347,7 @@
 <script setup lang="ts">
 import type { MenuProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { BubbleMenu } from '@tiptap/vue-3/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -438,6 +447,9 @@ const isHighlightActive = computed(() => editor.value?.isActive('highlight') ?? 
 const canUndo = computed(() => editor.value?.can().undo() ?? false)
 const canRedo = computed(() => editor.value?.can().redo() ?? false)
 const isApplyingContent = ref(false)
+const isEditorScrolling = ref(false)
+const editorWrapperRef = ref<HTMLElement | null>(null)
+const scrollHideTimer = ref<number | null>(null)
 
 // 编辑器操作方法（避免模板类型错误）
 const toggleBold = () => editor.value?.chain().focus().toggleBold().run()
@@ -450,16 +462,48 @@ const toggleCodeBlock = () => editor.value?.chain().focus().toggleCodeBlock().ru
 const setHorizontalRule = () => editor.value?.chain().focus().setHorizontalRule().run()
 const undo = () => editor.value?.chain().focus().undo().run()
 const redo = () => editor.value?.chain().focus().redo().run()
+
 const applyContentToEditor = (content: string) => {
   pendingContent.value = content
   if (!editor.value) return
   isApplyingContent.value = true
   const target = pendingContent.value ?? ''
-  // tiptap-markdown 重写了 setContent，会把传入字符串当作 Markdown 解析
   editor.value.commands.setContent(target || '')
   pendingContent.value = null
   nextTick(() => {
     isApplyingContent.value = false
+  })
+}
+
+const handleEditorScroll = () => {
+  isEditorScrolling.value = true
+  
+  if (scrollHideTimer.value !== null) {
+    clearTimeout(scrollHideTimer.value)
+  }
+  
+  scrollHideTimer.value = window.setTimeout(() => {
+    isEditorScrolling.value = false
+  }, 1000)
+}
+
+const detachScrollListener = () => {
+  if (editorWrapperRef.value) {
+    editorWrapperRef.value.removeEventListener('scroll', handleEditorScroll)
+  }
+  if (scrollHideTimer.value !== null) {
+    clearTimeout(scrollHideTimer.value)
+    scrollHideTimer.value = null
+  }
+}
+
+const attachScrollListener = () => {
+  nextTick(() => {
+    detachScrollListener()
+    
+    if (editorWrapperRef.value) {
+      editorWrapperRef.value.addEventListener('scroll', handleEditorScroll, { passive: true })
+    }
   })
 }
 
@@ -517,7 +561,6 @@ const editor = useEditor({
   },
   onUpdate: ({ editor }) => {
     if (isApplyingContent.value) return
-    // 使用类型断言访问 markdown 扩展
     const markdownStorage = (editor.storage as any).markdown
     noteContent.value = markdownStorage?.getMarkdown?.() || editor.getHTML()
     markUserEdit()
@@ -596,7 +639,6 @@ const openLinkModal = () => {
   const { from, to } = editor.value.state.selection
   const text = editor.value.state.doc.textBetween(from, to)
   
-  // 如果已经是链接，获取链接地址
   const attrs = editor.value.getAttributes('link')
   
   linkForm.label = text
@@ -621,14 +663,12 @@ const applyLink = () => {
   if (!editor.value) return
   
   if (linkForm.label.trim()) {
-    // 插入带文字的链接
     editor.value
       .chain()
       .focus()
       .insertContent(`<a href="${url}" target="_blank" rel="noopener noreferrer">${linkForm.label}</a>`)
       .run()
   } else {
-    // 为选中文字添加链接
     editor.value.chain().focus().setLink({ href: url }).run()
   }
   
@@ -667,7 +707,6 @@ const downloadBlob = (blob: Blob, filename: string) => {
 const exportMarkdown = (filename: string) => {
   if (!editor.value) return
   
-  // 使用类型断言访问 markdown 扩展
   const markdownStorage = (editor.value.storage as any).markdown
   const markdown = markdownStorage?.getMarkdown?.() || editor.value.getText()
   
@@ -821,8 +860,17 @@ watch(
     if (instance && pendingContent.value !== null) {
       applyContentToEditor(pendingContent.value)
     }
+    if (instance) {
+      attachScrollListener()
+    } else {
+      detachScrollListener()
+    }
   },
 )
+
+onMounted(() => {
+  attachScrollListener()
+})
 
 // 自动保存
 const performSave = async () => {
@@ -831,13 +879,9 @@ const performSave = async () => {
   showSavedIndicator.value = false
   
   try {
-    // 发送保存事件并等待父组件处理
     const saveData = { title: noteTitle.value, content: noteContent.value }
     emit('save', saveData)
     
-    // 等待一小段时间让父组件有时间处理
-    // 注意：这里假设父组件会同步或快速处理保存
-    // 如果需要更可靠的保存确认，应该由父组件调用一个回调
     await new Promise(resolve => setTimeout(resolve, 300))
     
     userEdited.value = false
@@ -907,14 +951,11 @@ const cancelTitleEdit = () => {
 const insertMarkdown = (markdown: string) => {
   if (!editor.value) return
   
-  // 在当前位置插入 Markdown 内容
   editor.value.commands.insertContent('\n\n' + markdown)
   
-  // 滚动到编辑器底部
   nextTick(() => {
-    const editorElement = document.querySelector('.tiptap-editor')
-    if (editorElement) {
-      editorElement.scrollTop = editorElement.scrollHeight
+    if (editorWrapperRef.value) {
+      editorWrapperRef.value.scrollTop = editorWrapperRef.value.scrollHeight
     }
   })
 }
@@ -925,6 +966,7 @@ defineExpose({
 })
 
 onBeforeUnmount(() => {
+  detachScrollListener()
   editor.value?.destroy()
   if (autoSaveTimer.value !== null) {
     clearTimeout(autoSaveTimer.value)
@@ -937,7 +979,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 12px 16px 16px;
+  padding: 10px 12px 12px;
   background: #fff;
   overflow: visible;
 }
@@ -1279,8 +1321,8 @@ onBeforeUnmount(() => {
   height: 16px;
 }
 
-/* Tiptap 编辑器样式 */
-.tiptap-editor {
+/* 编辑器容器 - 只负责布局，滚动条样式由父组件管理 */
+.tiptap-editor-wrapper {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1290,8 +1332,8 @@ onBeforeUnmount(() => {
   outline: none;
   padding: 8px 0 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  font-size: 18px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 2;
   color: #1f2937;
   min-height: 100%;
 }
@@ -1309,7 +1351,7 @@ onBeforeUnmount(() => {
 :deep(.tiptap-content p) {
   margin: 0.65em 0;
   font-size: 17px;
-  line-height: 1.65;
+  line-height: 1.8;
 }
 
 :deep(.tiptap-content h1) {
@@ -1362,7 +1404,7 @@ onBeforeUnmount(() => {
 :deep(.tiptap-content ol) {
   margin: 0.65em 0;
   padding-left: 2em;
-  line-height: 1.65;
+  line-height: 1.8;
 }
 
 :deep(.tiptap-content li) {
@@ -1486,23 +1528,5 @@ onBeforeUnmount(() => {
   border: none;
   border-top: 2px solid #e5e7eb;
   margin: 2em 0;
-}
-
-/* 滚动条样式 */
-.tiptap-editor::-webkit-scrollbar {
-  width: 8px;
-}
-
-.tiptap-editor::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tiptap-editor::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.tiptap-editor::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.15);
 }
 </style>
