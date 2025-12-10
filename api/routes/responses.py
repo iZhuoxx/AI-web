@@ -1,10 +1,32 @@
+import logging
+from pathlib import Path
+from uuid import uuid4
+
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Any, Dict, List
 from api.services import openai_client
 from api.settings import settings
 
-router = APIRouter(tags=["responses"]) 
+router = APIRouter(tags=["responses"])
+
+LOG_DIR = Path(__file__).resolve().parent.parent / "services" / "logs"
+LOG_FILE = LOG_DIR / "openai_responses.log"
+
+
+def _responses_logger() -> logging.Logger:
+    logger = logging.getLogger("openai_responses")
+    if logger.handlers:
+        return logger
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    logger.propagate = False
+    return logger
 
 def _check_auth(request: Request):
     if settings.INTERNAL_TOKEN and request.headers.get("X-API-KEY") != settings.INTERNAL_TOKEN:
@@ -43,7 +65,7 @@ def _build_responses_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     if "input" in raw:
         return raw
 
-    model = str(raw.get("model") or "gpt-4.1-mini")
+    model = str(raw.get("model") or "")
     system_prompt = str(raw.get("system_prompt") or raw.get("systemPrompt") or "").strip()
     text = str(raw.get("text") or raw.get("message") or "").strip()
     images = _coerce_str_list(raw.get("images"))
@@ -53,6 +75,7 @@ def _build_responses_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     prev_id = raw.get("previous_response_id") or raw.get("previousResponseId")
     temperature = raw.get("temperature")
     max_output_tokens = raw.get("max_output_tokens") or raw.get("maxTokens")
+    reasoning = raw.get("reasoning")
 
     input_blocks: List[Dict[str, Any]] = []
     if system_prompt:
@@ -98,6 +121,8 @@ def _build_responses_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
         payload["temperature"] = float(temperature)
     if isinstance(max_output_tokens, (int, float)):
         payload["max_output_tokens"] = int(max_output_tokens)
+    if reasoning is not None:
+        payload["reasoning"] = reasoning
 
     return payload
 
@@ -120,6 +145,8 @@ async def responses_complete_route(request: Request):
 async def responses_stream_route(request: Request):
     _check_auth(request)
     payload: Dict[str, Any] = await request.json()
+    # logger = _responses_logger()
+    # request_id = uuid4().hex[:8]
 
     try:
         normalized = _build_responses_payload(payload or {})
@@ -127,7 +154,12 @@ async def responses_stream_route(request: Request):
         raise
 
     async def event_gen():
-        async for chunk in openai_client.responses_stream(normalized):
-            yield chunk + "\n"  # newline delimited
+        try:
+            async for chunk in openai_client.responses_stream(normalized):
+                # logger.info("[%s] %s", request_id, chunk)
+                yield chunk + "\n"  # newline delimited
+        except Exception as exc:
+            # logger.exception("responses_stream_route error [%s]: %s", request_id, exc)
+            raise
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")

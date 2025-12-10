@@ -44,6 +44,18 @@ export type ImagePayload = {
   mimeType?: string
 }
 
+export type ReasoningStep = {
+  type: 'part' | 'delta' | 'summary'
+  content: string
+  timestamp: number
+}
+
+export type ReasoningState = {
+  phase: 'thinking' | 'streaming' | 'completed'
+  steps: ReasoningStep[]
+  isVisible: boolean
+}
+
 type WaitingStatus = { key: string; text: string }
 
 const WAITING_STATUS_BY_EVENT: Record<string, WaitingStatus> = {
@@ -137,6 +149,12 @@ const createInitialResponseUIState = (): ResponseUIState => ({
   statusKey: null,
   statusText: null,
   hasTextStarted: false,
+})
+
+const createInitialReasoningState = (): ReasoningState => ({
+  phase: 'thinking',
+  steps: [],
+  isVisible: false,
 })
 
 // ==================== 通用工具函数 ====================
@@ -365,6 +383,32 @@ function toDataUrl(payload: ImagePayload): string {
   return base64.startsWith('data:') ? base64 : `data:${mimeType};base64,${base64}`
 }
 
+// ==================== Reasoning 提取 ====================
+
+function extractReasoningText(payload: any): string | null {
+  if (payload === null || payload === undefined) return null
+  if (typeof payload === 'string') return payload
+  if (typeof payload.text === 'string') return payload.text
+  if (typeof payload.summary === 'string') return payload.summary
+  if (typeof payload.content === 'string') return payload.content
+  if (typeof payload.value === 'string') return payload.value
+
+  if (payload && typeof payload === 'object') {
+    const nested = ['content', 'parts', 'values', 'items']
+    for (const key of nested) {
+      const val = (payload as any)[key]
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          const found = extractReasoningText(item)
+          if (found !== null) return found
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 // ==================== 主函数 ====================
 
 export function useChat(options?: MessagesStore | UseChatOptions) {
@@ -506,6 +550,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
       tools: effectiveTools ?? undefined,
       includes: includeSet.size ? Array.from(includeSet) : undefined,
       previous_response_id: lastCompletedResponseId || undefined,
+      reasoning: { summary: 'auto', effort: "high"},
     }
 
     if (!selectedModel.includes('gpt-5')) {
@@ -540,6 +585,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     loadding.value = true
     stoppedFlag = false
     let uiState = createInitialResponseUIState()
+    let reasoningState = createInitialReasoningState()
 
     const syncUiState = (
       patch?: Partial<ResponseUIState>,
@@ -548,6 +594,54 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
       uiState = { ...uiState, ...(patch || {}) }
       messagesStore.setLastAssistantMeta({ ...(extraMeta || {}), uiState })
     }
+
+    const syncReasoningState = (patch: Partial<ReasoningState>) => {
+      reasoningState = { ...reasoningState, ...patch }
+      messagesStore.setLastAssistantMeta({ reasoning: reasoningState })
+    }
+
+    const appendReasoningStep = (
+      type: ReasoningStep['type'],
+      content: string,
+      options: { targetIndex?: number | null; forceNew?: boolean } = {}
+    ): number | null => {
+      const text = String(content)
+      if (text.length === 0) return options.targetIndex ?? null
+
+      const steps = reasoningState.steps
+      const targetIndex =
+        typeof options.targetIndex === 'number' && steps[options.targetIndex]?.type === type
+          ? options.targetIndex
+          : options.forceNew
+            ? null
+            : steps.length && steps[steps.length - 1].type === type
+            ? steps.length - 1
+            : null
+
+      if (targetIndex !== null) {
+        const existing = steps[targetIndex]
+        const merged = existing.content + text
+        if (merged !== existing.content) {
+          steps[targetIndex] = { ...existing, content: merged }
+          syncReasoningState({ steps: [...steps], isVisible: true })
+        }
+        return targetIndex
+      }
+
+      const newStep: ReasoningStep = {
+        type,
+        content: text,
+        timestamp: Date.now(),
+      }
+      steps.push(newStep)
+      syncReasoningState({
+        steps: [...steps],
+        isVisible: true,
+      })
+      return steps.length - 1
+    }
+
+    let currentDeltaIndex: number | null = null
 
     const applyWaitingStatus = (type: string) => {
       if (uiState.hasTextStarted || uiState.phase !== 'waiting') return
@@ -558,6 +652,12 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
 
     const markTextStarted = () => {
       if (uiState.hasTextStarted) return
+      
+      // 文本开始时，如果有 reasoning steps，标记为已完成
+      if (reasoningState.steps.length > 0 && reasoningState.phase !== 'completed') {
+        syncReasoningState({ phase: 'completed' })
+      }
+      
       syncUiState(
         { hasTextStarted: true, phase: 'streaming', statusKey: null, statusText: null },
         { loading: false },
@@ -628,6 +728,28 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
         applyWaitingStatus(evt.type)
 
         switch (evt.type) {
+          // ========== Reasoning 事件处理 ==========
+          case 'response.reasoning_summary_part.added': {
+            syncReasoningState({ phase: 'thinking' })
+            break
+          }
+
+          case 'response.reasoning_summary_part.done': {
+            syncReasoningState({ phase: 'thinking' })
+            currentDeltaIndex = appendReasoningStep('part', "\n", { forceNew: true })
+            break
+          }
+
+          case 'response.reasoning_summary_text.delta': {
+            const delta = extractReasoningText(evt.delta ?? evt.text ?? evt.reasoning_summary_text)
+            if (delta) {
+              syncReasoningState({ phase: 'streaming' })
+              currentDeltaIndex = appendReasoningStep('delta', delta, { targetIndex: currentDeltaIndex })
+            }
+            break
+          }
+
+          // ========== 文本输出 ==========
           case 'response.output_text.delta':
             if (typeof evt.delta === 'string') {
               markTextStarted()
@@ -709,7 +831,14 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     } finally {
       controller = null
       loadding.value = false
-      messagesStore.setLastAssistantMeta({ loading: false, uiState })
+      if (stoppedFlag) {
+        return
+      }
+      messagesStore.setLastAssistantMeta({ 
+        loading: false, 
+        uiState,
+        reasoning: reasoningState 
+      })
     }
   }
 
@@ -721,14 +850,22 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     const list = messagesStore.messages?.value
     const last = Array.isArray(list) && list.length ? list[list.length - 1] : null
     const prev = (last?.meta?.uiState as Partial<ResponseUIState> | undefined) ?? undefined
+    const prevReasoning = (last?.meta?.reasoning as Partial<ReasoningState> | undefined) ?? undefined
+    const stopStatusText = '回复已停止'
+    
     messagesStore.setLastAssistantMeta({
       loading: false,
       uiState: {
         phase: 'finished',
-        statusKey: null,
-        statusText: null,
+        statusKey: 'terminated',
+        statusText: stopStatusText,
         hasTextStarted: Boolean(prev?.hasTextStarted),
       },
+      reasoning: prevReasoning ? {
+        phase: 'completed',
+        steps: Array.isArray(prevReasoning.steps) ? prevReasoning.steps : [],
+        isVisible: Boolean(prevReasoning.isVisible),
+      } : undefined,
     })
   }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -26,8 +27,13 @@ router = APIRouter(prefix="/attachments", tags=["attachments"])
 
 
 def _sanitize_filename(filename: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", filename)
-    return cleaned or "upload.bin"
+    # Keep readable unicode (e.g. Chinese), strip path separators/control chars, and bound length.
+    normalized = unicodedata.normalize("NFKC", filename or "").strip()
+    basename = normalized.replace("\\", "/").split("/")[-1]
+    basename = re.sub(r"[\x00-\x1f]", "", basename)
+    cleaned = re.sub(r"[^\w.\- ()\u4e00-\u9fff]+", "_", basename, flags=re.UNICODE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ._")
+    return cleaned[:255] or "upload.bin"
 
 
 def _get_notebook_owned(notebook_id: uuid.UUID, user: models.User, db: Session) -> models.Notebook:

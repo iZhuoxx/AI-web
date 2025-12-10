@@ -288,7 +288,7 @@ async def generate_note_title(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"请求标题生成失败：{exc}")
 
     def _extract_text(payload: dict) -> str:
-        """Try to pull the first text reply from Responses or ChatCompletions style payloads."""
+        """Try to pull the first text reply from a Responses API payload."""
         if not isinstance(payload, dict):
             return ""
 
@@ -302,14 +302,6 @@ async def generate_note_title(
                         text_val = item.get("text")
                         if isinstance(text_val, str):
                             return text_val
-
-        choices = payload.get("choices") or []
-        if choices and isinstance(choices[0], dict):
-            message = choices[0].get("message") or {}
-            if isinstance(message, dict):
-                content_text = message.get("content")
-                if isinstance(content_text, str):
-                    return content_text
         return ""
 
     raw_title = _extract_text(data)

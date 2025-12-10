@@ -2,9 +2,9 @@
 <script setup lang="ts">
 import type { TMessage, ResponseUIState } from '@/types'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message as antdMessage } from 'ant-design-vue'
-import { Copy, ThumbsUp, ThumbsDown, Volume2, FilePlus2, Loader2 } from 'lucide-vue-next'
+import { Copy, ThumbsUp, ThumbsDown, Volume2, FilePlus2, Loader2, ChevronRight } from 'lucide-vue-next'
 import { generateNoteTitle } from '@/services/api'
 import { useNotebookStore } from '@/composables/useNotes'
 
@@ -18,11 +18,25 @@ type CitationPayload = {
   label?: number
 }
 
+type ReasoningStep = {
+  type: 'part' | 'delta' | 'summary'
+  content: string
+  timestamp: number
+}
+
+type ReasoningState = {
+  phase: 'thinking' | 'streaming' | 'completed'
+  steps: ReasoningStep[]
+  isVisible: boolean
+}
+
 const parseNumber = (val: any): number | undefined => {
   if (typeof val === 'number' && Number.isFinite(val)) return val
   if (typeof val === 'string' && val.trim() !== '' && !Number.isNaN(Number(val))) return Number(val)
   return undefined
 }
+
+const normalizeReasoningText = (text: string) => text.replace(/\s+/g, ' ').trim()
 
 const props = defineProps<{ message: TMessage }>()
 const emit = defineEmits<{
@@ -84,6 +98,38 @@ const uiState = computed<ResponseUIState>(() => {
   }
 })
 
+// Reasoning 状态 - 原始版本（可能为 null）
+const reasoningRaw = computed<ReasoningState | null>(() => {
+  const raw = props.message.meta?.reasoning
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    phase: raw.phase || 'thinking',
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    isVisible: Boolean(raw.isVisible),
+  }
+})
+
+// Reasoning 状态 - 非 null 版本（用于模板）
+const reasoning = computed<ReasoningState>(() => {
+  return reasoningRaw.value ?? {
+    phase: 'thinking',
+    steps: [],
+    isVisible: false,
+  }
+})
+
+const reasoningStepsForDisplay = computed(() => {
+  const seen = new Set<string>()
+  return reasoning.value.steps
+    .filter(step => {
+      const normalized = normalizeReasoningText(step.content || '')
+      if (!normalized) return false
+      if (seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+})
+
 const isBeforeFirstText = computed(() => !uiState.value.hasTextStarted && !props.message.msg)
 const showWaitingSpinner = computed(
   () => isBeforeFirstText.value && uiState.value.phase === 'waiting' && !uiState.value.statusText,
@@ -91,6 +137,35 @@ const showWaitingSpinner = computed(
 const shouldShowStatusText = computed(
   () => isBeforeFirstText.value && !!uiState.value.statusText,
 )
+
+// 显示 reasoning：有 steps 且标记为可见
+const showReasoning = computed(() => {
+  return reasoning.value.isVisible && reasoningStepsForDisplay.value.length > 0
+})
+
+const showInlineReasoningToggle = computed(() => showReasoning.value && isBeforeFirstText.value)
+
+// Reasoning 展开状态
+const reasoningExpanded = ref(false)
+
+// 根据 phase 自动控制展开/折叠
+watch(
+  () => reasoningRaw.value?.phase,
+  (phase) => {
+    if (phase === 'thinking' || phase === 'streaming') {
+      reasoningExpanded.value = true
+    } else if (phase === 'completed') {
+      // 完成后自动折叠
+      reasoningExpanded.value = false
+    }
+  },
+  { immediate: true }
+)
+
+// 格式化步骤内容
+const formatStepContent = (step: ReasoningStep): string => {
+  return step.content
+}
 
 const handleCitationOpen = (payload: CitationPayload) => {
   emit('open-citation', payload)
@@ -162,8 +237,6 @@ function getFileIcon(type?: string) {
 
 // 简洁的文件图标（用于用户上传的文件卡片）- 类似 Gemini 风格
 function getSimpleFileIcon(type?: string) {
-  const baseColor = '#5f6368' // Google 灰色
-  
   if (isPdfType(type)) {
     // PDF 图标 - 红色
     return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -246,24 +319,45 @@ const copyMarkdown = async () => {
     antdMessage.warning('暂无可复制的文本')
     return
   }
+  const copyPlainText = async () => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+    return false
+  }
   isCopying.value = true
   try {
-    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
-      const markdownBlob = new Blob([text], { type: 'text/markdown' })
-      const plainBlob = new Blob([text], { type: 'text/plain' })
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/markdown': markdownBlob,
-          'text/plain': plainBlob,
-        }),
-      ])
-    } else if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      throw new Error('当前环境不支持复制')
+    const canUseClipboardItem =
+      typeof ClipboardItem !== 'undefined' &&
+      'clipboard' in navigator &&
+      typeof navigator.clipboard?.write === 'function'
+    if (canUseClipboardItem) {
+      const payload: Record<string, Blob> = {
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      }
+      const supportsMarkdown =
+        typeof (ClipboardItem as any).supports === 'function' &&
+        (ClipboardItem as any).supports('text/markdown')
+      if (supportsMarkdown) {
+        payload['text/markdown'] = new Blob([text], { type: 'text/markdown' })
+      }
+      await navigator.clipboard.write([new ClipboardItem(payload)])
+      antdMessage.success(supportsMarkdown ? '已复制 Markdown' : '已复制文本')
+      return
     }
-    antdMessage.success('已复制 Markdown')
+    if (await copyPlainText()) {
+      antdMessage.success('已复制文本')
+      return
+    }
+    throw new Error('当前环境不支持复制')
   } catch (err: any) {
+    try {
+      if (await copyPlainText()) {
+        antdMessage.success('已复制文本')
+        return
+      }
+    } catch {}
     const msg = err?.message || '复制失败，请稍后再试'
     antdMessage.error(msg)
   } finally {
@@ -348,11 +442,66 @@ const createNoteFromReply = async () => {
     <!-- AI 消息 -->
     <template v-else>
       <div class="bubble ai">
-        <div v-if="showWaitingSpinner || shouldShowStatusText" class="ai-status">
-          <span v-if="showWaitingSpinner" class="loader-dots"><span></span><span></span><span></span></span>
-          <span v-if="shouldShowStatusText" class="ai-status__text">{{ uiState.statusText }}</span>
+        <!-- 等待/状态指示器 -->
+        <div
+          v-if="showWaitingSpinner || shouldShowStatusText"
+          class="ai-status-block"
+        >
+          <div class="ai-status">
+            <span v-if="showWaitingSpinner" class="loader-dots"><span></span><span></span><span></span></span>
+            <span
+              v-if="shouldShowStatusText"
+              class="ai-status__text"
+              :class="{ 'no-shimmer': uiState.statusKey === 'terminated' }"
+            >{{ uiState.statusText }}</span>
+            <button
+              v-if="showInlineReasoningToggle"
+              class="reasoning-toggle inline"
+              type="button"
+              :aria-expanded="reasoningExpanded"
+              :aria-label="reasoningExpanded ? '收起思考过程' : '展开思考过程'"
+              @click="reasoningExpanded = !reasoningExpanded"
+            >
+              <ChevronRight
+                class="reasoning-icon"
+                :class="{ expanded: reasoningExpanded }"
+                :size="14"
+              />
+            </button>
+          </div>
         </div>
-        <div v-else class="md-wrap">
+
+        <!-- Reasoning 区域 - ChatGPT/Gemini 风格，显示所有步骤 -->
+        <div v-if="showReasoning" class="reasoning-container">
+          <button
+            v-if="!showInlineReasoningToggle"
+            class="reasoning-toggle"
+            type="button"
+            :aria-expanded="reasoningExpanded"
+            :aria-label="reasoningExpanded ? '收起思考过程' : '展开思考过程'"
+            @click="reasoningExpanded = !reasoningExpanded"
+          >
+            <ChevronRight
+              class="reasoning-icon"
+              :class="{ expanded: reasoningExpanded }"
+              :size="14"
+            />
+            <span class="reasoning-label">思考过程</span>
+          </button>
+          
+          <div v-if="reasoningExpanded" class="reasoning-content">
+            <div
+              v-for="(step, index) in reasoningStepsForDisplay"
+              :key="`step-${index}-${step.timestamp}`"
+              class="reasoning-paragraph"
+            >
+              <MarkdownRenderer :source="formatStepContent(step)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 主要内容 -->
+        <div v-if="!showWaitingSpinner && !shouldShowStatusText" class="md-wrap">
           <MarkdownRenderer :source="props.message.msg" :citations="inlineCitations" @citation-click="handleCitationOpen" />
         </div>
 
@@ -381,7 +530,10 @@ const createNoteFromReply = async () => {
           </div>
         </div>
 
-        <div v-if="!showWaitingSpinner && !shouldShowStatusText" class="ai-actions">
+        <div
+          v-if="!showWaitingSpinner && !shouldShowStatusText"
+          class="ai-actions"
+        >
           <button
             class="action-btn"
             type="button"
@@ -504,6 +656,14 @@ const createNoteFromReply = async () => {
   padding: 2px 0;
 }
 
+.ai-status-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .ai-status__text {
   display: inline-flex;
   align-items: center;
@@ -521,6 +681,12 @@ const createNoteFromReply = async () => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: statusShimmer 1.6s ease-in-out infinite;
+}
+.ai-status__text.no-shimmer {
+  background: none;
+  -webkit-background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
 }
 
 .ai-status .loader-dots { display: inline-flex; gap: 5px; }
@@ -544,6 +710,104 @@ const createNoteFromReply = async () => {
   100% { background-position: -200% 0; }
 }
 
+/* Reasoning 区域 - ChatGPT/Gemini 风格 */
+.reasoning-container {
+  margin-bottom: 16px;
+}
+
+.reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.reasoning-toggle.inline {
+  padding: 2px;
+  margin-left: 4px;
+}
+
+.reasoning-toggle:hover {
+  background: #f1f5f9;
+}
+
+.reasoning-icon {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  color: #94a3b8;
+}
+
+.reasoning-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.reasoning-label {
+  color: #64748b;
+  letter-spacing: 0.01em;
+}
+
+.reasoning-content {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-left: 3px solid #e2e8f0;
+  border-radius: 6px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reasoning-paragraph {
+  position: relative;
+  margin: 0 0 10px 0;
+  padding-left: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.reasoning-paragraph::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #cbd5e1;
+  line-height: 1.2;
+}
+
+.reasoning-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.reasoning-paragraph :deep(.prose) {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: inherit;
+}
+
+.reasoning-paragraph :deep(p) {
+  margin: 0;
+}
+
 /* 用户消息容器 */
 .user-message-container {
   display: flex;
@@ -555,7 +819,6 @@ const createNoteFromReply = async () => {
 
 /* 文本样式 - 统一用户和AI消息的样式 */
 .text { 
-  /* font-size: 18px; */
   margin: 0; 
   white-space: pre-wrap; 
   word-break: break-word; 
