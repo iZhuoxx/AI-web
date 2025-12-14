@@ -1,6 +1,6 @@
 import { useStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
-import type { TMessage, TFileInMessage, ResponseUIState } from '@/types'
+import type { TMessage, TFileInMessage, ResponseUIState } from '@/types/chat'
 
 const createInitialUiState = (): ResponseUIState => ({
   phase: 'waiting',
@@ -75,42 +75,6 @@ function createMessagesStore(storageKey: string) {
     })
   }
 
-  const mergeDeltaNaturally = (prev: string, delta: string): string => {
-    if (typeof delta !== 'string' || delta.length === 0) return prev
-
-    let next = delta
-
-    // ① 先处理「空格+标点」这种常见 delta，比如 " ,"
-    //    如果 prev 结尾是非空字符，next 是空格+标点，就把 prev 末尾空格 / next 头部空格都去掉
-    if (/\S$/.test(prev) && /^\s+[.,!?;:]/.test(next)) {
-      // 去掉 prev 末尾可能存在的空格（防御性处理）
-      prev = prev.replace(/\s+$/, '')
-      // 去掉 next 开头空格，只保留标点
-      next = next.replace(/^\s+/, '')
-      return prev + next
-    }
-
-    const punct = /^[.,!?;:]/
-
-    // ② 标点本身就在开头的情况（比如模型正好切成 "." 这种）
-    if (punct.test(next)) {
-      return prev.replace(/\s+$/, '') + next
-    }
-
-    // ③ 前后都是空格 → 删掉后面的
-    if (prev.endsWith(' ') && next.startsWith(' ')) {
-      next = next.trimStart()
-    }
-
-    // ④ 单词被拆开，如 "Confirm" / "ing"
-    if (!next.startsWith(' ') && /[a-zA-Z]/.test(next[0])) {
-      return prev + next
-    }
-
-    return prev + next
-  }
-
-
   const appendToLastAssistant = (delta: string) => {
     const list = messages.value
     if (!list.length) return
@@ -135,7 +99,7 @@ function createMessagesStore(storageKey: string) {
       : typeof last.msg === 'string'
         ? last.msg
         : ''
-    last.msg = mergeDeltaNaturally(currentText, delta)
+    last.msg = currentText + delta
   }
 
   const appendImageToLastAssistant = (src: string) => {

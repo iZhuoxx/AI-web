@@ -165,6 +165,19 @@ class FlashcardOut(FlashcardBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class FlashcardGenerateRequest(BaseModel):
+    attachment_ids: List[UUID] = Field(default_factory=list)
+    count: Optional[int] = Field(default=None, ge=1, le=60)
+    focus: Optional[str] = Field(default=None, max_length=600)
+    folder_name: Optional[str] = Field(default=None, max_length=255)
+    model: Optional[str] = Field(default=None, max_length=100)
+
+
+class FlashcardGenerateResponse(BaseModel):
+    folder: FlashcardFolderOut
+    flashcards: List[FlashcardOut]
+
+
 class NotebookQuizBase(BaseModel):
     notebook_id: UUID
     question: str

@@ -5,6 +5,7 @@ import {
   TRANSCRIBE_REALTIME_WS_ENDPOINT,
 } from '@/constants/audio'
 import type { TranscriptSegment } from '@/types/notes'
+import { getModelFor } from '@/composables/setting'
 
 export type NoiseReductionMode = 'none' | 'auto' | 'near_field' | 'far_field'
 
@@ -145,7 +146,7 @@ const formatTimestamp = (seconds: number) => {
 export function useRealtimeTranscription(options?: RealtimeTranscriptionOptions) {
   const endpoint = options?.endpoint?.trim() || TRANSCRIBE_REALTIME_WS_ENDPOINT
   const targetSampleRate = options?.sampleRate ?? DEFAULT_SAMPLE_RATE
-  const preferredModel = options?.model?.trim() || DEFAULT_AUDIO_MODEL
+  const preferredModel = options?.model?.trim() || getModelFor('audioRealtime') || DEFAULT_AUDIO_MODEL
   const noiseReduction = options?.noiseReduction ?? 'near_field'
   const vadThreshold = options?.vadThreshold ?? 0.5
   const silenceDurationMs = options?.silenceDurationMs ?? 500

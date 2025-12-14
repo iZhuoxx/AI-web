@@ -24,6 +24,7 @@ declare module '@vue/runtime-core' {
     ASelectOption: typeof import('ant-design-vue/es')['SelectOption']
     ASpin: typeof import('ant-design-vue/es')['Spin']
     ATag: typeof import('ant-design-vue/es')['Tag']
+    ATextarea: typeof import('ant-design-vue/es')['Textarea']
     ATooltip: typeof import('ant-design-vue/es')['Tooltip']
     AttachmentDocViewer: typeof import('./src/components/note/AttachmentDocViewer.vue')['default']
     AttachmentPdfViewer: typeof import('./src/components/note/AttachmentPdfViewer.vue')['default']

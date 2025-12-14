@@ -140,7 +140,6 @@ import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
 import { useNotebookStore } from '@/composables/useNotes'
-import useSetting from '@/composables/setting'
 
 export type NoteChatPanelExposed = {
   startNewConversation: () => void
@@ -158,10 +157,6 @@ const emit = defineEmits<{
     label?: number
   }): void
 }>()
-
-// 固定模型为 GPT-5
-const setting = useSetting()
-setting.value.model = 'gpt-5-mini-2025-08-07'
 
 // 当前笔记本的向量库 ID，用于 file_search
 const notebookStore = useNotebookStore()
@@ -194,6 +189,7 @@ const createChatInstance = (id: string | number | null) => {
     storageKey: 'notes-chat-messages' + id,
     tools: () => chatTools.value,
     includes: () => (vectorStoreId.value ? ['file_search_call.results'] : []),
+    modelKey: 'noteChat',
   })
   instance.messagesStore.setPreferredTools?.(chatTools.value ?? null)
   chatInstance.value = instance
@@ -381,7 +377,7 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   // Track message count before send
   messageCountBeforeSend.value = chatMessages.value.length
 
-  await send({ text, imagesDataUrls, files })
+  await send({ text, imagesDataUrls, files, reasoning: { summary: 'auto' } })
 }
 
 // 主按钮（发送/停止）

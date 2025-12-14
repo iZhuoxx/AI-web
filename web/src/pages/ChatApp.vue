@@ -12,7 +12,6 @@ import {
 import { message as antdMessage } from 'ant-design-vue'
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed, watch } from 'vue'
 import Message from '.././components/message.vue'
-import useMessages from '@/composables/messages'
 import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
@@ -20,8 +19,11 @@ import useSetting from '@/composables/setting'
 import { MODEL_OPTIONS } from '@/constants/models'
 
 const DEFAULT_CHAT_TOOLS = [{ type: 'image_generation' }]
-const messages = useMessages()
-const { loadding, send, stop } = useChat({ messagesStore: messages, tools: DEFAULT_CHAT_TOOLS })
+const { loadding, send, stop, messagesStore } = useChat({
+  storageKey: 'chat-app-messages',
+  tools: DEFAULT_CHAT_TOOLS,
+  modelKey: 'chat',
+})
 
 const {
   imageFiles,
@@ -57,9 +59,10 @@ const realtimeSegments = realtime.segments
 
 const modelOptions = MODEL_OPTIONS
 const selectedModel = computed({
-  get: () => setting.value.model,
+  get: () => setting.value.models.chat,
   set: (val: string) => {
     if (val) {
+      setting.value.models.chat = val
       setting.value.model = val
     }
   },
@@ -68,7 +71,7 @@ const selectedModel = computed({
 const isAudioProcessing = ref(false)
 const hasPendingUploads = computed(() => genericFiles.value.some(it => it.status === 'pending'))
 
-const chatMessages = messages.messages
+const chatMessages = messagesStore.messages
 const hasMessages = computed(() => chatMessages.value.length > 0)
 
 const handlePaste = (event: ClipboardEvent) => {
@@ -226,7 +229,7 @@ onBeforeUnmount(() => {
 })
 
 function clearMessages() {
-  messages.clearMessages()
+  messagesStore.clearMessages()
 }
 
 async function onSend(ev?: Event | { preventDefault?: () => void }) {
@@ -254,7 +257,7 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   await nextTick()
   autoResize()
 
-  await send({ text, imagesDataUrls, files })
+  await send({ text, imagesDataUrls, files, reasoning: { summary: 'auto' } })
 }
 
 // Auto-scroll logic

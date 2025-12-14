@@ -3,6 +3,7 @@ import {
   DEFAULT_AUDIO_MODEL,
   TRANSCRIBE_ENDPOINT,
 } from '@/constants/audio'
+import { getModelFor } from '@/composables/setting'
 
 export type TranscriptionResult = {
   text: string
@@ -28,7 +29,7 @@ const supportsMediaRecorder = () => {
 
 export function useSpeechToText(options?: SpeechToTextOptions) {
   const endpoint = options?.endpoint?.trim() || TRANSCRIBE_ENDPOINT
-  const chosenModel = ref(options?.model || DEFAULT_AUDIO_MODEL)
+  const chosenModel = ref(options?.model || getModelFor('audioTranscribe') || DEFAULT_AUDIO_MODEL)
   const chosenLanguage = ref(options?.language || '')
 
   const isRecording = ref(false)

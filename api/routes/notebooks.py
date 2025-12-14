@@ -6,10 +6,10 @@ import uuid
 from typing import List, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
-
+from typing import Any, Dict, List
 from api.dependencies import get_current_user, require_csrf
 from api.db.database import get_db
 from api.db import models
@@ -21,8 +21,13 @@ from api.schemas import (
     NotebookOut,
     NotebookUpdate,
     NoteOut,
+    FlashcardOut,
+    FlashcardFolderOut,
+    FlashcardGenerateRequest,
+    FlashcardGenerateResponse,
 )
-
+from api.settings import settings
+from api.services.openai_utils import build_responses_payload
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -33,6 +38,17 @@ class TitleGenerateRequest(BaseModel):
 
 class TitleGenerateResponse(BaseModel):
     title: str
+
+
+class StructuredFlashcard(BaseModel):
+    question: str = Field(..., description="清晰的提问或提示，用于闪卡正面")
+    answer: str = Field(..., description="简洁的答案，用于闪卡背面，50-120字以内")
+    sources: list[str] = Field(default_factory=list, description="引用的文件名或 file_id")
+
+
+class StructuredFlashcardSet(BaseModel):
+    folder_name: str = Field(..., description="闪卡合集的名称")
+    flashcards: list[StructuredFlashcard]
 
 
 def _notebook_query(user_id: uuid.UUID) -> Select[tuple[models.Notebook]]:
@@ -124,6 +140,29 @@ def _load_folders(db: Session, user: models.User, folder_ids: Sequence[uuid.UUID
             detail=f"Notebook folder not found for ids: {', '.join(missing)}",
         )
     return folders
+
+
+def _flashcard_folder_to_schema(folder: models.FlashcardFolder) -> FlashcardFolderOut:
+    return FlashcardFolderOut(
+        id=folder.id,
+        notebook_id=folder.notebook_id,
+        name=folder.name,
+        description=folder.description,
+        created_at=folder.created_at,
+        updated_at=folder.updated_at,
+        flashcard_ids=[card.id for card in folder.flashcards],
+    )
+
+
+def _flashcard_to_schema(card: models.Flashcard) -> FlashcardOut:
+    return FlashcardOut(
+        id=card.id,
+        notebook_id=card.notebook_id,
+        question=card.question,
+        answer=card.answer,
+        meta=card.meta,
+        folder_ids=[folder.id for folder in card.folders],
+    )
 
 
 @router.get("", response_model=List[NotebookOut])
@@ -248,6 +287,184 @@ def delete_notebook(
     db.delete(notebook)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def enforce_no_additional_properties(schema: dict):
+    """Recursively set additionalProperties=False for every object schema."""
+    def walk(node: object):
+        if isinstance(node, dict):
+            if node.get("type") == "object":
+                node.setdefault("additionalProperties", False)
+                props = node.get("properties")
+                if isinstance(props, dict):
+                    node["required"] = list(props.keys())
+            # Recurse into common schema containers
+            for key, val in list(node.items()):
+                if isinstance(val, (dict, list)):
+                    walk(val)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(schema)
+
+
+@router.post(
+    "/{notebook_id}/flashcards/generate",
+    response_model=FlashcardGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+async def generate_flashcards_from_openai(
+    notebook_id: uuid.UUID,
+    payload: FlashcardGenerateRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FlashcardGenerateResponse:
+    notebook = _get_notebook_for_user(notebook_id, user, db)
+
+    attachment_map = {att.id: att for att in notebook.attachments}
+    requested_ids = payload.attachment_ids or [att.id for att in notebook.attachments if att.openai_file_id]
+    selected: list[models.Attachment] = []
+
+    for att_id in requested_ids:
+        att = attachment_map.get(att_id)
+        if not att:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"附件不存在或不属于该笔记本: {att_id}")
+        if not att.openai_file_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"附件 {att.filename or att.id} 尚未同步到 OpenAI（缺少 openai_file_id）",
+            )
+        selected.append(att)
+
+    if not selected:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要一个已上传到 OpenAI 的附件")
+
+    file_blocks = [{"type": "input_file", "file_id": att.openai_file_id} for att in selected if att.openai_file_id]
+
+    model_name = payload.model or getattr(settings, "FLASHCARD_MODEL", None) or "gpt-4o-2024-08-06"
+    desired_count = payload.count
+    focus_text = (payload.focus or "").strip()
+
+    system_prompt = (
+        "You are a bilingual study coach that creates concise Q/A flashcards in Chinese. "
+        "Use the provided files (input_file) to ground every card. "
+        "Each question should be clear and the answer compact (1-3 sentences). "
+        "Prefer high-yield concepts, formulas, or definitions. "
+        "If a count is provided, generate exactly that many cards; otherwise choose a balanced set. "
+        "Always fill the structured output schema precisely."
+    )
+
+    focus_line = f"重点/Focus: {focus_text}" if focus_text else "重点/Focus: 自动选择最重要的知识点。"
+    count_line = f"生成数量: {desired_count} 张" if desired_count else "生成数量: 模型自行决定（通常 8-15 张）。"
+    file_names = ", ".join(filter(None, [att.filename or "" for att in selected])) or "已选资料"
+
+    user_prompt = "\n".join(
+        [
+          f"Notebook: {notebook.title or '未命名笔记本'}",
+          f"资料文件: {file_names}",
+          count_line,
+          focus_line,
+          "输出语言: 中文。",
+        ]
+    )
+    
+    user_content = [{"type": "input_text", "text": user_prompt}, *file_blocks]
+    schema = StructuredFlashcardSet.model_json_schema()
+    enforce_no_additional_properties(schema)
+
+    openai_payload: Dict[str, Any] = build_responses_payload(
+        {
+            "model": model_name,
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                {"role": "user", "content": user_content},
+            ],
+            "max_output_tokens": 2048,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "StructuredFlashcardSet",
+                    "strict": True,
+                    "schema": schema,
+                }
+            },
+        }
+    )
+
+    if not model_name.lower().startswith("gpt-5"):
+        openai_payload["temperature"] = float(0.2)
+
+    try:
+        data = await openai_client.responses_complete(openai_payload, timeout=60.0)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    def _extract_structured(payload: dict) -> dict:
+        if not isinstance(payload, dict):
+            return {}
+        output = payload.get("output") or []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            content_list = item.get("content") or []
+            for c in content_list:
+                if not isinstance(c, dict):
+                    continue
+                if "parsed" in c and c.get("parsed") is not None:
+                    return c.get("parsed") or {}
+                json_val = c.get("json")
+                if isinstance(json_val, dict):
+                    return json_val
+                text_val = c.get("text")
+                if isinstance(text_val, str) and text_val.strip():
+                    try:
+                        import json
+
+                        return json.loads(text_val)
+                    except Exception:
+                        continue
+        return {}
+
+    structured_payload = _extract_structured(data)
+
+    try:
+        result: StructuredFlashcardSet = StructuredFlashcardSet.model_validate(structured_payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"解析闪卡结构化输出失败: {exc}")
+
+    folder_name = (payload.folder_name or result.folder_name or notebook.title or "AI 闪卡").strip()
+    if len(folder_name) > 255:
+        folder_name = folder_name[:255]
+
+    folder = models.FlashcardFolder(
+        user_id=user.id,
+        notebook_id=notebook.id,
+        name=folder_name,
+        description=focus_text or None,
+    )
+
+    for item in result.flashcards:
+        card = models.Flashcard(
+            user_id=user.id,
+            notebook_id=notebook.id,
+            question=item.question.strip(),
+            answer=item.answer.strip(),
+            meta={"sources": item.sources} if item.sources else None,
+        )
+        folder.flashcards.append(card)
+
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    for card in folder.flashcards:
+        db.refresh(card)
+
+    return FlashcardGenerateResponse(
+        folder=_flashcard_folder_to_schema(folder),
+        flashcards=[_flashcard_to_schema(card) for card in folder.flashcards],
+    )
 
 
 @router.post(

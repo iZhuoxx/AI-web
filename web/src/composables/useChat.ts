@@ -1,9 +1,9 @@
 // src/composables/useChat.ts
 import { ref, nextTick } from 'vue'
-import useSetting from '@/composables/setting'
+import useSetting, { getModelFor, type ModelKey } from '@/composables/setting'
 import useMessages, { type MessagesStore } from '@/composables/messages'
 import { useResponsesStream } from '@/composables/useResponsesStream'
-import type { TFileInMessage, ResponseUIState } from '@/types'
+import type { TFileInMessage, ResponseUIState } from '@/types/chat'
 
 // ==================== 类型定义（保持原有导出） ====================
 
@@ -14,6 +14,7 @@ export interface UseChatOptions {
   storageKey?: string
   tools?: ToolConfig[] | null | (() => ToolConfig[] | null | undefined)
   includes?: string | string[] | (() => string[] | null | undefined)
+  modelKey?: ModelKey
 }
 
 // 保持原有类型导出，供外部使用
@@ -413,6 +414,9 @@ function extractReasoningText(payload: any): string | null {
 
 export function useChat(options?: MessagesStore | UseChatOptions) {
   const setting = useSetting()
+  const modelKey: ModelKey = !options || 'addMessage' in (options as MessagesStore)
+    ? 'chat'
+    : ((options as UseChatOptions).modelKey ?? 'chat')
 
   // 解析 messagesStore
   const messagesStore: MessagesStore = (() => {
@@ -519,10 +523,11 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     content: string,
     imagesDataUrls: string[],
     files: TFileInMessage[],
-    tools?: ToolConfig[] | null
+    tools?: ToolConfig[] | null,
+    reasoning?: Record<string, any>
   ): Record<string, any> => {
     const s = setting.value as any
-    const selectedModel = String(s.model)
+    const selectedModel = getModelFor(modelKey)
     const systemPrompt = s.systemPrompt || ''
     const temperature = typeof s.temperature === 'number' ? s.temperature : 0.7
     const maxOutputTokens = typeof s.maxTokens === 'number' ? s.maxTokens : undefined
@@ -550,7 +555,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
       tools: effectiveTools ?? undefined,
       includes: includeSet.size ? Array.from(includeSet) : undefined,
       previous_response_id: lastCompletedResponseId || undefined,
-      reasoning: { summary: 'auto', effort: "high"},
+      reasoning: reasoning ?? undefined,
     }
 
     if (!selectedModel.includes('gpt-5')) {
@@ -572,12 +577,14 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     files,
     onDelta,
     tools,
+    reasoning,
   }: {
     text: string
     imagesDataUrls: string[]
     files: TFileInMessage[]
     onDelta?: (delta: string) => void
     tools?: ToolConfig[] | null
+    reasoning?: Record<string, any>
   }) {
     const content = text.trim()
     if (!content && !imagesDataUrls.length && !files.length) return
@@ -682,7 +689,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     })
 
     // 构建请求
-    const body = buildRequestBody(content, imagesDataUrls, files, tools)
+    const body = buildRequestBody(content, imagesDataUrls, files, tools, reasoning)
 
     // 占位 assistant
     messagesStore.addAssistantPlaceholder()

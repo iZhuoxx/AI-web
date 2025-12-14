@@ -1,5 +1,7 @@
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteAttachment } from '@/types/notes'
+import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
+import { getModelFor } from '@/composables/setting'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || '/api'
 const CSRF_HEADER = 'X-CSRF-Token'
@@ -89,6 +91,25 @@ interface ApiNotebook {
   folders: ApiNotebookFolderRef[]
 }
 
+interface ApiFlashcardFolder {
+  id: string
+  notebook_id: string
+  name: string
+  description: string | null
+  created_at: string
+  updated_at: string
+  flashcard_ids: string[]
+}
+
+interface ApiFlashcard {
+  id: string
+  notebook_id: string
+  question: string
+  answer: string
+  meta: Record<string, unknown> | null
+  folder_ids: string[]
+}
+
 const mapNotebookNote = (note: ApiNotebookNote): NotebookNote => ({
   id: note.id,
   title: note.title,
@@ -142,6 +163,25 @@ const mapNotebookSummary = (notebook: ApiNotebook): NotebookSummary => ({
   createdAt: notebook.created_at,
   updatedAt: notebook.updated_at,
   isArchived: notebook.is_archived,
+})
+
+const mapFlashcardFolder = (folder: ApiFlashcardFolder): FlashcardFolder => ({
+  id: folder.id,
+  notebookId: folder.notebook_id,
+  name: folder.name,
+  description: folder.description,
+  flashcardIds: folder.flashcard_ids ?? [],
+  createdAt: folder.created_at,
+  updatedAt: folder.updated_at,
+})
+
+const mapFlashcard = (card: ApiFlashcard): Flashcard => ({
+  id: card.id,
+  notebookId: card.notebook_id,
+  question: card.question,
+  answer: card.answer,
+  meta: card.meta ?? null,
+  folderIds: card.folder_ids ?? [],
 })
 
 export const ensureCsrfToken = async (force = false): Promise<string | null> => {
@@ -266,10 +306,13 @@ export const getNotebook = async (id: string): Promise<NotebookDetail> => {
   return mapNotebookDetail(data)
 }
 
-export const generateNoteTitle = async (content: string): Promise<string> => {
+export const generateNoteTitle = async (content: string, options?: { model?: string }): Promise<string> => {
+  const body: Record<string, unknown> = { content }
+  if (options?.model) body.model = options.model
+
   const data = await apiFetch<{ title?: string }>(`/notebooks/title`, {
     method: 'POST',
-    body: { content },
+    body,
   })
   if (typeof data?.title === 'string' && data.title.trim()) return data.title.trim()
   return ''
@@ -347,6 +390,57 @@ export const deleteAttachment = async (attachmentId: string): Promise<void> => {
   await apiFetch<void>(`/attachments/${attachmentId}`, { method: 'DELETE' })
 }
 
+export const listFlashcardFolders = async (options?: { notebookId?: string }): Promise<FlashcardFolder[]> => {
+  const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
+  const data = await apiFetch<ApiFlashcardFolder[]>(`/flashcard-folders${query}`, {
+    method: 'GET',
+    skipCsrf: true,
+  })
+  return data.map(mapFlashcardFolder)
+}
+
+export const listFlashcards = async (options?: { notebookId?: string }): Promise<Flashcard[]> => {
+  const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
+  const data = await apiFetch<ApiFlashcard[]>(`/flashcards${query}`, { method: 'GET', skipCsrf: true })
+  return data.map(mapFlashcard)
+}
+
+export const updateFlashcard = async (
+  cardId: string,
+  payload: { question?: string; answer?: string; meta?: Record<string, unknown> | null; folderIds?: string[] },
+): Promise<Flashcard> => {
+  const body: Record<string, unknown> = {}
+  if (payload.question !== undefined) body.question = payload.question
+  if (payload.answer !== undefined) body.answer = payload.answer
+  if (payload.meta !== undefined) body.meta = payload.meta
+  if (payload.folderIds !== undefined) body.folder_ids = payload.folderIds
+
+  const data = await apiFetch<ApiFlashcard>(`/flashcards/${cardId}`, { method: 'PUT', body })
+  return mapFlashcard(data)
+}
+
+export const generateFlashcardsForNotebook = async (
+  notebookId: string,
+  payload?: { attachmentIds?: string[]; count?: number; focus?: string; folderName?: string; model?: string },
+): Promise<{ folder: FlashcardFolder; flashcards: Flashcard[] }> => {
+  const body: Record<string, unknown> = {}
+  if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
+  if (payload?.count) body.count = payload.count
+  if (payload?.focus) body.focus = payload.focus
+  if (payload?.folderName) body.folder_name = payload.folderName
+  if (payload?.model) body.model = payload.model
+
+  const data = await apiFetch<{ folder: ApiFlashcardFolder; flashcards: ApiFlashcard[] }>(
+    `/notebooks/${notebookId}/flashcards/generate`,
+    { method: 'POST', body },
+  )
+
+  return {
+    folder: mapFlashcardFolder(data.folder),
+    flashcards: (data.flashcards ?? []).map(mapFlashcard),
+  }
+}
+
 interface OpenAIFileResponse {
   id: string
   object: string
@@ -410,7 +504,7 @@ export const transcribeAudio = async (
 ): Promise<AudioTranscriptionResponse> => {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('model', options?.model ?? DEFAULT_AUDIO_MODEL)
+  formData.append('model', options?.model ?? getModelFor('audioTranscribe') ?? DEFAULT_AUDIO_MODEL)
   formData.append('response_format', options?.responseFormat ?? 'json')
   if (options?.language) formData.append('language', options.language)
   if (typeof options?.temperature === 'number') {
