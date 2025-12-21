@@ -78,10 +78,7 @@
               tabindex="0"
             >
               <div class="card-header">
-                <div class="card-header__info">
-                  <h3>{{ notebook.title || '未命名笔记' }}</h3>
-                  <span>{{ formatDate(notebook.updatedAt) }}</span>
-                </div>
+                <h3 class="card-title">{{ notebook.title || '未命名笔记' }}</h3>
                 <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-card-menu">
                   <button class="card-menu" type="button" @click.stop>
                     <MoreOutlined />
@@ -105,12 +102,12 @@
                   </template>
                 </a-dropdown>
               </div>
-              <p class="card-summary">{{ notebook.summary || '暂无摘要，进入笔记继续完善内容～' }}</p>
+              <span class="card-time">{{ formatDate(notebook.updatedAt) }}</span>
             </div>
           </div>
 
           <div v-if="isSearching && !notebooks.length" class="notes-list-view__placeholder notes-list-view__placeholder--empty">
-            <a-empty description="没有找到相关笔记，换个关键词试试？" />
+            <a-empty description="没有找到相关笔记，换个关键词试试?" />
           </div>
 
           <div v-else-if="!isSearching && !notebooks.length" class="notes-list-view__empty-hint">
@@ -124,6 +121,7 @@
       v-model:visible="renameModal.open"
       :footer="null"
       :maskClosable="false"
+      :closable="false"
       :width="420"
       centered
       destroy-on-close
@@ -132,9 +130,6 @@
       @afterClose="resetRenameModal"
     >
       <div class="note-modal__body">
-        <div class="note-modal__avatar">
-          <BookOutlined />
-        </div>
         <label class="note-modal__label" for="note-rename-input">笔记本名称*</label>
         <a-input
           id="note-rename-input"
@@ -165,6 +160,7 @@
       v-model:visible="deleteModal.open"
       :footer="null"
       :maskClosable="false"
+      :closable="false"
       :width="360"
       centered
       destroy-on-close
@@ -705,7 +701,6 @@ const handleColorSelect = async (color: string) => {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   border: 1px solid #e8e8e8;
   transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
   cursor: pointer;
@@ -714,27 +709,10 @@ const handleColorSelect = async (color: string) => {
   overflow: hidden;
 }
 
-.notes-list-view__card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 100%);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-}
-
 .notes-list-view__card:hover {
   border-color: #d0d0d0;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   transform: translateY(-4px);
-}
-
-.notes-list-view__card:hover::before {
-  opacity: 1;
 }
 
 .notes-list-view__card:focus-visible {
@@ -744,32 +722,32 @@ const handleColorSelect = async (color: string) => {
 
 /* ==================== 卡片颜色变体 ==================== */
 .card-color--yellow {
-  background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
+  background: #fff8e1;
   border-color: #f5e6b3;
 }
 
 .card-color--blue {
-  background: linear-gradient(135deg, #f5f9ff 0%, #e3f2fd 100%);
+  background: #e3f2fd;
   border-color: #b3d9ff;
 }
 
 .card-color--green {
-  background: linear-gradient(135deg, #f5fdf7 0%, #e8f5e9 100%);
+  background: #e8f5e9;
   border-color: #b3e6b8;
 }
 
 .card-color--purple {
-  background: linear-gradient(135deg, #faf5fd 0%, #f3e5f5 100%);
+  background: #f3e5f5;
   border-color: #e0b3f0;
 }
 
 .card-color--pink {
-  background: linear-gradient(135deg, #fff5f8 0%, #fce4ec 100%);
+  background: #fce4ec;
   border-color: #ffb3c9;
 }
 
 .card-color--orange {
-  background: linear-gradient(135deg, #fff9f0 0%, #ffe0b2 100%);
+  background: #ffe0b2;
   border-color: #ffcc80;
 }
 
@@ -791,14 +769,10 @@ const handleColorSelect = async (color: string) => {
   box-shadow: none;
 }
 
-.notes-list-view__card--create::before {
-  display: none;
-}
-
 .notes-list-view__card--create:hover {
   border-color: #1a73e8;
   border-style: solid;
-  background: linear-gradient(135deg, #f8fbff 0%, #f0f7ff 100%);
+  background: #f0f7ff;
   box-shadow: 0 4px 16px rgba(26, 115, 232, 0.15);
 }
 
@@ -828,13 +802,13 @@ const handleColorSelect = async (color: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%);
+  background: #f0f0f0;
   color: #666666;
   transition: all 0.25s ease;
 }
 
 .notes-list-view__card--create:hover .create-card__icon {
-  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+  background: #1a73e8;
   color: #ffffff;
   transform: scale(1.1);
 }
@@ -855,46 +829,32 @@ const handleColorSelect = async (color: string) => {
   justify-content: space-between;
   gap: 10px;
   align-items: flex-start;
-}
-
-.card-header__info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   flex: 1;
-  min-width: 0;
 }
 
-.card-header h3 {
+.card-title {
   margin: 0;
   font-size: 17px;
   font-weight: 500;
   color: #1a1a1a;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
   letter-spacing: -0.2px;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 7;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.card-header span {
+/* ==================== 卡片时间 ==================== */
+.card-time {
   font-size: 12px;
   color: #999999;
   font-weight: 400;
-}
-
-/* ==================== 卡片摘要 ==================== */
-.card-summary {
-  margin: 0;
-  color: #4a4a4a;
-  font-size: 14px;
-  line-height: 1.6;
-  flex: 1;
-  display: -webkit-box;
-  line-clamp: 5;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  letter-spacing: 0.1px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 /* ==================== 卡片菜单按钮 ==================== */
@@ -906,22 +866,20 @@ const handleColorSelect = async (color: string) => {
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.8);
+  background: transparent;
   color: #666666;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  backdrop-filter: blur(8px);
 }
 
 .card-menu:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.05);
   color: #1a1a1a;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .card-menu:active {
-  background: rgba(240, 240, 240, 0.95);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 /* ==================== 下拉菜单 ==================== */
@@ -952,6 +910,139 @@ const handleColorSelect = async (color: string) => {
 :deep(.note-card-menu .ant-dropdown-menu-item-divider) {
   background: #f0f0f0;
   margin: 8px 0;
+}
+
+/* ==================== 模态框样式 ==================== */
+:deep(.ant-modal-wrap.note-modal .ant-modal) {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+:deep(.ant-modal-wrap.note-modal .ant-modal-content) {
+  border-radius: 16px !important;
+  padding: 32px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.note-modal__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.note-modal__body--delete {
+  gap: 28px;
+}
+
+.note-modal__avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a73e8;
+  color: #ffffff;
+  font-size: 40px;
+  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.25);
+}
+
+.note-modal__label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1a1a1a;
+  align-self: flex-start;
+  letter-spacing: 0.1px;
+}
+
+.note-modal__input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.3s ease;
+}
+
+.note-modal__input :deep(.ant-input) {
+  border: none;
+  padding: 14px 16px;
+  font-size: 15px;
+  color: #1a1a1a;
+}
+
+.note-modal__input:hover {
+  border-color: #d0d0d0;
+}
+
+.note-modal__input:focus-within {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+}
+
+.note-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+}
+
+.note-modal__btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  height: 36px !important;
+  padding: 0 20px !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.note-modal__btn--ghost {
+  background: #f5f5f5 !important;
+  color: #5f6368 !important;
+}
+
+.note-modal__btn--ghost:hover {
+  background: #e8e8e8 !important;
+  color: #3c4043 !important;
+}
+
+.note-modal__btn--primary {
+  background: #1a73e8 !important;
+  color: #ffffff !important;
+}
+
+.note-modal__btn--primary:hover {
+  background: #1557b0 !important;
+}
+
+.note-modal__btn--danger {
+  background: #d93025 !important;
+  color: #ffffff !important;
+}
+
+.note-modal__btn--danger:hover {
+  background: #c5221f !important;
+}
+
+.note-modal__delete-title {
+  margin: 0;
+  font-size: 17px;
+  color: #1a1a1a;
+  text-align: center;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.note-modal__note-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-weight: 500;
 }
 
 /* ==================== 颜色选择器模态框 ==================== */
@@ -1004,155 +1095,17 @@ const handleColorSelect = async (color: string) => {
   box-shadow: 0 4px 16px rgba(26, 115, 232, 0.3);
 }
 
-.color-picker__item--yellow { background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%); }
-.color-picker__item--blue { background: linear-gradient(135deg, #f5f9ff 0%, #e3f2fd 100%); }
-.color-picker__item--green { background: linear-gradient(135deg, #f5fdf7 0%, #e8f5e9 100%); }
-.color-picker__item--purple { background: linear-gradient(135deg, #faf5fd 0%, #f3e5f5 100%); }
-.color-picker__item--pink { background: linear-gradient(135deg, #fff5f8 0%, #fce4ec 100%); }
-.color-picker__item--orange { background: linear-gradient(135deg, #fff9f0 0%, #ffe0b2 100%); }
+.color-picker__item--yellow { background: #fff8e1; }
+.color-picker__item--blue { background: #e3f2fd; }
+.color-picker__item--green { background: #e8f5e9; }
+.color-picker__item--purple { background: #f3e5f5; }
+.color-picker__item--pink { background: #fce4ec; }
+.color-picker__item--orange { background: #ffe0b2; }
 
 .color-selected-icon {
   color: #1a73e8;
   font-size: 28px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-}
-
-/* ==================== 模态框样式 ==================== */
-:deep(.note-modal.ant-modal) {
-  border-radius: 16px;
-}
-
-:deep(.note-modal .ant-modal-content) {
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-}
-
-.note-modal__body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-}
-
-.note-modal__body--delete {
-  gap: 28px;
-}
-
-.note-modal__avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
-  color: #ffffff;
-  font-size: 40px;
-  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.3);
-}
-
-.note-modal__label {
-  font-size: 15px;
-  font-weight: 500;
-  color: #1a1a1a;
-  align-self: flex-start;
-  letter-spacing: 0.1px;
-}
-
-.note-modal__input {
-  width: 100%;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-  transition: all 0.3s ease;
-}
-
-.note-modal__input :deep(.ant-input) {
-  border: none;
-  padding: 14px 16px;
-  font-size: 15px;
-  color: #1a1a1a;
-}
-
-.note-modal__input:hover {
-  border-color: #d0d0d0;
-}
-
-.note-modal__input:focus-within {
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
-}
-
-.note-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  width: 100%;
-}
-
-.note-modal__btn {
-  border-radius: 8px !important;
-  font-weight: 500 !important;
-  height: 40px !important;
-  padding: 0 28px !important;
-  font-size: 15px !important;
-  transition: all 0.25s ease !important;
-}
-
-.note-modal__btn--ghost {
-  background: transparent !important;
-  border: none !important;
-  color: #1a73e8 !important;
-}
-
-.note-modal__btn--ghost:hover {
-  background: rgba(26, 115, 232, 0.1) !important;
-}
-
-.note-modal__btn--primary {
-  background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%) !important;
-  border: none !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
-}
-
-.note-modal__btn--primary:hover {
-  background: linear-gradient(135deg, #1557b0 0%, #0d47a1 100%) !important;
-  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
-  transform: translateY(-1px);
-}
-
-.note-modal__btn--danger {
-  background: linear-gradient(135deg, #d93025 0%, #b71c1c 100%) !important;
-  border: none !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(217, 48, 37, 0.3);
-}
-
-.note-modal__btn--danger:hover {
-  background: linear-gradient(135deg, #c5221f 0%, #a11a14 100%) !important;
-  box-shadow: 0 4px 12px rgba(217, 48, 37, 0.4);
-  transform: translateY(-1px);
-}
-
-.note-modal__delete-title {
-  margin: 0;
-  font-size: 17px;
-  color: #1a1a1a;
-  text-align: center;
-  line-height: 1.6;
-  font-weight: 400;
-}
-
-.note-modal__note-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: #f5f5f5;
-  color: #1a1a1a;
-  font-weight: 500;
 }
 
 /* ==================== 响应式设计 ==================== */
@@ -1193,5 +1146,17 @@ const handleColorSelect = async (color: string) => {
   .notes-list-view__card {
     width: 100%;
   }
+}
+</style>
+
+<style>
+/* Modal 全局样式 - 确保圆角生效 */
+.ant-modal-wrap.note-modal .ant-modal {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.ant-modal-wrap.note-modal .ant-modal-content {
+  border-radius: 16px !important;
 }
 </style>

@@ -99,8 +99,8 @@ onMounted(() => {
       <div class="toggle-wrap">
         <button class="toggle-btn" type="button" @click="emit('toggle')" :aria-label="tooltipText">
           <svg class="toggle-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2H6a2 2 0 0 1 -2 -2z" stroke-width="2" />
-            <path d="M9 4v16" stroke-width="2" />
+            <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2H6a2 2 0 0 1 -2 -2z" stroke-width="1.6" />
+            <path d="M9 4v16" stroke-width="1.6" />
           </svg>
         </button>
         <div class="toggle-tooltip">{{ tooltipText }}</div>
@@ -158,11 +158,11 @@ onMounted(() => {
 
 <style scoped>
 .sidebar {
-  --rail-size: 44px;
+  --rail-size: 48px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(15, 23, 42, 0.08);
-  padding: 18px 14px;
+  padding: 20px 16px;
   height: 100%;
   box-sizing: border-box;
   background: #f1f5f9;
@@ -202,7 +202,7 @@ onMounted(() => {
 
 .sidebar__brand-text {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 17px;
   color: #0f172a;
   white-space: nowrap;
   transition: opacity 0.25s ease, transform 0.25s ease;
@@ -229,8 +229,8 @@ onMounted(() => {
 .toggle-btn {
   background: transparent;
   border: none;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -245,8 +245,8 @@ onMounted(() => {
 }
 
 .toggle-svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .toggle-tooltip {
@@ -282,14 +282,14 @@ onMounted(() => {
 .sidebar__item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 12px;
+  padding: 8px 12px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: #f1f5f9;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-  font-size: 12px;
+  font-size: 13px;
   color: #0f172a;
 }
 
@@ -319,8 +319,8 @@ onMounted(() => {
 }
 
 .sidebar__icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -329,8 +329,8 @@ onMounted(() => {
 }
 
 .sidebar__icon svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .sidebar__body {
@@ -341,6 +341,7 @@ onMounted(() => {
 
 .sidebar__label {
   font-weight: 600;
+  font-size: 14px;
 }
 
 .sidebar.is-collapsed .sidebar__body {
@@ -361,7 +362,7 @@ onMounted(() => {
   width: 100%;
   border-radius: 16px;
   border: none;
-  padding: 12px 14px;
+  padding: 13px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -378,8 +379,8 @@ onMounted(() => {
 }
 
 .user-chip .avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 12px;
   background: #f1f5f9;
   display: flex;

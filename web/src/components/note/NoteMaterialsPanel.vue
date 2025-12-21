@@ -1015,7 +1015,7 @@ defineExpose({ focusAttachmentByCitation })
 .upload-floating {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: 20px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -1024,12 +1024,30 @@ defineExpose({ focusAttachmentByCitation })
 }
 
 .upload-btn {
-  min-width: 140px;
-  border-radius: 999px;
-  box-shadow: none;
-  height: 38px;
-  font-weight: 600;
-  gap: 6px;
+  border-radius: 16px;
+  height: 48px;
+  min-width: 0;
+  padding: 0 26px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  gap: 8px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.22s ease, filter 0.22s ease;
+}
+
+.upload-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  filter: brightness(1.04);
+}
+
+.upload-btn:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
 }
 
 .rename-modal__body,

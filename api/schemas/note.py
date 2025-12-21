@@ -170,6 +170,7 @@ class FlashcardGenerateRequest(BaseModel):
     count: Optional[int] = Field(default=None, ge=1, le=60)
     focus: Optional[str] = Field(default=None, max_length=600)
     folder_name: Optional[str] = Field(default=None, max_length=255)
+    folder_id: Optional[UUID] = None
     model: Optional[str] = Field(default=None, max_length=100)
 
 

@@ -290,7 +290,7 @@ def delete_notebook(
 
 
 def enforce_no_additional_properties(schema: dict):
-    """Recursively set additionalProperties=False for every object schema."""
+    """Recursively set additionalProperties=False for every object schema, and ensure required lists are present."""
     def walk(node: object):
         if isinstance(node, dict):
             if node.get("type") == "object":
@@ -322,6 +322,28 @@ async def generate_flashcards_from_openai(
     db: Session = Depends(get_db),
 ) -> FlashcardGenerateResponse:
     notebook = _get_notebook_for_user(notebook_id, user, db)
+
+    target_folder = None
+    if payload.folder_id:
+        target_folder = (
+            db.execute(
+                select(models.FlashcardFolder)
+                .where(
+                    models.FlashcardFolder.id == payload.folder_id,
+                    models.FlashcardFolder.user_id == user.id,
+                )
+                .options(selectinload(models.FlashcardFolder.flashcards))
+            )
+            .scalars()
+            .first()
+        )
+        if target_folder is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flashcard folder not found")
+        if target_folder.notebook_id != notebook.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="目标闪卡合集不属于当前笔记本",
+            )
 
     attachment_map = {att.id: att for att in notebook.attachments}
     requested_ids = payload.attachment_ids or [att.id for att in notebook.attachments if att.openai_file_id]
@@ -357,7 +379,7 @@ async def generate_flashcards_from_openai(
     )
 
     focus_line = f"重点/Focus: {focus_text}" if focus_text else "重点/Focus: 自动选择最重要的知识点。"
-    count_line = f"生成数量: {desired_count} 张" if desired_count else "生成数量: 模型自行决定（通常 8-15 张）。"
+    count_line = f"生成数量: {desired_count} 张" if desired_count else "生成数量: 模型自行决定。"
     file_names = ", ".join(filter(None, [att.filename or "" for att in selected])) or "已选资料"
 
     user_prompt = "\n".join(
@@ -429,6 +451,20 @@ async def generate_flashcards_from_openai(
 
     structured_payload = _extract_structured(data)
 
+    if not isinstance(structured_payload, dict):
+        structured_payload = {}
+
+    if not structured_payload.get("folder_name"):
+        structured_payload["folder_name"] = (
+            payload.folder_name
+            or (target_folder.name if target_folder else None)
+            or notebook.title
+            or "AI 闪卡"
+        )
+
+    if not structured_payload.get("flashcards"):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="生成闪卡失败：模型未返回任何闪卡内容，请重试")
+
     try:
         result: StructuredFlashcardSet = StructuredFlashcardSet.model_validate(structured_payload)
     except ValidationError as exc:
@@ -438,13 +474,14 @@ async def generate_flashcards_from_openai(
     if len(folder_name) > 255:
         folder_name = folder_name[:255]
 
-    folder = models.FlashcardFolder(
+    target_folder = target_folder or models.FlashcardFolder(
         user_id=user.id,
         notebook_id=notebook.id,
         name=folder_name,
         description=focus_text or None,
     )
 
+    new_cards: list[models.Flashcard] = []
     for item in result.flashcards:
         card = models.Flashcard(
             user_id=user.id,
@@ -453,17 +490,18 @@ async def generate_flashcards_from_openai(
             answer=item.answer.strip(),
             meta={"sources": item.sources} if item.sources else None,
         )
-        folder.flashcards.append(card)
+        new_cards.append(card)
+        target_folder.flashcards.append(card)
 
-    db.add(folder)
+    db.add(target_folder)
     db.commit()
-    db.refresh(folder)
-    for card in folder.flashcards:
+    db.refresh(target_folder)
+    for card in new_cards:
         db.refresh(card)
 
     return FlashcardGenerateResponse(
-        folder=_flashcard_folder_to_schema(folder),
-        flashcards=[_flashcard_to_schema(card) for card in folder.flashcards],
+        folder=_flashcard_folder_to_schema(target_folder),
+        flashcards=[_flashcard_to_schema(card) for card in new_cards],
     )
 
 

@@ -204,7 +204,7 @@ type DragMoveEvent = {
   relatedContext?: { element?: NoteItem }
 }
 
-type DragStartEvent = SortableEvent & { item?: HTMLElement | null }
+type DragStartEvent = Partial<SortableEvent> & { item?: HTMLElement | null } & Record<string, any>
 
 const handleMove = (event: DragMoveEvent) => {
   const dragged: NoteItem | undefined = event?.draggedContext?.element
@@ -424,7 +424,10 @@ const onDragEnd = () => {
   background: transparent;
   cursor: grab;
   border-radius: 8px;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: background-color 0.18s ease, color 0.18s ease, opacity 0.16s ease, visibility 0.16s ease;
 }
 
 .drag-handle:active {
@@ -436,14 +439,14 @@ const onDragEnd = () => {
 }
 
 .drag-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   color: #9ca3af;
 }
 
 .item-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin-top: 1px;
   color: #2563eb;
   flex-shrink: 0;
@@ -460,6 +463,8 @@ const onDragEnd = () => {
 
 .item-title {
   font-weight: 500;
+  font-size: 15px;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -469,6 +474,10 @@ const onDragEnd = () => {
   display: flex;
   align-items: center;
   gap: 4px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0.16s ease;
 }
 
 .more-btn {
@@ -493,6 +502,22 @@ const onDragEnd = () => {
 .more-icon {
   width: 16px;
   height: 16px;
+}
+
+.note-item:hover .drag-handle,
+.note-item:focus-within .drag-handle,
+.note-item--dragging .drag-handle {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.note-item:hover .item-actions,
+.note-item:focus-within .item-actions,
+.note-item--dragging .item-actions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 :deep(.note-actions-dropdown .ant-dropdown-menu) {
