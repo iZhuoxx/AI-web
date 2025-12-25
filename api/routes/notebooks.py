@@ -25,6 +25,8 @@ from api.schemas import (
     FlashcardFolderOut,
     FlashcardGenerateRequest,
     FlashcardGenerateResponse,
+    MindMapGenerateRequest,
+    MindMapOut,
 )
 from api.settings import settings
 from api.services.openai_utils import build_responses_payload
@@ -49,6 +51,22 @@ class StructuredFlashcard(BaseModel):
 class StructuredFlashcardSet(BaseModel):
     folder_name: str = Field(..., description="闪卡合集的名称")
     flashcards: list[StructuredFlashcard]
+
+
+class StructuredMindMapNode(BaseModel):
+    title: str = Field(..., description="节点标题")
+    summary: str | None = Field(default=None, description="节点的简短备注")
+    children: list["StructuredMindMapNode"] = Field(default_factory=list, description="子节点")
+
+
+class StructuredMindMap(BaseModel):
+    title: str = Field(..., description="思维导图名称")
+    description: str | None = Field(default=None, description="导图简介")
+    root: StructuredMindMapNode
+
+
+StructuredMindMapNode.model_rebuild()
+StructuredMindMap.model_rebuild()
 
 
 def _notebook_query(user_id: uuid.UUID) -> Select[tuple[models.Notebook]]:
@@ -309,6 +327,34 @@ def enforce_no_additional_properties(schema: dict):
     walk(schema)
 
 
+def _extract_structured_output(payload: dict) -> dict:
+    """Extract the first structured/json response block from Responses API payload."""
+    if not isinstance(payload, dict):
+        return {}
+    output = payload.get("output") or []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        content_list = item.get("content") or []
+        for c in content_list:
+            if not isinstance(c, dict):
+                continue
+            if "parsed" in c and c.get("parsed") is not None:
+                return c.get("parsed") or {}
+            json_val = c.get("json")
+            if isinstance(json_val, dict):
+                return json_val
+            text_val = c.get("text")
+            if isinstance(text_val, str) and text_val.strip():
+                try:
+                    import json
+
+                    return json.loads(text_val)
+                except Exception:
+                    continue
+    return {}
+
+
 @router.post(
     "/{notebook_id}/flashcards/generate",
     response_model=FlashcardGenerateResponse,
@@ -423,33 +469,7 @@ async def generate_flashcards_from_openai(
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
-    def _extract_structured(payload: dict) -> dict:
-        if not isinstance(payload, dict):
-            return {}
-        output = payload.get("output") or []
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            content_list = item.get("content") or []
-            for c in content_list:
-                if not isinstance(c, dict):
-                    continue
-                if "parsed" in c and c.get("parsed") is not None:
-                    return c.get("parsed") or {}
-                json_val = c.get("json")
-                if isinstance(json_val, dict):
-                    return json_val
-                text_val = c.get("text")
-                if isinstance(text_val, str) and text_val.strip():
-                    try:
-                        import json
-
-                        return json.loads(text_val)
-                    except Exception:
-                        continue
-        return {}
-
-    structured_payload = _extract_structured(data)
+    structured_payload = _extract_structured_output(data)
 
     if not isinstance(structured_payload, dict):
         structured_payload = {}
@@ -503,6 +523,150 @@ async def generate_flashcards_from_openai(
         folder=_flashcard_folder_to_schema(target_folder),
         flashcards=[_flashcard_to_schema(card) for card in new_cards],
     )
+
+
+def _build_mind_elixir_node(node: StructuredMindMapNode, *, is_root: bool = False) -> dict:
+    children = [_build_mind_elixir_node(child) for child in node.children]
+    data = {
+        "id": str(uuid.uuid4()),
+        "topic": node.title.strip() or "未命名节点",
+    }
+    if is_root:
+        data["root"] = True
+        data["expanded"] = True
+    if node.summary:
+        data["note"] = node.summary.strip()
+    if children:
+        data["children"] = children
+    return data
+
+
+def _structured_mindmap_to_data(mindmap: StructuredMindMap) -> dict:
+    return {
+        "nodeData": _build_mind_elixir_node(mindmap.root, is_root=True),
+        "linkData": {},
+        "template": "right",
+        "direction": 1,
+        "meta": {"title": mindmap.title},
+    }
+
+
+@router.post(
+    "/{notebook_id}/mindmaps/generate",
+    response_model=MindMapOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+async def generate_mindmap_from_openai(
+    notebook_id: uuid.UUID,
+    payload: MindMapGenerateRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MindMapOut:
+    notebook = _get_notebook_for_user(notebook_id, user, db)
+
+    attachment_map = {att.id: att for att in notebook.attachments}
+    requested_ids = payload.attachment_ids or [att.id for att in notebook.attachments if att.openai_file_id]
+    selected: list[models.Attachment] = []
+
+    for att_id in requested_ids:
+        att = attachment_map.get(att_id)
+        if not att:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"附件不存在或不属于该笔记本: {att_id}")
+        if not att.openai_file_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"附件 {att.filename or att.id} 尚未同步到 OpenAI（缺少 openai_file_id）",
+            )
+        selected.append(att)
+
+    if not selected:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要一个已上传到 OpenAI 的附件")
+
+    file_blocks = [{"type": "input_file", "file_id": att.openai_file_id} for att in selected if att.openai_file_id]
+
+    model_name = payload.model or getattr(settings, "MINDMAP_MODEL", None) or "gpt-4o-2024-08-06"
+    focus_text = (payload.focus or "").strip()
+    user_title = (payload.title or notebook.title or "AI 思维导图").strip()
+
+    system_prompt = (
+        "You are a bilingual study assistant that creates concise mind maps in Chinese. "
+        "Use the provided files (input_file) as sources. "
+        "Return a clean hierarchical structure with a single root and 3-8 main branches, depth 2-3. "
+        "Keep titles short, add optional summaries when helpful, and avoid markdown. "
+        "Always follow the JSON schema strictly."
+    )
+
+    focus_line = f"聚焦/Focus: {focus_text}" if focus_text else "聚焦/Focus: 课程的关键概念、关系和步骤。"
+    file_names = ", ".join(filter(None, [att.filename or "" for att in selected])) or "已选资料"
+
+    user_prompt = "\n".join(
+        [
+            f"Notebook: {notebook.title or '未命名笔记本'}",
+            f"Mind map title: {user_title}",
+            f"资料文件: {file_names}",
+            focus_line,
+            "输出语言: 中文。",
+        ]
+    )
+
+    user_content = [{"type": "input_text", "text": user_prompt}, *file_blocks]
+    schema = StructuredMindMap.model_json_schema()
+    enforce_no_additional_properties(schema)
+
+    openai_payload: Dict[str, Any] = build_responses_payload(
+        {
+            "model": model_name,
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                {"role": "user", "content": user_content},
+            ],
+            "max_output_tokens": 2048,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "StructuredMindMap",
+                    "strict": True,
+                    "schema": schema,
+                }
+            },
+        }
+    )
+
+    if not model_name.lower().startswith("gpt-5"):
+        openai_payload["temperature"] = float(0.2)
+
+    try:
+        data = await openai_client.responses_complete(openai_payload, timeout=60.0)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    structured_payload = _extract_structured_output(data) or {}
+
+    try:
+        result: StructuredMindMap = StructuredMindMap.model_validate(structured_payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"解析思维导图结构化输出失败: {exc}")
+
+    title = (payload.title or result.title or notebook.title or "AI 思维导图").strip()
+    if len(title) > 255:
+        title = title[:255]
+    description = (payload.description or result.description or focus_text or "").strip() or None
+    data_payload = _structured_mindmap_to_data(result)
+
+    mindmap = models.MindMap(
+        user_id=user.id,
+        notebook_id=notebook.id,
+        title=title,
+        description=description,
+        data=data_payload,
+    )
+
+    db.add(mindmap)
+    db.commit()
+    db.refresh(mindmap)
+
+    return MindMapOut.model_validate(mindmap)
 
 
 @router.post(

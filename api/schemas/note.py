@@ -179,6 +179,14 @@ class FlashcardGenerateResponse(BaseModel):
     flashcards: List[FlashcardOut]
 
 
+class MindMapGenerateRequest(BaseModel):
+    attachment_ids: List[UUID] = Field(default_factory=list)
+    focus: Optional[str] = Field(default=None, max_length=600)
+    title: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=400)
+    model: Optional[str] = Field(default=None, max_length=100)
+
+
 class NotebookQuizBase(BaseModel):
     notebook_id: UUID
     question: str

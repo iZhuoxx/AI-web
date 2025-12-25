@@ -574,13 +574,7 @@ class MindMap(Base, TimestampMixin):
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # 示例结构：
-    # {
-    #   "nodes": [{ "id": "n1", "label": "主题", "x": 0, "y": 0, "data": {...} }],
-    #   "edges": [{ "id": "e1", "source": "n1", "target": "n2", "label": "因果" }],
-    #   "version": 1
-    # }
+    
     data: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="mindmaps")

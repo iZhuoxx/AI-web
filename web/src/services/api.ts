@@ -1,5 +1,6 @@
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteAttachment } from '@/types/notes'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
+import type { MindMap } from '@/types/mindmaps'
 import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 import { getModelFor } from '@/composables/setting'
 
@@ -110,6 +111,16 @@ interface ApiFlashcard {
   folder_ids: string[]
 }
 
+interface ApiMindMap {
+  id: string
+  notebook_id: string
+  title: string
+  description: string | null
+  data: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
 const mapNotebookNote = (note: ApiNotebookNote): NotebookNote => ({
   id: note.id,
   title: note.title,
@@ -183,6 +194,32 @@ const mapFlashcard = (card: ApiFlashcard): Flashcard => ({
   meta: card.meta ?? null,
   folderIds: card.folder_ids ?? [],
 })
+
+const mapMindMap = (item: ApiMindMap): MindMap => {
+  const baseData = (item.data as any) ?? {}
+  const normalizedData =
+    baseData && typeof baseData === 'object' && 'nodeData' in baseData
+      ? baseData
+      : {
+          nodeData: {
+            id: item.id,
+            topic: item.title || '思维导图',
+            root: true,
+            children: [],
+          },
+          linkData: {},
+        }
+
+  return {
+    id: item.id,
+    notebookId: item.notebook_id,
+    title: item.title,
+    description: item.description,
+    data: normalizedData,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  }
+}
 
 export const ensureCsrfToken = async (force = false): Promise<string | null> => {
   if (!force && csrfToken) return csrfToken
@@ -474,6 +511,61 @@ export const generateFlashcardsForNotebook = async (
     folder: mapFlashcardFolder(data.folder),
     flashcards: (data.flashcards ?? []).map(mapFlashcard),
   }
+}
+
+export const listMindMaps = async (options?: { notebookId?: string }): Promise<MindMap[]> => {
+  const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
+  const data = await apiFetch<ApiMindMap[]>(`/mindmaps${query}`, { method: 'GET', skipCsrf: true })
+  return (data ?? []).map(mapMindMap)
+}
+
+export const createMindMap = async (payload: {
+  notebookId: string
+  title: string
+  description?: string | null
+  data: Record<string, unknown>
+}): Promise<MindMap> => {
+  const body: Record<string, unknown> = {
+    notebook_id: payload.notebookId,
+    title: payload.title,
+    description: payload.description,
+    data: payload.data,
+  }
+  const data = await apiFetch<ApiMindMap>('/mindmaps', { method: 'POST', body })
+  return mapMindMap(data)
+}
+
+export const updateMindMap = async (
+  mindmapId: string,
+  payload: { notebookId?: string; title?: string; description?: string | null; data?: Record<string, unknown> },
+): Promise<MindMap> => {
+  const body: Record<string, unknown> = {}
+  if (payload.notebookId !== undefined) body.notebook_id = payload.notebookId
+  if (payload.title !== undefined) body.title = payload.title
+  if (payload.description !== undefined) body.description = payload.description
+  if (payload.data !== undefined) body.data = payload.data
+
+  const data = await apiFetch<ApiMindMap>(`/mindmaps/${mindmapId}`, { method: 'PUT', body })
+  return mapMindMap(data)
+}
+
+export const deleteMindMap = async (mindmapId: string): Promise<void> => {
+  await apiFetch<void>(`/mindmaps/${mindmapId}`, { method: 'DELETE' })
+}
+
+export const generateMindMapForNotebook = async (
+  notebookId: string,
+  payload?: { attachmentIds?: string[]; focus?: string; title?: string; description?: string; model?: string },
+): Promise<MindMap> => {
+  const body: Record<string, unknown> = {}
+  if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
+  if (payload?.focus) body.focus = payload.focus
+  if (payload?.title) body.title = payload.title
+  if (payload?.description) body.description = payload.description
+  if (payload?.model) body.model = payload.model
+
+  const data = await apiFetch<ApiMindMap>(`/notebooks/${notebookId}/mindmaps/generate`, { method: 'POST', body })
+  return mapMindMap(data)
 }
 
 interface OpenAIFileResponse {

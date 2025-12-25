@@ -843,6 +843,7 @@ const handleColorSelect = async (color: string) => {
   min-width: 0;
   word-break: break-word;
   display: -webkit-box;
+  line-clamp: 7;
   -webkit-line-clamp: 7;
   -webkit-box-orient: vertical;
   overflow: hidden;

@@ -42,7 +42,7 @@
         @change="onListChange"
         @end="onDragEnd"
       >
-        <template #item="{ element }: { element: NoteItem }">
+        <template #item="{ element }">
           <li
             :key="element.id"
             :data-id="element.id"
@@ -120,13 +120,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, defineComponent, type SlotsType } from 'vue'
 import { BotIcon, FileTextIcon, GripVerticalIcon, Loader2Icon, MoreVerticalIcon, PlusIcon, Trash2Icon } from 'lucide-vue-next'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
-import Draggable from 'vuedraggable'
+import DraggableComponent from 'vuedraggable'
 import type { SortableEvent } from 'sortablejs'
 import type { NoteItem } from '@/types/notes'
 import { useNotebookStore } from '@/composables/useNotes'
+
+const Draggable = DraggableComponent as unknown as any
 
 const props = defineProps<{
   notes: ReadonlyArray<NoteItem>

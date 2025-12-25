@@ -249,13 +249,12 @@
     @cancel="closeGenerateModal"
   >
     <div class="generate-form">
-      <label class="form-label">Number of flashcards</label>
+      <label class="form-label">闪卡数量</label>
       <a-input
         v-model:value="generateModal.count"
         type="number"
         min="1"
-        max="60"
-        placeholder="留空交给 AI 决定"
+        placeholder="自动"
       />
 
       <label class="form-label">选择资料</label>
@@ -263,18 +262,18 @@
         v-model:value="generateModal.attachments"
         mode="multiple"
         style="width: 100%"
-        placeholder="请选择用于生成的资料（默认全选）"
+        placeholder="请选择用于生成的资料"
       >
         <a-select-option v-for="item in selectableAttachments" :key="item.id" :value="item.id">
           {{ item.filename || '未命名资料' }}
         </a-select-option>
       </a-select>
 
-      <label class="form-label">What should the flashcard focus on?</label>
+      <label class="form-label">你的重点和偏好?</label>
       <a-textarea
         v-model:value="generateModal.focus"
         :auto-size="{ minRows: 2, maxRows: 4 }"
-        placeholder="可填写重点或偏好，留空自动选择高价值知识点"
+        placeholder="让AI根据你的重点和偏好来定制化闪卡"
       />
     </div>
   </a-modal>
