@@ -19,6 +19,28 @@
           </div>
 
           <div class="mindmap-canvas" :id="mindmapElementId" ref="mindmapContainer"></div>
+
+          <div class="canvas-actions">
+            <button
+              class="canvas-action-btn"
+              type="button"
+              :data-label="allExpanded ? '收起全部' : '展开全部'"
+              @click="toggleExpandAll"
+            >
+              <ChevronsUpDownIcon class="action-icon" />
+            </button>
+            <button
+              class="canvas-action-btn"
+              type="button"
+              :data-label="isFullscreen ? '退出全屏' : '全屏画布'"
+              @click="toggleFullscreen"
+            >
+              <component :is="fullscreenIcon" class="action-icon" />
+            </button>
+            <button class="canvas-action-btn" type="button" data-label="导出图片" @click="exportMindmap">
+              <DownloadIcon class="action-icon" />
+            </button>
+          </div>
           
           <div v-if="loadingMap" class="canvas-overlay">
             <a-spin />
@@ -123,9 +145,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, shallowRef, toRaw, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, toRaw, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { ArrowLeftIcon, MapIcon, MoreVerticalIcon, SparklesIcon } from 'lucide-vue-next'
+import {
+  ArrowLeftIcon,
+  ChevronsUpDownIcon,
+  DownloadIcon,
+  MapIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  MoreVerticalIcon,
+  SparklesIcon,
+} from 'lucide-vue-next'
 import type { MindElixirData, MindElixirInstance } from 'mind-elixir'
 import type { MindMap } from '@/types/mindmaps'
 import type { NoteAttachment } from '@/types/notes'
@@ -162,10 +193,12 @@ const mindmaps = ref<MindMap[]>([])
 const activeMindmapId = ref<string | null>(null)
 const hasUnsavedChanges = ref(false)
 const allExpanded = ref(false)
+const isFullscreen = ref(false)
+const fullscreenIcon = computed(() => (isFullscreen.value ? Minimize2Icon : Maximize2Icon))
 // 放宽缩放范围并与内置 toolbar 保持可用
 const MIN_SCALE = 0.5
 const MAX_SCALE = 2
-const ZOOM_SENSITIVITY = 0.00105
+const ZOOM_SENSITIVITY = 0.0013
 const MAX_WHEEL_DELTA = 180
 const ZOOM_EASING = 0.28
 
@@ -344,158 +377,28 @@ const waitForContainerReady = async (maxTries = 5): Promise<boolean> => {
   return false
 }
 
-// ✅ 智能自适应 - 使用渲染后的 DOM 节点计算边界
+// ✅ 简化的居中和自适应 - 使用 MindElixir 内置方法
 const fitToView = async (payload?: MouseEvent | MindElixirInstance | null) => {
-  const containerEl =
-    (mindmapContainer.value?.querySelector('.map-container') as HTMLElement | null) ?? mindmapContainer.value
-  const instance =
-    (payload && (payload as any)?.init ? (payload as MindElixirInstance) : mindInstance.value) as any
+  const instance = (payload && (payload as any)?.init ? (payload as MindElixirInstance) : mindInstance.value) as any
 
-  if (!instance || !containerEl) {
-    console.warn('fitToView: mindInstance 或 mindmapContainer 为空')
+  if (!instance) {
     return
   }
 
-  // 等待DOM更新，增加延迟确保完全渲染
+  // 等待DOM渲染完成
   await nextTick()
-  await new Promise(resolve => setTimeout(resolve, 100))
   await new Promise(resolve => requestAnimationFrame(resolve))
-  
+
   try {
-    console.log('🔍 开始 fitToView...')
-    
-    // 先重置到默认缩放
+    // 重置缩放并居中
     instance.scale(1)
-    await nextTick()
-    
-    // 先居中一次
+
+    // ✅ 使用 MindElixir 内置的 toCenter 方法
     if (instance.toCenter) {
       instance.toCenter()
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    const container = containerEl
-    
-    // ✅ 获取 MindElixir 渲染出来的画布
-    const nodesContainer =
-      (container.querySelector('.map-canvas') as HTMLElement | null) ||
-      (instance?.container?.querySelector?.('.map-canvas') as HTMLElement | null) ||
-      null
-    
-    if (!nodesContainer) {
-      console.warn('❌ 找不到思维导图画布')
-      return
-    }
-    
-    console.log('✅ 找到思维导图画布:', nodesContainer)
-    
-    // 获取 nodes 容器的所有子元素（这些是实际的节点元素）
-    const allElements = nodesContainer.querySelectorAll('*')
-    console.log(`📊 总共找到 ${allElements.length} 个元素`)
-    
-    // ✅ 直接在画布内查找所有节点元素
-    const nodeElements: NodeListOf<HTMLElement> = nodesContainer.querySelectorAll<HTMLElement>('root, grp, tpc')
-    
-    if (!nodeElements || nodeElements.length === 0) {
-      console.warn('❌ 无法找到任何节点元素')
-      return
-    }
-    
-    console.log(`✅ 找到 ${nodeElements.length} 个节点元素`)
-    
-    // 计算所有节点的边界框
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    
-    const containerRect = container.getBoundingClientRect()
-    if (!containerRect.width || !containerRect.height) {
-      console.warn('fitToView: 容器尺寸为 0，跳过缩放')
-      return
-    }
-    const containerScrollLeft = container.scrollLeft
-    const containerScrollTop = container.scrollTop
-    
-    let validNodeCount = 0
-    
-    nodeElements.forEach((node: HTMLElement) => {
-      const rect = node.getBoundingClientRect()
-      
-      // 过滤掉无效的元素（宽高为0）
-      if (rect.width === 0 || rect.height === 0) {
-        return
-      }
-      
-      validNodeCount++
-      
-      // 计算相对于容器滚动坐标系的位置
-      const x = rect.left - containerRect.left + containerScrollLeft
-      const y = rect.top - containerRect.top + containerScrollTop
-      
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x + rect.width)
-      maxY = Math.max(maxY, y + rect.height)
-    })
-    
-    console.log(`📏 有效节点数: ${validNodeCount}`)
-    console.log(`📏 边界框: minX=${minX.toFixed(0)}, minY=${minY.toFixed(0)}, maxX=${maxX.toFixed(0)}, maxY=${maxY.toFixed(0)}`)
-    
-    if (validNodeCount === 0 || !isFinite(minX) || !isFinite(minY)) {
-      console.warn('❌ 没有有效的节点或边界框无效')
-      return
-    }
-    
-    const contentWidth = maxX - minX
-    const contentHeight = maxY - minY
-    
-    console.log(`📐 内容尺寸: ${contentWidth.toFixed(0)} x ${contentHeight.toFixed(0)}`)
-    
-    if (contentWidth <= 0 || contentHeight <= 0) {
-      console.warn('❌ 内容尺寸无效')
-      return
-    }
-    
-    const containerWidth = container.clientWidth
-    const containerHeight = container.clientHeight
-    
-    console.log(`📐 容器尺寸: ${containerWidth} x ${containerHeight}`)
-    
-    // 留出边距后计算缩放比例
-    const padding = 60
-    const paddedMinX = minX - padding
-    const paddedMinY = minY - padding
-    const paddedWidth = contentWidth + padding * 2
-    const paddedHeight = contentHeight + padding * 2
-    
-    const scaleX = containerWidth / paddedWidth
-    const scaleY = containerHeight / paddedHeight
-    let optimalScale = Math.min(scaleX, scaleY)
-    optimalScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, optimalScale))
-    
-    console.log(`🎯 计算缩放: scaleX=${scaleX.toFixed(2)}, scaleY=${scaleY.toFixed(2)}, optimal=${optimalScale.toFixed(2)}`)
-    
-    // 应用缩放
-    instance.scale(optimalScale)
-    
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 50))
-    
-    // 缩放后将内容左上与视口对齐（包含 padding 留白）
-    const targetScrollLeft = Math.max(0, paddedMinX)
-    const targetScrollTop = Math.max(0, paddedMinY)
-    container.scrollTo({
-      left: targetScrollLeft,
-      top: targetScrollTop,
-      behavior: 'auto',
-    })
-    
-    console.log(`✅ fitToView 完成: scale=${optimalScale.toFixed(2)}, content=${contentWidth.toFixed(0)}x${contentHeight.toFixed(0)}`)
   } catch (error) {
-    console.error('❌ fitToView执行失败:', error)
-    console.error('错误堆栈:', (error as Error).stack)
+    console.error('fitToView 执行失败:', error)
   }
 }
 
@@ -601,34 +504,85 @@ const bindSmoothWheelZoom = (instance: MindElixirInstance) => {
 // ✅ 展开/收起所有节点
 const toggleExpandAll = async () => {
   if (!mindInstance.value) return
-  
+
   const instance = mindInstance.value as any
   const shouldExpand = !allExpanded.value
-  
-  // 递归展开/收起所有节点
+
+  // 直接修改数据模型的 expanded 状态，避免依赖 DOM
   const toggleNode = (node: any) => {
     if (!node) return
-    
-    if (instance.expandNode) {
-      instance.expandNode(node, shouldExpand)
-    }
-    
-    if (node.children && Array.isArray(node.children)) {
+    if (node.children && Array.isArray(node.children) && node.children.length) {
+      node.expanded = shouldExpand
       node.children.forEach((child: any) => toggleNode(child))
     }
   }
-  
-  const data = instance.getData()
-  if (data && data.nodeData) {
-    toggleNode(data.nodeData)
+
+  const data = instance.getData?.() || instance.nodeData
+  const rootNode = data?.nodeData || data
+  if (rootNode) {
+    // 确保根节点保持展开
+    rootNode.expanded = true
+    toggleNode(rootNode)
+    // 重新布局更新展开状态
+    if (instance.layout && instance.linkDiv) {
+      instance.layout()
+      instance.linkDiv()
+    }
   }
-  
+
   allExpanded.value = shouldExpand
   hasUnsavedChanges.value = true
-  
-  // ✅ 展开/收缩后自动适应视图
-  await new Promise(resolve => setTimeout(resolve, 300))
+
+  // ✅ 展开/收缩后自动居中
+  await nextTick()
   await fitToView()
+}
+
+const handleFullscreenChange = async () => {
+  isFullscreen.value = !!document.fullscreenElement
+  if (isFullscreen.value && mindInstance.value) {
+    await nextTick()
+    await fitToView()
+  }
+}
+
+const toggleFullscreen = async () => {
+  if (!mindmapContainer.value) return
+  try {
+    if (!document.fullscreenElement && mindmapContainer.value.requestFullscreen) {
+      await mindmapContainer.value.requestFullscreen()
+    } else if (document.exitFullscreen) {
+      await document.exitFullscreen()
+    }
+  } catch (err) {
+    console.error('切换全屏失败:', err)
+    message.error('切换全屏失败，请重试')
+  }
+}
+
+const exportMindmap = async () => {
+  if (!mindInstance.value) {
+    message.warning('请先打开思维导图')
+    return
+  }
+  try {
+    const painterModule = await import('mind-elixir/dist/painter')
+    const painter = (painterModule as any).default || painterModule
+    painter.exportPng(mindInstance.value, activeMindmap.value?.title || '思维导图')
+  } catch (err) {
+    console.error('导出思维导图失败:', err)
+    message.error('导出失败，请稍后重试')
+  }
+}
+
+const exitFullscreenIfNeeded = async () => {
+  if (document.fullscreenElement && document.exitFullscreen) {
+    try {
+      await document.exitFullscreen()
+    } catch (err) {
+      console.warn('退出全屏失败:', err)
+    }
+  }
 }
 
 // ✅ 优化后的渲染函数
@@ -663,59 +617,47 @@ const renderMindmap = async () => {
         ? (rawData as any).direction
         : (MindElixir as any).SIDE ?? (MindElixir as any).RIGHT ?? 1
     
-    // ✅ 关键配置：设置 alignment 为 'nodes' 以实现整个思维导图的居中
+    // ✅ 优化的配置：清晰简洁的只读思维导图查看器
     const instance = new (MindElixir as any)({
       el: `#${mindmapElementId}`,
       direction,
-      draggable: false,
-      editable: false,
-      contextMenu: false,
-      toolBar: false,
-      nodeMenu: false,
-      keypress: false,
-      mouseSelectionButton: 0,
-      alignment: 'nodes',
-      overflowHidden: false,
-      primaryLinkStyle: 2,
-      primaryNodeHorizontalGap: 42,
-      primaryNodeVerticalGap: 18,
+      // 交互设置
+      draggable: true,              // 允许拖动画布以便浏览
+      editable: false,              // 禁止编辑节点内容
+      contextMenu: false,           // 无右键菜单
+      toolBar: false,               // 无工具栏（使用自定义工具栏）
+      nodeMenu: false,              // 无节点菜单
+      keypress: false,              // 无键盘快捷键
+      mouseSelectionButton: 0,      // 左键选择节点
+      // 视图设置
+      alignment: 'nodes',           // 以整个思维导图为中心对齐
+      overflowHidden: false,        // 允许画布移动
+      // 缩放设置
+      scaleSensitivity: 0.3,       // 滚轮缩放灵敏度（更平滑）
+      // 布局设置
+      primaryLinkStyle: 2,          // 连线样式：贝塞尔曲线
+      primaryNodeHorizontalGap: 42, // 水平间距
+      primaryNodeVerticalGap: 18,   // 垂直间距
+      // 本地化
       locale: 'zh_CN',
       data: mindElixirData,
     })
     
     instance.init()
 
+    // 等待渲染完成
     await nextTick()
     await new Promise(resolve => requestAnimationFrame(resolve))
-    
-    if (instance.refresh) {
-      instance.refresh()
-    }
-    
+
     // 移除旧的滚轮缩放监听
     if (wheelCleanup) {
       wheelCleanup()
       wheelCleanup = null
     }
-    
-    // ✅ 调试：输出 MindElixir 实例的关键属性
-    console.log('🔧 MindElixir 实例:', {
-      hasNodes: !!instance.nodes,
-      hasContainer: !!instance.container,
-      hasMapCanvas: !!instance.container?.querySelector('.map-canvas'),
-      nodeKeys: instance.nodes ? Object.keys(instance.nodes).slice(0, 10) : [],
-    })
-    
-    // ✅ 等待DOM完全渲染
-    await new Promise(resolve => requestAnimationFrame(resolve))
-    await new Promise(resolve => requestAnimationFrame(resolve))
-    
-    // ✅ 额外延迟确保 MindElixir 完全初始化
-    await new Promise(resolve => setTimeout(resolve, 200))
-    
+
     mindInstance.value = instance
-    
-    // ✅ 初始加载时自动智能缩放以完整显示
+
+    // ✅ 自动居中显示
     await fitToView(instance)
     
     // ✅ 添加双击展开/收缩功能
@@ -762,7 +704,7 @@ const openMindmap = async (id: string) => {
   await renderMindmap()
 }
 
-const goBackToList = () => {
+const goBackToList = async () => {
   activeMindmapId.value = null
   if (mindInstance.value) {
     mindInstance.value = null
@@ -771,6 +713,8 @@ const goBackToList = () => {
     wheelCleanup()
     wheelCleanup = null
   }
+  await exitFullscreenIfNeeded()
+  isFullscreen.value = false
 }
 
 const resetMindmap = async () => {
@@ -868,6 +812,10 @@ let wheelCleanup: (() => void) | null = null
 let wheelZoomFrame: number | null = null
 let wheelZoomTarget: WheelZoomTarget | null = null
 
+onMounted(() => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+})
+
 onBeforeUnmount(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
@@ -876,6 +824,8 @@ onBeforeUnmount(() => {
     wheelCleanup()
     wheelCleanup = null
   }
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  exitFullscreenIfNeeded()
 })
 
 watch(
@@ -913,17 +863,23 @@ watch(
         resizeObserver.disconnect()
         resizeObserver = null
       }
+      await exitFullscreenIfNeeded()
+      isFullscreen.value = false
       return
     }
     await nextTick()
     await renderMindmap()
     
-    // ✅ 监听容器大小变化，自动重新适应
+    // ✅ 监听容器大小变化，自动重新居中（带防抖）
     if (mindmapContainer.value && typeof ResizeObserver !== 'undefined') {
+      let resizeTimer: number | null = null
       resizeObserver = new ResizeObserver(() => {
-        if (mindInstance.value) {
-          fitToView()
-        }
+        if (resizeTimer) clearTimeout(resizeTimer)
+        resizeTimer = window.setTimeout(() => {
+          if (mindInstance.value) {
+            fitToView()
+          }
+        }, 150)
       })
       resizeObserver.observe(mindmapContainer.value)
     }
@@ -990,6 +946,7 @@ watch(
   flex-direction: column;
   overflow: auto;
   width: 100%;
+  position: relative;
 }
 
 .folders-grid {
@@ -1100,11 +1057,11 @@ watch(
 .material-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
+  border-radius: 10px;
   color: #475569;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .folder-menu-btn {
@@ -1267,16 +1224,74 @@ watch(
   max-width: 100%;
   border-radius: 14px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background:
-    radial-gradient(circle at 18% 18%, rgba(37, 99, 235, 0.06), transparent 32%),
-    radial-gradient(circle at 82% 76%, rgba(16, 185, 129, 0.06), transparent 34%),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8)),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.025), rgba(0, 0, 0, 0.025) 1px, transparent 1px, transparent 22px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.025), rgba(0, 0, 0, 0.025) 1px, transparent 1px, transparent 22px),
-    #f9fafb;
+  background: #f9fafb;
   overflow: hidden;
   position: relative;
   box-sizing: border-box;
+}
+
+.canvas-actions {
+  position: fixed;
+  right: 58px;
+  bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 4;
+}
+
+.canvas-action-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: #f9fafb;
+  box-shadow: none;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.canvas-action-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #f1f5f9;
+}
+
+.action-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.canvas-action-btn::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translate(-50%, -10px);
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.canvas-action-btn:hover::after {
+  opacity: 1;
+  transform: translate(-50%, -14px);
 }
 
 /* ✅ MindElixir 容器样式优化 */
@@ -1289,9 +1304,9 @@ watch(
   overflow: hidden;
   box-sizing: border-box;
   --me-primary: #2563eb;
-  --me-primary-soft: #93c5fd;
-  --me-secondary: #0ea5e9;
-  --me-leaf: #10b981;
+  --me-primary-soft: #dbeafe;
+  --me-secondary: #f97316;
+  --me-leaf: #22c55e;
   --me-muted: #94a3b8;
 }
 
@@ -1340,7 +1355,7 @@ watch(
 }
 
 :deep(.mind-elixir .topiclinks path) {
-  stroke: #f59e0b;
+  stroke: #ef4444;
   stroke-width: 2.2px;
   opacity: 0.85;
 }
@@ -1403,7 +1418,7 @@ watch(
   min-width: 28px !important;
   min-height: 28px !important;
   border-radius: 50% !important;
-  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  background: var(--me-primary) !important;
   border: 3px solid #fff !important;
   box-shadow: 0 3px 10px rgba(59, 130, 246, 0.35) !important;
   cursor: pointer !important;
@@ -1432,7 +1447,7 @@ watch(
 
 :deep(.mind-elixir me-epd:hover),
 :deep(.mind-elixir [class*="epd"]:hover) {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  background: #1d4ed8 !important;
   transform: scale(1.15) !important;
   box-shadow: 0 5px 16px rgba(37, 99, 235, 0.45) !important;
 }
@@ -1474,7 +1489,7 @@ watch(
 
 /* ✅ 节点主题更贴近官方示例，带柔和阴影与配色 */
 :deep(.mind-elixir root tpc) {
-  background: linear-gradient(135deg, var(--me-primary), var(--me-secondary));
+  background: var(--me-primary);
   color: #fff;
   border-radius: 14px;
   padding: 12px 18px;
