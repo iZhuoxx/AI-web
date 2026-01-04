@@ -54,7 +54,7 @@ uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 
 # 前端：Vite 开发服务器，带 /api 代理
 cd web
-pnpm dev  # http://localhost:5173
+pnpm run dev  # http://localhost:5173
 ```
 
 ## 生产构建与部署

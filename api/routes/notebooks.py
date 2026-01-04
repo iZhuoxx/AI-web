@@ -61,7 +61,6 @@ class StructuredMindMapNode(BaseModel):
 
 class StructuredMindMap(BaseModel):
     title: str = Field(..., description="思维导图名称")
-    description: str | None = Field(default=None, description="导图简介")
     root: StructuredMindMapNode
 
 
@@ -331,10 +330,29 @@ def _extract_structured_output(payload: dict) -> dict:
     """Extract the first structured/json response block from Responses API payload."""
     if not isinstance(payload, dict):
         return {}
+
+    # Newer Responses API can expose parsed JSON at the top level or as the first parsed item.
+    parsed = payload.get("output_parsed")
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list) and parsed:
+        first = parsed[0]
+        if isinstance(first, dict):
+            return first
+
     output = payload.get("output") or []
     for item in output:
         if not isinstance(item, dict):
             continue
+        # Some SDKs place parsed JSON alongside content
+        item_parsed = item.get("parsed")
+        if isinstance(item_parsed, dict):
+            return item_parsed
+        if isinstance(item_parsed, list):
+            for candidate in item_parsed:
+                if isinstance(candidate, dict):
+                    return candidate
+
         content_list = item.get("content") or []
         for c in content_list:
             if not isinstance(c, dict):
@@ -651,14 +669,12 @@ async def generate_mindmap_from_openai(
     title = (payload.title or result.title or notebook.title or "AI 思维导图").strip()
     if len(title) > 255:
         title = title[:255]
-    description = (payload.description or result.description or focus_text or "").strip() or None
     data_payload = _structured_mindmap_to_data(result)
 
     mindmap = models.MindMap(
         user_id=user.id,
         notebook_id=notebook.id,
         title=title,
-        description=description,
         data=data_payload,
     )
 

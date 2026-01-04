@@ -573,8 +573,6 @@ class MindMap(Base, TimestampMixin):
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
     data: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="mindmaps")

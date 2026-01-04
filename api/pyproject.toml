@@ -2,10 +2,10 @@
 name = "api"
 version = "0.1.0"
 description = ""
-authors = ["miclon <jcnd@163.com>"]
+authors = ["david <zhuohuang07@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10.12"
 pydantic = "^2.6.4"
 fastapi = {extras = ["all"], version = "^0.110.0"}
 httpx = "^0.23.3"

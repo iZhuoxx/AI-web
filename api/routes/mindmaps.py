@@ -30,7 +30,6 @@ def _mindmap_to_schema(mindmap: models.MindMap) -> MindMapOut:
         id=mindmap.id,
         notebook_id=mindmap.notebook_id,
         title=mindmap.title,
-        description=mindmap.description,
         data=mindmap.data,
         created_at=mindmap.created_at,
         updated_at=mindmap.updated_at,
@@ -88,7 +87,6 @@ def create_mindmap(
         user_id=user.id,
         notebook_id=payload.notebook_id,
         title=payload.title,
-        description=payload.description,
         data=payload.data,
     )
     db.add(mindmap)
@@ -115,8 +113,6 @@ def update_mindmap(
         mindmap.notebook_id = payload.notebook_id
     if payload.title is not None:
         mindmap.title = payload.title
-    if payload.description is not None:
-        mindmap.description = payload.description
     if payload.data is not None:
         mindmap.data = payload.data
 

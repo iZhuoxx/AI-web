@@ -1,6 +1,7 @@
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteAttachment } from '@/types/notes'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { MindMap } from '@/types/mindmaps'
+import type { MindElixirData } from 'mind-elixir'
 import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 import { getModelFor } from '@/composables/setting'
 
@@ -115,7 +116,6 @@ interface ApiMindMap {
   id: string
   notebook_id: string
   title: string
-  description: string | null
   data: Record<string, unknown> | null
   created_at: string
   updated_at: string
@@ -195,26 +195,30 @@ const mapFlashcard = (card: ApiFlashcard): Flashcard => ({
   folderIds: card.folder_ids ?? [],
 })
 
+const isValidMindElixirData = (data: any): data is MindElixirData =>
+  !!data &&
+  typeof data === 'object' &&
+  data.nodeData &&
+  typeof data.nodeData === 'object'
+
 const mapMindMap = (item: ApiMindMap): MindMap => {
   const baseData = (item.data as any) ?? {}
-  const normalizedData =
-    baseData && typeof baseData === 'object' && 'nodeData' in baseData
-      ? baseData
-      : {
-          nodeData: {
-            id: item.id,
-            topic: item.title || '思维导图',
-            root: true,
-            children: [],
-          },
-          linkData: {},
-        }
+  const normalizedData: MindElixirData = isValidMindElixirData(baseData)
+    ? baseData
+    : {
+        nodeData: {
+          id: item.id,
+          topic: item.title || '思维导图',
+          root: true,
+          children: [],
+        },
+        linkData: {},
+      }
 
   return {
     id: item.id,
     notebookId: item.notebook_id,
     title: item.title,
-    description: item.description,
     data: normalizedData,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
@@ -522,13 +526,11 @@ export const listMindMaps = async (options?: { notebookId?: string }): Promise<M
 export const createMindMap = async (payload: {
   notebookId: string
   title: string
-  description?: string | null
   data: Record<string, unknown>
 }): Promise<MindMap> => {
   const body: Record<string, unknown> = {
     notebook_id: payload.notebookId,
     title: payload.title,
-    description: payload.description,
     data: payload.data,
   }
   const data = await apiFetch<ApiMindMap>('/mindmaps', { method: 'POST', body })
@@ -537,12 +539,11 @@ export const createMindMap = async (payload: {
 
 export const updateMindMap = async (
   mindmapId: string,
-  payload: { notebookId?: string; title?: string; description?: string | null; data?: Record<string, unknown> },
+  payload: { notebookId?: string; title?: string; data?: Record<string, unknown> },
 ): Promise<MindMap> => {
   const body: Record<string, unknown> = {}
   if (payload.notebookId !== undefined) body.notebook_id = payload.notebookId
   if (payload.title !== undefined) body.title = payload.title
-  if (payload.description !== undefined) body.description = payload.description
   if (payload.data !== undefined) body.data = payload.data
 
   const data = await apiFetch<ApiMindMap>(`/mindmaps/${mindmapId}`, { method: 'PUT', body })
@@ -555,13 +556,12 @@ export const deleteMindMap = async (mindmapId: string): Promise<void> => {
 
 export const generateMindMapForNotebook = async (
   notebookId: string,
-  payload?: { attachmentIds?: string[]; focus?: string; title?: string; description?: string; model?: string },
+  payload?: { attachmentIds?: string[]; focus?: string; title?: string; model?: string },
 ): Promise<MindMap> => {
   const body: Record<string, unknown> = {}
   if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
   if (payload?.focus) body.focus = payload.focus
   if (payload?.title) body.title = payload.title
-  if (payload?.description) body.description = payload.description
   if (payload?.model) body.model = payload.model
 
   const data = await apiFetch<ApiMindMap>(`/notebooks/${notebookId}/mindmaps/generate`, { method: 'POST', body })

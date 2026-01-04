@@ -183,7 +183,6 @@ class MindMapGenerateRequest(BaseModel):
     attachment_ids: List[UUID] = Field(default_factory=list)
     focus: Optional[str] = Field(default=None, max_length=600)
     title: Optional[str] = Field(default=None, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=400)
     model: Optional[str] = Field(default=None, max_length=100)
 
 
@@ -222,7 +221,6 @@ class QuizQuestionOut(NotebookQuizBase):
 class MindMapBase(BaseModel):
     notebook_id: UUID
     title: str = Field(max_length=255)
-    description: Optional[str] = None
     data: dict
 
 
@@ -233,7 +231,6 @@ class MindMapCreate(MindMapBase):
 class MindMapUpdate(BaseModel):
     notebook_id: Optional[UUID] = None
     title: Optional[str] = Field(default=None, max_length=255)
-    description: Optional[str] = None
     data: Optional[dict] = None
 
 

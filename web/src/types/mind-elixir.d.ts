@@ -10,7 +10,9 @@ declare module 'mind-elixir' {
 
   export interface MindElixirOptions {
     el: HTMLElement | string
+    data?: MindElixirData
     direction?: any
+    locale?: string
     draggable?: boolean
     editable?: boolean
     contextMenu?: boolean | Record<string, unknown>
@@ -18,12 +20,20 @@ declare module 'mind-elixir' {
     nodeMenu?: boolean
     keypress?: boolean
     allowUndo?: boolean
+    before?: Record<string, unknown>
+    newTopicName?: string
+    primaryLinkStyle?: number
+    overflowHidden?: boolean
+    primaryNodeHorizontalGap?: number
+    primaryNodeVerticalGap?: number
+    mobileMenu?: boolean
   }
 
   export interface MindElixirInstance {
-    init(data: MindElixirData): void
+    init(data?: MindElixirData): void
     getAllData(): MindElixirData
     refresh(data?: MindElixirData): void
+    toCenter?: () => void
     focusNode?: (id: string) => void
     addChild?: (node: unknown) => void
     addSibling?: (node: unknown) => void
