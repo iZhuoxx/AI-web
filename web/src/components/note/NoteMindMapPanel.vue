@@ -86,13 +86,16 @@
                   </a-tooltip>
                 </div>
               </div>
-                <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
+                <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown mindmap-actions-dropdown">
                   <button class="folder-menu-btn" type="button" @click.stop>
                     <MoreVerticalIcon class="menu-icon" />
                   </button>
                   <template #overlay>
-                    <a-menu>
-                      <a-menu-item @click.stop="promptDeleteMindmap(item)">
+                    <a-menu @click="(e: any) => e.domEvent?.stopPropagation?.()">
+                      <a-menu-item @click.stop="promptDeleteMindmap(item)" class="delete-menu-item">
+                        <template #icon>
+                          <DeleteOutlined />
+                        </template>
                         删除
                       </a-menu-item>
                     </a-menu>
@@ -167,6 +170,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, toRaw, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 import {
   ArrowLeftIcon,
   ChevronsUpDownIcon,
@@ -1674,5 +1678,35 @@ watch(
 
 .rounded-dropdown .ant-dropdown-menu-item {
   border-radius: 0;
+}
+
+/* Mindmap actions dropdown styles */
+:deep(.mindmap-actions-dropdown .ant-dropdown-menu-item) {
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+:deep(.mindmap-actions-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
+  display: flex;
+  align-items: center;
+}
+
+:deep(.mindmap-actions-dropdown .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
+}
+
+:deep(.mindmap-actions-dropdown .delete-menu-item) {
+  color: #ff4d4f;
+}
+
+:deep(.mindmap-actions-dropdown .delete-menu-item:hover) {
+  color: #ff4d4f;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:deep(.mindmap-actions-dropdown .delete-menu-item .anticon) {
+  color: #ff4d4f;
 }
 </style>

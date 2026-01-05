@@ -79,13 +79,16 @@
                       <div class="divider"></div>
                       <div class="answer">{{ card.answer }}</div>
                     </div>
-                    <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
+                    <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown flashcard-actions-dropdown">
                       <button class="card-menu-btn" type="button" @click.stop>
                         <MoreVerticalIcon class="menu-icon" />
                       </button>
                       <template #overlay>
-                        <a-menu>
-                          <a-menu-item @click.stop="promptDeleteCard(card)">
+                        <a-menu @click="(e: any) => e.domEvent?.stopPropagation?.()">
+                          <a-menu-item @click.stop="promptDeleteCard(card)" class="delete-menu-item">
+                            <template #icon>
+                              <DeleteOutlined />
+                            </template>
                             删除
                           </a-menu-item>
                         </a-menu>
@@ -200,13 +203,16 @@
                   </div>
                 </div>
               </div>
-              <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
+              <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown flashcard-actions-dropdown">
                 <button class="folder-menu-btn" type="button" @click.stop>
                   <MoreVerticalIcon class="menu-icon" />
                 </button>
                 <template #overlay>
-                  <a-menu>
-                    <a-menu-item @click.stop="promptDeleteFolder(folder)">
+                  <a-menu @click="(e: any) => e.domEvent?.stopPropagation?.()">
+                    <a-menu-item @click.stop="promptDeleteFolder(folder)" class="delete-menu-item">
+                      <template #icon>
+                        <DeleteOutlined />
+                      </template>
                       删除
                     </a-menu-item>
                   </a-menu>
@@ -331,6 +337,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 import { ArrowLeftIcon, Edit3Icon, ShuffleIcon, SparklesIcon, PlusIcon, DownloadIcon, MoreVerticalIcon } from 'lucide-vue-next'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { NoteAttachment } from '@/types/notes'
@@ -1872,6 +1879,36 @@ const exportFlashcards = () => {
 
 .rounded-dropdown .ant-dropdown-menu-item {
   border-radius: 0;
+}
+
+/* Flashcard actions dropdown styles */
+:deep(.flashcard-actions-dropdown .ant-dropdown-menu-item) {
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+:deep(.flashcard-actions-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
+  display: flex;
+  align-items: center;
+}
+
+:deep(.flashcard-actions-dropdown .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
+}
+
+:deep(.flashcard-actions-dropdown .delete-menu-item) {
+  color: #ff4d4f;
+}
+
+:deep(.flashcard-actions-dropdown .delete-menu-item:hover) {
+  color: #ff4d4f;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:deep(.flashcard-actions-dropdown .delete-menu-item .anticon) {
+  color: #ff4d4f;
 }
 
 /* 删除弹窗中的名称标签样式 */

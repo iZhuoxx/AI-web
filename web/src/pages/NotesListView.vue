@@ -79,24 +79,29 @@
             >
               <div class="card-header">
                 <h3 class="card-title">{{ notebook.title || '未命名笔记' }}</h3>
-                <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-card-menu">
+                <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="rounded-dropdown note-card-menu">
                   <button class="card-menu" type="button" @click.stop>
                     <MoreOutlined />
                   </button>
                   <template #overlay>
                     <a-menu @click="onNotebookMenuClick(notebook, $event)">
                       <a-menu-item key="rename">
-                        <EditOutlined />
-                        <span>重命名</span>
+                        <template #icon>
+                          <EditOutlined />
+                        </template>
+                        重命名
                       </a-menu-item>
                       <a-menu-item key="color">
-                        <BgColorsOutlined />
-                        <span>更改颜色</span>
+                        <template #icon>
+                          <BgColorsOutlined />
+                        </template>
+                        更改颜色
                       </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item key="delete">
-                        <DeleteOutlined />
-                        <span>删除</span>
+                      <a-menu-item key="delete" class="delete-menu-item">
+                        <template #icon>
+                          <DeleteOutlined />
+                        </template>
+                        删除
                       </a-menu-item>
                     </a-menu>
                   </template>
@@ -884,33 +889,41 @@ const handleColorSelect = async (color: string) => {
 }
 
 /* ==================== 下拉菜单 ==================== */
-:deep(.note-card-menu .ant-dropdown-menu) {
+:deep(.rounded-dropdown .ant-dropdown-menu) {
+  min-width: 170px;
+  padding: 6px 0;
   border-radius: 12px;
-  padding: 8px;
-  background: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e8e8e8;
-  min-width: 200px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
 }
 
 :deep(.note-card-menu .ant-dropdown-menu-item) {
-  padding: 10px 16px;
-  color: #1a1a1a;
+  padding: 10px 14px;
+  line-height: 1.5;
   font-size: 14px;
+}
+
+:deep(.note-card-menu .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
 }
 
-:deep(.note-card-menu .ant-dropdown-menu-item:hover) {
-  background: #f5f5f5;
+:deep(.note-card-menu .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
 }
 
-:deep(.note-card-menu .ant-dropdown-menu-item-divider) {
-  background: #f0f0f0;
-  margin: 8px 0;
+:deep(.note-card-menu .delete-menu-item) {
+  color: #ff4d4f;
+}
+
+:deep(.note-card-menu .delete-menu-item:hover) {
+  color: #ff4d4f;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:deep(.note-card-menu .delete-menu-item .anticon) {
+  color: #ff4d4f;
 }
 
 /* ==================== 模态框样式 ==================== */

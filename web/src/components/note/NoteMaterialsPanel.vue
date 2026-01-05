@@ -36,17 +36,22 @@
                   <template #overlay>
                     <a-menu @click="onMenuClick(item, $event)">
                       <a-menu-item key="rename">
-                        <PencilIcon class="menu-icon" />
-                        <span>重命名</span>
+                        <template #icon>
+                          <EditOutlined />
+                        </template>
+                        重命名
                       </a-menu-item>
-                      <a-menu-item key="delete">
-                        <Trash2Icon class="menu-icon" />
-                        <span>移除</span>
-                      </a-menu-item>
-                      <a-menu-divider />
                       <a-menu-item key="download" :disabled="downloading === item.id">
-                        <DownloadIcon class="menu-icon" />
-                        <span>下载</span>
+                        <template #icon>
+                          <DownloadOutlined />
+                        </template>
+                        下载
+                      </a-menu-item>
+                      <a-menu-item key="delete" class="delete-menu-item">
+                        <template #icon>
+                          <DeleteOutlined />
+                        </template>
+                        移除
                       </a-menu-item>
                     </a-menu>
                   </template>
@@ -211,6 +216,11 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
+import {
+  EditOutlined,
+  DeleteOutlined,
+  DownloadOutlined
+} from '@ant-design/icons-vue'
 import { computed, reactive, ref, watch } from 'vue'
 import {
   ArrowLeftIcon,
@@ -225,9 +235,7 @@ import {
   FileTypeIcon,
   FileVideoIcon,
   MoreVerticalIcon,
-  PencilIcon,
   UploadIcon,
-  Trash2Icon,
 } from 'lucide-vue-next'
 import AttachmentDocViewer from './AttachmentDocViewer.vue'
 import AttachmentPdfViewer from './AttachmentPdfViewer.vue'
@@ -806,26 +814,32 @@ defineExpose({ focusAttachmentByCitation })
 }
 
 :deep(.materials-actions-dropdown .ant-dropdown-menu-item) {
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+:deep(.materials-actions-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  line-height: 1.2;
 }
 
-:deep(.materials-actions-dropdown .menu-icon) {
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: middle;
-  color: rgba(0, 0, 0, 0.55);
-  flex-shrink: 0;
+:deep(.materials-actions-dropdown .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
 }
 
-:deep(.materials-actions-dropdown .ant-dropdown-menu-item-disabled .menu-icon) {
-  color: rgba(0, 0, 0, 0.35);
+:deep(.materials-actions-dropdown .delete-menu-item) {
+  color: #ff4d4f;
+}
+
+:deep(.materials-actions-dropdown .delete-menu-item:hover) {
+  color: #ff4d4f;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:deep(.materials-actions-dropdown .delete-menu-item .anticon) {
+  color: #ff4d4f;
 }
 
 .action-icon {
