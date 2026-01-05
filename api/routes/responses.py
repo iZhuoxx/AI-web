@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -36,6 +35,7 @@ def _check_auth(request: Request):
 
 @router.post("/responses")
 async def responses_complete_route(request: Request):
+    """Proxy a single Responses API request to OpenAI and return the full JSON payload."""
     _check_auth(request)
     payload: Dict[str, Any] = await request.json()
     try:
@@ -50,10 +50,9 @@ async def responses_complete_route(request: Request):
 
 @router.post("/responses/stream")
 async def responses_stream_route(request: Request):
+    """Proxy a streaming Responses API request to OpenAI and relay SSE chunks."""
     _check_auth(request)
     payload: Dict[str, Any] = await request.json()
-    # logger = _responses_logger()
-    # request_id = uuid4().hex[:8]
 
     try:
         normalized = build_responses_payload(payload or {})
@@ -63,10 +62,8 @@ async def responses_stream_route(request: Request):
     async def event_gen():
         try:
             async for chunk in openai_client.responses_stream(normalized):
-                # logger.info("[%s] %s", request_id, chunk)
                 yield chunk + "\n"  # newline delimited
         except Exception as exc:
-            # logger.exception("responses_stream_route error [%s]: %s", request_id, exc)
             raise
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")

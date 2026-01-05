@@ -33,7 +33,6 @@
         <a-tag v-else-if="showSavedIndicator" class="status-tag" color="success">已保存</a-tag>
 
         <div class="note-header__toolbar" v-if="editorInstance">
-          <!-- 撤销 -->
           <button
             class="toolbar-btn"
             type="button"
@@ -44,7 +43,6 @@
             <UndoIcon class="icon" />
           </button>
 
-          <!-- 重做 -->
           <button
             class="toolbar-btn"
             type="button"
@@ -55,7 +53,6 @@
             <RedoIcon class="icon" />
           </button>
 
-          <!-- 导出 -->
           <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
             <template #overlay>
               <a-menu :selectable="false" @click="handleExportClick">
@@ -70,7 +67,6 @@
             </button>
           </a-dropdown>
 
-          <!-- 全屏切换 -->
           <button
             v-if="showFullscreenToggle"
             class="toolbar-btn"
@@ -93,7 +89,6 @@
       >
         <div class="bubble-toolbar">
           <div class="bubble-toolbar__group">
-            <!-- 段落样式 -->
             <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
               <template #overlay>
                 <a-menu :selectable="false" @click="handleHeadingSelect">
@@ -123,7 +118,6 @@
               </button>
             </a-dropdown>
 
-            <!-- 列表 -->
             <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
               <template #overlay>
                 <a-menu :selectable="false" @click="handleListSelect">
@@ -138,7 +132,6 @@
               </button>
             </a-dropdown>
 
-            <!-- 文本 / 高亮颜色 -->
             <div class="color-merge-btn">
               <button
                 class="toolbar-btn bubble-btn color-merge-btn__chip-btn"
@@ -213,7 +206,6 @@
           </div>
 
           <div class="bubble-toolbar__group">
-            <!-- 加粗 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isBoldActive }"
@@ -224,7 +216,6 @@
               <span class="text-control text-control--bold">B</span>
             </button>
 
-            <!-- 斜体 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isItalicActive }"
@@ -235,7 +226,6 @@
               <span class="text-control text-control--italic">I</span>
             </button>
 
-            <!-- 下划线 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isUnderlineActive }"
@@ -246,7 +236,6 @@
               <span class="text-control text-control--underline">U</span>
             </button>
 
-            <!-- 删除线 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isStrikeActive }"
@@ -257,7 +246,6 @@
               <span class="text-control text-control--strike">S</span>
             </button>
 
-            <!-- 代码 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isCodeActive }"
@@ -268,12 +256,10 @@
               <CodeIcon class="icon" />
             </button>
 
-            <!-- 链接 -->
             <button class="toolbar-btn bubble-btn" type="button" aria-label="插入链接" @click="openLinkModal">
               <Link2Icon class="icon" />
             </button>
 
-            <!-- 引用 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isBlockquoteActive }"
@@ -284,7 +270,6 @@
               <QuoteIcon class="icon" />
             </button>
 
-            <!-- 代码块 -->
             <button
               class="toolbar-btn bubble-btn"
               :class="{ 'is-active': isCodeBlockActive }"
@@ -295,7 +280,6 @@
               <BracesIcon class="icon" />
             </button>
 
-            <!-- 水平线 -->
             <button
               class="toolbar-btn bubble-btn"
               type="button"
@@ -310,7 +294,6 @@
 
       <div class="editor-divider"></div>
 
-      <!-- Tiptap 编辑器 -->
       <div 
         ref="editorWrapperRef"
         class="tiptap-editor-wrapper"
@@ -323,7 +306,6 @@
       </div>
     </section>
 
-    <!-- 链接弹窗 -->
     <a-modal
       v-model:visible="linkModalVisible"
       title="插入链接"
@@ -392,7 +374,7 @@ const emit = defineEmits<{
   (e: 'save', payload: { title: string; content: string }): void
 }>()
 
-// 颜色配置
+// 文本与高亮颜色配置
 const textColorPalette = ['#111111', '#1d4ed8', '#0ea5e9', '#16a34a', '#eab308', '#ef4444', '#f97316', '#9333ea']
 const highlightColorPalette = ['#fef3c7', '#fde68a', '#fcd34d', '#d9f99d', '#bae6fd', '#fbcfe8', '#f5d0fe', '#fecaca']
 const currentTextColor = ref('#111111')
@@ -435,7 +417,7 @@ const isFullscreenComputed = computed(() => props.isFullscreen === true)
 // Editor 实例（用于 editor-content 组件）
 const editorInstance = computed(() => editor.value ?? undefined)
 
-// 工具栏按钮状态（避免模板类型错误）
+// 工具栏按钮状态
 const isBoldActive = computed(() => editor.value?.isActive('bold') ?? false)
 const isItalicActive = computed(() => editor.value?.isActive('italic') ?? false)
 const isUnderlineActive = computed(() => editor.value?.isActive('underline') ?? false)
@@ -451,7 +433,7 @@ const isEditorScrolling = ref(false)
 const editorWrapperRef = ref<HTMLElement | null>(null)
 const scrollHideTimer = ref<number | null>(null)
 
-// 编辑器操作方法（避免模板类型错误）
+// 编辑器操作方法
 const toggleBold = () => editor.value?.chain().focus().toggleBold().run()
 const toggleItalic = () => editor.value?.chain().focus().toggleItalic().run()
 const toggleUnderline = () => editor.value?.chain().focus().toggleUnderline().run()
@@ -632,7 +614,7 @@ const resetTextAndHighlight = () => {
   editor.value?.chain().focus().unsetColor().unsetHighlight().run()
 }
 
-// 链接
+// 链接弹窗逻辑
 const openLinkModal = () => {
   if (!editor.value) return
   
@@ -675,7 +657,7 @@ const applyLink = () => {
   closeLinkModal()
 }
 
-// 导出
+// 导出入口
 const handleExportClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
   const safeTitle = (noteTitle.value || 'note').replace(/[\\/:*?"<>|]/g, '_')
   

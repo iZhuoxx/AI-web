@@ -67,6 +67,7 @@ def list_notebook_folders(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[NotebookFolderOut]:
+    """List notebook folders; optionally filter to those containing a specific notebook."""
     query = (
         select(models.NotebookFolder)
         .where(models.NotebookFolder.user_id == user.id)
@@ -91,6 +92,7 @@ def create_notebook_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotebookFolderOut:
+    """Create a notebook folder and attach notebooks to it."""
     folder = models.NotebookFolder(
         user_id=user.id,
         name=payload.name,
@@ -115,6 +117,7 @@ def update_notebook_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotebookFolderOut:
+    """Update folder name/description/color and its notebook membership."""
     folder = _get_folder(folder_id, user, db)
 
     if payload.name is not None:
@@ -142,6 +145,7 @@ def delete_notebook_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete a notebook folder (notebooks remain)."""
     folder = _get_folder(folder_id, user, db)
     db.delete(folder)
     db.commit()

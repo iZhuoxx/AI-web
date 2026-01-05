@@ -92,6 +92,7 @@ def list_flashcards(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[FlashcardOut]:
+    """List flashcards for the user; optionally filter by notebook id."""
     query = (
         select(models.Flashcard)
         .where(models.Flashcard.user_id == user.id)
@@ -116,6 +117,7 @@ def create_flashcard(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardOut:
+    """Create a flashcard under a notebook and optionally attach it to folders."""
     _ensure_notebook_owned(db, user, payload.notebook_id)
     card = models.Flashcard(
         user_id=user.id,
@@ -142,6 +144,7 @@ def update_flashcard(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardOut:
+    """Update flashcard text/metadata and its folder membership."""
     card = _get_card(card_id, user, db)
 
     if payload.question is not None:
@@ -169,6 +172,7 @@ def delete_flashcard(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete a flashcard owned by the user."""
     card = _get_card(card_id, user, db)
     db.delete(card)
     db.commit()

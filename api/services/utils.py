@@ -1,4 +1,3 @@
-# api/services/utils.py
 import os
 from typing import Optional
 from api.settings import settings

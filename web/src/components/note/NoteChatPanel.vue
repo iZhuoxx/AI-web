@@ -16,7 +16,7 @@
             :class="msg.type === 1 ? 'send' : 'replay'"
             @open-citation="emit('open-citation', $event)"
           />
-          <!-- Loading bubble when waiting for response - only show if no assistant message started yet -->
+          <!-- 等待回复时的加载气泡（尚未开始助手回复时显示） -->
           <div v-if="loadding && !hasAssistantMessageStarted" class="loading-bubble">
             <div class="loader-dots">
               <span></span>
@@ -107,7 +107,7 @@
         </div>
       </form>
 
-      <!-- 居中底部"下箭头"悬浮按钮：不在底部时显示 -->
+      <!-- 底部回到最新的悬浮按钮 -->
       <button
         v-if="showScrollToBottom"
         class="scroll-fab"
@@ -217,7 +217,7 @@ const stop = () => {
   chatInstance.value?.stop()
 }
 
-// 上传/拖拽/音频转写 相关
+// 上传、拖拽与实时转写相关的状态
 const {
   imageFiles,
   imagePreviews,
@@ -251,14 +251,14 @@ const realtimeSegments = realtime.segments
 const hasMessages = computed(() => chatMessages.value.length > 0)
 watch(hasMessages, value => emit('has-messages-change', value), { immediate: true })
 
-// Track if assistant message has started
+// 记录助手回复是否已经开始
 const messageCountBeforeSend = ref(0)
 const hasAssistantMessageStarted = computed(() => {
   if (!loadding.value) return false
   return chatMessages.value.length > messageCountBeforeSend.value
 })
 
-// 输入区
+// 输入区状态
 const state = reactive({ message: '' })
 const hasPendingUploads = computed(() => genericFiles.value.some(it => it.status === 'pending'))
 const hasPayload = computed(
@@ -374,7 +374,7 @@ async function onSend(ev?: Event | { preventDefault?: () => void }) {
   await nextTick()
   autoResize()
 
-  // Track message count before send
+  // 记录发送前的消息数量，用于判定助手是否开始回复
   messageCountBeforeSend.value = chatMessages.value.length
 
   await send({ text, imagesDataUrls, files, reasoning: { summary: 'auto' } })
@@ -393,7 +393,7 @@ async function handlePrimaryAction() {
   await onSend()
 }
 
-// ===== 自动滚动逻辑 =====
+// 自动滚动逻辑
 const scrollContainer = ref<HTMLDivElement | null>(null)
 const isAutoScroll = ref(true)
 const showScrollToBottom = ref(false)

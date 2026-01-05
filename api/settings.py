@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     HTTPS_PROXY: Optional[str] = None
     INTERNAL_TOKEN: Optional[str] = None
 
-    DATABASE_URL: str = "postgresql+psycopg://noteai:noteai@localhost:5432/appdb"
+    DATABASE_URL: Optional[str] = None
     SQLALCHEMY_ECHO: bool = False
     SQLALCHEMY_DISABLE_POOL: bool = False
 

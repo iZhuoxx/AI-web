@@ -58,6 +58,7 @@ def list_quiz_questions(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[QuizQuestionOut]:
+    """List quiz questions for the user; optionally filter by notebook id."""
     query = (
         select(models.QuizQuestion)
         .where(models.QuizQuestion.user_id == user.id)
@@ -81,6 +82,7 @@ def create_quiz_question(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> QuizQuestionOut:
+    """Create a multiple-choice quiz question under a notebook."""
     _ensure_notebook_owned(db, user, payload.notebook_id)
     _validate_index(payload.options, payload.correct_index)
     question = models.QuizQuestion(
@@ -110,6 +112,7 @@ def update_quiz_question(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> QuizQuestionOut:
+    """Update quiz question text/options/correct index and favorite flag."""
     question = _get_question(question_id, user, db)
 
     options = payload.options or question.options
@@ -147,6 +150,7 @@ def delete_quiz_question(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete a quiz question owned by the user."""
     question = _get_question(question_id, user, db)
     db.delete(question)
     db.commit()

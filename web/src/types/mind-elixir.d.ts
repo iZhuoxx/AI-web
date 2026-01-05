@@ -53,3 +53,17 @@ declare module 'mind-elixir' {
   export const E: any
   export default MindElixir
 }
+
+declare module 'mind-elixir/dist/painter' {
+  import type { MindElixirInstance } from 'mind-elixir'
+
+  export interface MindElixirPainter {
+    exportSvg(instance: MindElixirInstance, fileName?: string): void
+    exportPng(instance: MindElixirInstance, fileName?: string): Promise<void>
+  }
+
+  export const exportSvg: MindElixirPainter['exportSvg']
+  export const exportPng: MindElixirPainter['exportPng']
+  const painter: MindElixirPainter
+  export default painter
+}

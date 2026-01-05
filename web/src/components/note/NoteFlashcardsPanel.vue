@@ -79,8 +79,7 @@
                       <div class="divider"></div>
                       <div class="answer">{{ card.answer }}</div>
                     </div>
-                    <!-- 右上角删除按钮 -->
-                    <a-dropdown trigger="click" placement="bottomRight">
+                    <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
                       <button class="card-menu-btn" type="button" @click.stop>
                         <MoreVerticalIcon class="menu-icon" />
                       </button>
@@ -92,7 +91,6 @@
                         </a-menu>
                       </template>
                     </a-dropdown>
-                    <!-- 右下角编辑按钮 -->
                     <button class="card-edit-btn" type="button" @click.stop="openEdit(card)">
                       <Edit3Icon class="edit-icon" />
                     </button>
@@ -173,31 +171,36 @@
               :class="`folder-card--color-${index % 6}`"
               @click="openFolder(folder.id)"
             >
-              <div class="folder-card__head">
-                <div class="folder-info">
-                  <div class="folder-title">{{ folder.name }}</div>
-                  <div v-if="folder.description" class="folder-desc">{{ folder.description }}</div>
-                  <div class="folder-materials">
-                    <template v-if="resolveMaterials(folder).length">
-                      <span
-                        v-for="(material, idx) in resolveMaterials(folder).slice(0, 2)"
-                        :key="`${material}-${idx}`"
-                        class="material-tag"
+                <div class="folder-card__head">
+                  <div class="folder-info">
+                    <div class="folder-title">{{ folder.name }}</div>
+                    <div v-if="folder.description" class="folder-desc">{{ folder.description }}</div>
+                    <div class="folder-materials">
+                      <a-tooltip
+                        placement="bottom"
+                        overlay-class-name="folder-materials-tooltip"
+                        :title="(resolveMaterials(folder).length ? resolveMaterials(folder) : ['课堂资料']).join('\n')"
                       >
-                        {{ material }}
-                      </span>
-                      <span v-if="resolveMaterials(folder).length > 2" class="material-more">
-                        +{{ resolveMaterials(folder).length - 2 }}
-                      </span>
-                    </template>
-                    <span v-else class="material-tag">课堂资料</span>
+                        <div class="materials-inline">
+                          <template v-if="resolveMaterials(folder).length">
+                            <span
+                              v-for="(material, idx) in resolveMaterials(folder).slice(0, 2)"
+                              :key="`${material}-${idx}`"
+                              class="material-tag"
+                            >
+                              {{ material }}
+                            </span>
+                            <span v-if="resolveMaterials(folder).length > 2" class="material-more">
+                              +{{ resolveMaterials(folder).length - 2 }}
+                            </span>
+                          </template>
+                          <span v-else class="material-tag">课堂资料</span>
+                        </div>
+                      </a-tooltip>
                   </div>
                 </div>
-                <!-- 卡片数量徽章 - 移到垂直居中 -->
-                <span class="folder-badge">{{ getCardsForFolder(folder).length || folder.flashcardIds.length }} 张</span>
               </div>
-              <!-- 右上角菜单按钮 -->
-              <a-dropdown trigger="click" placement="bottomRight">
+              <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
                 <button class="folder-menu-btn" type="button" @click.stop>
                   <MoreVerticalIcon class="menu-icon" />
                 </button>
@@ -823,13 +826,13 @@ const exportFlashcards = () => {
     return
   }
   
-  // 创建CSV格式的数据
+  // 生成 CSV 内容
   const csvContent = [
     ['问题', '答案'],
     ...activeFolderCards.value.map(card => [card.question, card.answer])
   ].map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
   
-  // 创建Blob并下载
+  // 写入 Blob 并触发下载
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
@@ -1020,37 +1023,27 @@ const exportFlashcards = () => {
   align-items: center;
 }
 
+.materials-inline {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .material-tag {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(8px);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
   color: #475569;
-  font-weight: 600;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 11px;
 }
 
 .material-more {
   font-size: 11px;
   color: #64748b;
   font-weight: 600;
-}
-
-/* 文件夹卡片数量徽章 - 移到垂直居中 */
-.folder-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 42px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(99, 102, 241, 0.12);
-  color: #4338ca;
-  font-weight: 700;
-  font-size: 13px;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 /* 文件夹菜单按钮 - 右上角悬浮 */
@@ -1870,6 +1863,17 @@ const exportFlashcards = () => {
   color: #475569;
 }
 
+.rounded-dropdown .ant-dropdown-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px 0;
+}
+
+.rounded-dropdown .ant-dropdown-menu-item {
+  border-radius: 0;
+}
+
 /* 删除弹窗中的名称标签样式 */
 .delete-modal-name-tag {
   display: inline-block;
@@ -1880,5 +1884,20 @@ const exportFlashcards = () => {
   font-weight: 600;
   font-size: 15px;
   margin: 0 2px;
+}
+
+.folder-materials-tooltip .ant-tooltip-inner {
+  white-space: pre-wrap;
+  max-width: 280px;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.folder-materials-tooltip .ant-tooltip-arrow-content {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 </style>

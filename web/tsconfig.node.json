@@ -3,12 +3,11 @@
     "composite": true,
     "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "types": ["node"],
     "esModuleInterop": true,
-    "baseUrl": ".",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },

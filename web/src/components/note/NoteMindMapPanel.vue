@@ -63,10 +63,30 @@
                   <span class="folder-title-text">{{ item.title }}</span>
                 </div>
                 <div class="folder-materials">
-                  <span class="material-tag">{{ getNodeCount(item) }} 节点</span>
+                  <a-tooltip
+                    placement="bottom"
+                    overlay-class-name="folder-materials-tooltip"
+                    :title="(resolveMaterials(item).length ? resolveMaterials(item) : ['课堂资料']).join('\n')"
+                  >
+                    <div class="materials-inline">
+                      <template v-if="resolveMaterials(item).length">
+                        <span
+                          v-for="(material, idx) in resolveMaterials(item).slice(0, 2)"
+                          :key="`${material}-${idx}`"
+                          class="material-tag"
+                        >
+                          {{ material }}
+                        </span>
+                        <span v-if="resolveMaterials(item).length > 2" class="material-more">
+                          +{{ resolveMaterials(item).length - 2 }}
+                        </span>
+                      </template>
+                      <span v-else class="material-tag">课堂资料</span>
+                    </div>
+                  </a-tooltip>
                 </div>
               </div>
-                <a-dropdown trigger="click" placement="bottomRight">
+                <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown">
                   <button class="folder-menu-btn" type="button" @click.stop>
                     <MoreVerticalIcon class="menu-icon" />
                   </button>
@@ -195,7 +215,7 @@ const hasUnsavedChanges = ref(false)
 const allExpanded = ref(false)
 const isFullscreen = ref(false)
 const fullscreenIcon = computed(() => (isFullscreen.value ? Minimize2Icon : Maximize2Icon))
-// 放宽缩放范围并与内置 toolbar 保持可用
+// 放宽缩放范围，仍兼容内置工具条
 const MIN_SCALE = 0.5
 const MAX_SCALE = 2
 const ZOOM_SENSITIVITY = 0.0013
@@ -230,7 +250,7 @@ const normalizeWheelDelta = (evt: WheelEvent) => {
   return eased
 }
 
-// 深度克隆函数 - 完全移除 Vue 响应式
+// 深拷贝，剥离 Vue 响应式引用
 const deepClone = (obj: any): any => {
   if (obj === null || obj === undefined) return obj
   if (typeof obj !== 'object') return obj
@@ -245,23 +265,44 @@ const deepClone = (obj: any): any => {
   return cloned
 }
 
-// 安全的节点计数
-const getNodeCount = (mindmap: MindMap): number => {
-  const walk = (node: any): number => {
-    if (!node || typeof node !== 'object') return 0
-    const children = Array.isArray(node.children) ? node.children : []
-    return 1 + children.reduce((sum: number, child: any) => sum + walk(child), 0)
+// 安全统计节点数量，避免数据异常报错
+const extractMaterialNames = (meta: Record<string, unknown> | null): string[] => {
+  if (!meta) return []
+  const sources =
+    (meta as any).sources ??
+    (meta as any).materials ??
+    (meta as any).attachments ??
+    (meta as any).files ??
+    (meta as any).source
+
+  const list = Array.isArray(sources) ? sources : sources ? [sources] : []
+  return list
+    .map(item => {
+      if (!item) return ''
+      if (typeof item === 'string') return item
+      if (typeof item === 'object') {
+        const obj = item as Record<string, any>
+        return obj.title || obj.name || obj.filename || obj.file || ''
+      }
+      return ''
+    })
+    .filter(Boolean)
+}
+
+const resolveMaterials = (mindmap: MindMap): string[] => {
+  const rawData = mindmap?.data as any
+  const meta = rawData && typeof rawData === 'object' && rawData.meta && typeof rawData.meta === 'object'
+    ? (rawData.meta as Record<string, unknown>)
+    : null
+
+  const names = new Set<string>()
+  extractMaterialNames(meta).forEach(name => names.add(name))
+
+  if (!names.size && attachments.value.length) {
+    attachments.value.slice(0, 2).forEach(att => names.add(att.filename || att.s3ObjectKey || '课堂资料'))
   }
-  
-  try {
-    const data = mindmap?.data
-    if (!data || typeof data !== 'object') return 0
-    const nodeData = (data as any).nodeData
-    if (!nodeData || typeof nodeData !== 'object') return 0
-    return walk(nodeData)
-  } catch (err) {
-    return 0
-  }
+
+  return Array.from(names)
 }
 
 const parseTime = (value: string): number => {
@@ -272,7 +313,7 @@ const parseTime = (value: string): number => {
 const sortMindmaps = (items: MindMap[]): MindMap[] =>
   [...items].sort((a, b) => parseTime(b.updatedAt) - parseTime(a.updatedAt))
 
-// ✅ 只展开根节点，显示一级节点
+// 仅默认展开根节点
 const ensureNode = (node: any, isRoot = false, depth = 0): MindmapNodeData | null => {
   if (!node || typeof node !== 'object') return null
 
@@ -280,7 +321,7 @@ const ensureNode = (node: any, isRoot = false, depth = 0): MindmapNodeData | nul
     id: String(node.id || `node-${Date.now()}-${Math.random().toString(16).slice(2)}`),
     topic: typeof node.topic === 'string' && node.topic.trim() ? node.topic.trim() : '未命名节点',
     root: isRoot ? true : node.root === true ? true : undefined,
-    // ✅ 只展开根节点（depth === 0），其他都收起
+    // 根节点展开，其余层级默认收起
     expanded: depth === 0,
     note: typeof node.note === 'string' ? node.note : undefined,
   }
@@ -377,7 +418,7 @@ const waitForContainerReady = async (maxTries = 5): Promise<boolean> => {
   return false
 }
 
-// ✅ 简化的居中和自适应 - 使用 MindElixir 内置方法
+// 利用 MindElixir 内置方法进行居中与缩放
 const fitToView = async (payload?: MouseEvent | MindElixirInstance | null) => {
   const instance = (payload && (payload as any)?.init ? (payload as MindElixirInstance) : mindInstance.value) as any
 
@@ -385,7 +426,7 @@ const fitToView = async (payload?: MouseEvent | MindElixirInstance | null) => {
     return
   }
 
-  // 等待DOM渲染完成
+  // 等待 DOM 渲染完成
   await nextTick()
   await new Promise(resolve => requestAnimationFrame(resolve))
 
@@ -393,7 +434,7 @@ const fitToView = async (payload?: MouseEvent | MindElixirInstance | null) => {
     // 重置缩放并居中
     instance.scale(1)
 
-    // ✅ 使用 MindElixir 内置的 toCenter 方法
+    // 调用内置 toCenter 避免手写定位
     if (instance.toCenter) {
       instance.toCenter()
     }
@@ -501,7 +542,7 @@ const bindSmoothWheelZoom = (instance: MindElixirInstance) => {
   }
 }
 
-// ✅ 展开/收起所有节点
+// 展开/收起所有节点
 const toggleExpandAll = async () => {
   if (!mindInstance.value) return
 
@@ -533,7 +574,7 @@ const toggleExpandAll = async () => {
   allExpanded.value = shouldExpand
   hasUnsavedChanges.value = true
 
-  // ✅ 展开/收缩后自动居中
+  // 展开/收缩后自动居中
   await nextTick()
   await fitToView()
 }
@@ -585,7 +626,7 @@ const exitFullscreenIfNeeded = async () => {
   }
 }
 
-// ✅ 优化后的渲染函数
+// 只读渲染器初始化
 const renderMindmap = async () => {
   if (!activeMindmap.value) {
     console.error('无法渲染：activeMindmap 为空')
@@ -617,7 +658,7 @@ const renderMindmap = async () => {
         ? (rawData as any).direction
         : (MindElixir as any).SIDE ?? (MindElixir as any).RIGHT ?? 1
     
-    // ✅ 优化的配置：清晰简洁的只读思维导图查看器
+    // 只读查看配置
     const instance = new (MindElixir as any)({
       el: `#${mindmapElementId}`,
       direction,
@@ -657,10 +698,10 @@ const renderMindmap = async () => {
 
     mindInstance.value = instance
 
-    // ✅ 自动居中显示
+    // 初次渲染后居中
     await fitToView(instance)
     
-    // ✅ 添加双击展开/收缩功能
+    // 双击节点切换展开/收起
     const canvas = mindmapContainer.value.querySelector('.map-canvas')
     if (canvas) {
       canvas.addEventListener('dblclick', (e: any) => {
@@ -870,7 +911,7 @@ watch(
     await nextTick()
     await renderMindmap()
     
-    // ✅ 监听容器大小变化，自动重新居中（带防抖）
+    // 监听容器大小变化，防抖后重新居中
     if (mindmapContainer.value && typeof ResizeObserver !== 'undefined') {
       let resizeTimer: number | null = null
       resizeObserver = new ResizeObserver(() => {
@@ -1054,6 +1095,13 @@ watch(
   flex-wrap: wrap;
 }
 
+.materials-inline {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .material-tag {
   display: inline-flex;
   align-items: center;
@@ -1064,17 +1112,33 @@ watch(
   font-size: 11px;
 }
 
+.material-more {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
 .folder-menu-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
   border: none;
-  background: rgba(255, 255, 255, 0.6);
-  padding: 8px;
-  border-radius: 12px;
-  color: #475569;
+  background: transparent;
+  border-radius: 8px;
+  color: #64748b;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  opacity: 0;
+  z-index: 2;
+}
+
+.folder-card:hover .folder-menu-btn {
+  opacity: 1;
 }
 
 .folder-menu-btn:hover {
@@ -1582,5 +1646,33 @@ watch(
   font-weight: 600;
   color: #475569;
   margin-top: 4px;
+}
+</style>
+
+<style>
+.folder-materials-tooltip .ant-tooltip-inner {
+  white-space: pre-wrap;
+  max-width: 280px;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.folder-materials-tooltip .ant-tooltip-arrow-content {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.rounded-dropdown .ant-dropdown-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px 0;
+}
+
+.rounded-dropdown .ant-dropdown-menu-item {
+  border-radius: 0;
 }
 </style>

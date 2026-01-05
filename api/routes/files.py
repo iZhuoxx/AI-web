@@ -1,4 +1,3 @@
-# api/routers/files.py
 from __future__ import annotations
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Form, Query
@@ -22,11 +21,6 @@ def _validate_file_id(file_id: str) -> None:
         raise HTTPException(status_code=500, detail="Upload ok but missing file id")
 
 
-# Supported formats: 
-# \"c\", \"cpp\", \"cs\", \"css\", \"csv\", \"doc\", \"docx\", \"gif\", \"go\", \"html\", \"java\", 
-# \"jpeg\", \"jpg\", \"js\", \"json\", \"md\", \"pdf\", \"php\", \"pkl\", \"png\", \"pptx\", \"py\", 
-# \"rb\", \"tar\", \"tex\", \"ts\", \"txt\", \"webp\", \"xlsx\", \"xml\", \"zip\"",
-
 @router.post("/")
 async def upload_file(
     request: Request,
@@ -35,6 +29,7 @@ async def upload_file(
     expires_after_anchor: str | None = Form(default=None, alias="expires_after[anchor]"),
     expires_after_seconds: int | None = Form(default=None, alias="expires_after[seconds]"),
 ):
+    """Upload a file to OpenAI Files API for the given purpose (assistants, user_data, etc.)."""
     _check_auth(request)
 
     normalized_purpose = (purpose or "").strip()
@@ -58,7 +53,7 @@ async def upload_file(
         if "expires_after[anchor]" not in extra_form:
             extra_form["expires_after[anchor]"] = "created_at"
 
-    # 1) 类型与体积校验
+    # 1) Validate content type and payload size.
     filename = file.filename or "unnamed.txt"
     ctype = file.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
@@ -92,6 +87,7 @@ async def list_files(
     order: str | None = Query(default=None),
     purpose: str | None = Query(default=None),
 ):
+    """List files in the authenticated OpenAI account with optional paging/filters."""
     _check_auth(request)
     params: Dict[str, Any] = {}
     if after:
@@ -120,6 +116,7 @@ async def list_files(
 
 @router.get("/{file_id}")
 async def get_file_metadata(request: Request, file_id: str):
+    """Fetch metadata for a specific OpenAI file id."""
     _check_auth(request)
     try:
         data = await openai_client.retrieve_file(file_id)
@@ -130,6 +127,7 @@ async def get_file_metadata(request: Request, file_id: str):
 
 @router.delete("/{file_id}")
 async def delete_file(request: Request, file_id: str):
+    """Delete an OpenAI file by id."""
     _check_auth(request)
     try:
         data = await openai_client.delete_file_async(file_id)
@@ -140,6 +138,7 @@ async def delete_file(request: Request, file_id: str):
 
 @router.get("/{file_id}/content")
 async def get_file_content(request: Request, file_id: str):
+    """Stream the raw bytes of an OpenAI file."""
     _check_auth(request)
     try:
         iterator, media_type = await openai_client.stream_file_content(file_id)

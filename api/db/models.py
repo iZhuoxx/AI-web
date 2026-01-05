@@ -66,12 +66,12 @@ class User(Base, TimestampMixin):
         "TranscriptionSession", back_populates="user", cascade="all, delete-orphan"
     )
 
-    # Notebook 分组文件夹
+    # Notebook folder relationships.
     notebook_folders: Mapped[List["NotebookFolder"]] = relationship(
         "NotebookFolder", back_populates="user", cascade="all, delete-orphan"
     )
 
-    # 闪卡相关
+    # Flashcard relationships.
     flashcard_folders: Mapped[List["FlashcardFolder"]] = relationship(
         "FlashcardFolder", back_populates="user", cascade="all, delete-orphan"
     )
@@ -79,12 +79,12 @@ class User(Base, TimestampMixin):
         "Flashcard", back_populates="user", cascade="all, delete-orphan"
     )
 
-    # Quiz 相关
+    # Quiz relationships.
     quiz_questions: Mapped[List["QuizQuestion"]] = relationship(
         "QuizQuestion", back_populates="user", cascade="all, delete-orphan"
     )
 
-    # MindMap
+    # Mind maps.
     mindmaps: Mapped[List["MindMap"]] = relationship(
         "MindMap", back_populates="user", cascade="all, delete-orphan"
     )
@@ -137,16 +137,15 @@ class Notebook(Base, TimestampMixin):
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Notebook 显示颜色（例如 "#FFFFFF" 或 Tailwind 之类）
+    # Notebook color for UI (e.g. "#FFFFFF" or a Tailwind class).
     color: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
-    # OpenAI / 向量库的 vector store id（例如 file search 的索引 id）
+    # OpenAI vector store id (e.g., for file search index).
     openai_vector_store_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     vector_store_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # TODO
-    # Add a column that is related to the AI chat Message.
+    # TODO: add relation to AI chat messages.
 
     user: Mapped["User"] = relationship("User", back_populates="notebooks")
     notes: Mapped[List["Note"]] = relationship(
@@ -159,14 +158,14 @@ class Notebook(Base, TimestampMixin):
         "TranscriptionSession", back_populates="notebook"
     )
 
-    # Notebook 分组（多对多）
+    # Notebook folders (many-to-many).
     folders: Mapped[List["NotebookFolder"]] = relationship(
         "NotebookFolder",
         secondary="notebook_folder_items",
         back_populates="notebooks",
     )
 
-    # Flashcard / Quiz / MindMap 归属
+    # Flashcard / Quiz / MindMap ownership.
     flashcard_folders: Mapped[List["FlashcardFolder"]] = relationship(
         "FlashcardFolder", back_populates="notebook", cascade="all, delete-orphan"
     )
@@ -205,8 +204,8 @@ class Note(Base):
 
 
 class AttachmentTranscriptionStatus(str, enum.Enum):
-    NONE = "none"          # 不需要转录 / 尚未申请
-    PENDING = "pending"    # 已提交转录任务
+    NONE = "none"          # No transcription requested yet.
+    PENDING = "pending"    # Transcription task submitted.
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -219,35 +218,35 @@ class Attachment(Base, TimestampMixin):
     notebook_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
-    # 基本信息
+    # Basic metadata.
     filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     mime: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     sha256: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
-    # S3 存储信息（本地 / 自己的对象存储）
-    s3_object_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # bucket 内部 key
-    s3_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # 预签名或公开访问 URL
+    # S3/object storage info.
+    s3_object_key: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # Key within the bucket.
+    s3_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # Presigned or public URL.
 
-    # 外部链接（例如 Youtube / Bilibili 视频）
+    # External link (e.g., YouTube / Bilibili video).
     external_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
-    # OpenAI 侧信息：用于 File / Vector Store / File Search
+    # OpenAI metadata for Files / Vector Store / File Search.
     openai_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    # 有些场景你可能还想区分 purpose（assistants / user_data 等）
+    # Some flows may also track a purpose (assistants / user_data etc.).
     openai_file_purpose: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
-    # 是否参与 File Search（有些附件可以只做存档，不进检索）
+    # Whether the attachment participates in File Search (some are archive-only).
     enable_file_search: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
-    # 文本摘要（用于列表展示 / 快速预览）
+    # Text summary used for list display / quick preview.
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 通用扩展信息（例如 OCR 结果、解析元数据等）
+    # General extension info (e.g., OCR results or parsed metadata).
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # --------------------------
-    # 转录相关的轻量信息
+    # Lightweight transcription details
     # --------------------------
     transcription_status: Mapped[AttachmentTranscriptionStatus] = mapped_column(
         Enum(
@@ -260,11 +259,11 @@ class Attachment(Base, TimestampMixin):
         server_default=AttachmentTranscriptionStatus.NONE.value,
     )
 
-    # 最近一次转录的语言 / 时长（方便前端展示）
+    # Last transcription language / duration (for UI display).
     transcription_lang: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     transcription_duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # 关系
+    # Relationships
     notebook: Mapped["Notebook"] = relationship("Notebook", back_populates="attachments")
     user: Mapped["User"] = relationship("User", back_populates="attachments")
     transcription_session: Mapped[Optional["TranscriptionSession"]] = relationship(
@@ -371,12 +370,12 @@ class TranscriptionSegment(Base):
 
 
 # ---------------------------------------------------------------------------
-# Notebook 文件夹（多对多）
+# Notebook folders (many-to-many)
 # ---------------------------------------------------------------------------
 
 
 class NotebookFolder(Base, TimestampMixin):
-    """Notebook 的分组文件夹（多对多）。"""
+    """Notebook grouping folder (many-to-many)."""
 
     __tablename__ = "notebook_folders"
 
@@ -403,7 +402,7 @@ class NotebookFolder(Base, TimestampMixin):
 
 
 class NotebookFolderItem(Base):
-    """NotebookFolder - Notebook 多对多中间表。"""
+    """Join table between NotebookFolder and Notebook."""
 
     __tablename__ = "notebook_folder_items"
 
@@ -423,12 +422,12 @@ class NotebookFolderItem(Base):
 
 
 # ---------------------------------------------------------------------------
-# 闪卡 & 闪卡文件夹
+# Flashcards & flashcard folders
 # ---------------------------------------------------------------------------
 
 
 class FlashcardFolder(Base, TimestampMixin):
-    """闪卡文件夹 / 卡组，强制属于某个 Notebook。"""
+    """Flashcard folder/collection scoped to a Notebook."""
 
     __tablename__ = "flashcard_folders"
 
@@ -461,7 +460,7 @@ class FlashcardFolder(Base, TimestampMixin):
 
 
 class Flashcard(Base):
-    """闪卡：只存问题和答案，强制属于 Notebook。"""
+    """Flashcard storing only question and answer, scoped to a Notebook."""
 
     __tablename__ = "flashcards"
 
@@ -492,7 +491,7 @@ class Flashcard(Base):
 
 
 class FlashcardFolderItem(Base):
-    """闪卡文件夹 - 闪卡 多对多关系 + 排序。"""
+    """Join table mapping flashcards to folders (with optional ordering)."""
 
     __tablename__ = "flashcard_folder_items"
 
@@ -512,12 +511,12 @@ class FlashcardFolderItem(Base):
 
 
 # ---------------------------------------------------------------------------
-# Quiz 题目 + 收藏（选择题，options 用 JSONB）
+# Quiz questions + favorites (multiple choice, options stored as JSONB)
 # ---------------------------------------------------------------------------
 
 
 class QuizQuestion(Base, TimestampMixin):
-    """测验题目：选择题，保存问题、选项、正确答案索引和提示。"""
+    """Multiple-choice quiz question with options, correct index, and optional hint."""
 
     __tablename__ = "quiz_questions"
 
@@ -529,19 +528,19 @@ class QuizQuestion(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False
     )
 
-    # 题干
+    # Question stem.
     question: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # 选项：例如 ["A 内容", "B 内容", "C 内容", "D 内容"]
+    # Options, e.g., ["A ...", "B ...", "C ...", "D ..."].
     options: Mapped[List[str]] = mapped_column(JSONB, nullable=False)
 
-    # 正确选项在 options 中的下标（0~3）
+    # Index of the correct option in options (0-3).
     correct_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # 提示
+    # Optional hint.
     hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # 预留元数据（难度、来源等）
+    # Additional metadata (difficulty, source, etc.).
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="quiz_questions")
@@ -555,12 +554,12 @@ class QuizQuestion(Base, TimestampMixin):
 
 
 # ---------------------------------------------------------------------------
-# 思维导图（保存整张导图的 JSON）
+# Mind maps (store the full diagram JSON)
 # ---------------------------------------------------------------------------
 
 
 class MindMap(Base, TimestampMixin):
-    """思维导图：保存整张导图的 JSON 数据。"""
+    """Mind map that stores the full diagram JSON."""
 
     __tablename__ = "mindmaps"
 
@@ -601,212 +600,3 @@ __all__ = [
     "QuizQuestion",
     "MindMap",
 ]
-
-
-
-
-# Legsacy model. Will be deleted
-
-# class User(Base, TimestampMixin):
-#     __tablename__ = "users"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     email: Mapped[str] = mapped_column(CITEXT(), unique=True, nullable=False, index=True)
-#     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-#     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-#     member_plan: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-#     member_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-#     memberships: Mapped[List[Membership]] = relationship(
-#         "Membership", back_populates="user", cascade="all, delete-orphan"
-#     )
-#     notebooks: Mapped[List["Notebook"]] = relationship(
-#         "Notebook", back_populates="user", cascade="all, delete-orphan"
-#     )
-#     attachments: Mapped[List[Attachment]] = relationship(
-#         "Attachment", back_populates="user", cascade="all, delete-orphan"
-#     )
-#     transcription_sessions: Mapped[List[TranscriptionSession]] = relationship(
-#         "TranscriptionSession", back_populates="user", cascade="all, delete-orphan"
-#     )
-#     tags: Mapped[List[Tag]] = relationship("Tag", back_populates="user", cascade="all, delete-orphan")
-
-
-# class MembershipStatus(str, enum.Enum):
-#     ACTIVE = "active"
-#     CANCELED = "canceled"
-#     EXPIRED = "expired"
-#     PAST_DUE = "past_due"
-
-
-# class Membership(Base):
-#     __tablename__ = "memberships"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-#     plan: Mapped[str] = mapped_column(String(50), nullable=False)
-#     status: Mapped[MembershipStatus] = mapped_column(Enum(MembershipStatus, name="membership_status"), nullable=False)
-#     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-#     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-#     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-#     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-#     user: Mapped[User] = relationship("User", back_populates="memberships")
-
-#     __table_args__ = (Index("idx_memberships_user", "user_id"),)
-
-
-# class Notebook(Base, TimestampMixin):
-#     __tablename__ = "notebooks"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-#     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-#     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-#     # TODO
-#     # Add a column for Color
-#     # Add a column for vector_store_id, this is for OpenAI file search function
-#     # Add a column that is related to the AI chat Message.the chat message informtion can reference to the meesage.ts
-
-#     user: Mapped[User] = relationship("User", back_populates="notebooks")
-#     notes: Mapped[List["Note"]] = relationship(
-#         "Note", back_populates="notebook", cascade="all, delete-orphan", order_by="Note.seq"
-#     )
-#     attachments: Mapped[List[Attachment]] = relationship(
-#         "Attachment", back_populates="notebook", cascade="all, delete-orphan"
-#     )
-#     transcription_sessions: Mapped[List[TranscriptionSession]] = relationship(
-#         "TranscriptionSession", back_populates="notebook"
-#     )
-#     tags: Mapped[List[Tag]] = relationship(
-#         "Tag", secondary="note_tags", back_populates="notebooks"
-#     )
-
-#     __table_args__ = (
-#         Index("idx_notebooks_user_updated", "user_id", "updated_at"),
-#     )
-
-
-# class Note(Base):
-#     __tablename__ = "notes"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     notebook_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"))
-#     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-#     seq: Mapped[int] = mapped_column(Integer, nullable=False)
-
-#     notebook: Mapped[Notebook] = relationship("Notebook", back_populates="notes")
-
-#     __table_args__ = (
-#         UniqueConstraint("notebook_id", "seq", name="uq_notes_seq"),
-#         Index("idx_notes_notebook", "notebook_id"),
-#     )
-
-
-
-# class TranscriptionSource(str, enum.Enum):
-#     REALTIME = "realtime"
-#     BATCH = "batch"
-
-
-# class TranscriptionSession(Base, TimestampMixin):
-#     __tablename__ = "transcription_sessions"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-#     notebook_id: Mapped[uuid.UUID] = mapped_column(
-#         UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="SET NULL"), nullable=True
-#     )
-#     attachment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-#         UUID(as_uuid=True), ForeignKey("attachments.id", ondelete="SET NULL"), nullable=True
-#     )
-#     source: Mapped[TranscriptionSource] = mapped_column(
-#         Enum(TranscriptionSource, name="transcription_source"), nullable=False
-#     )
-#     session_uid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     model: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     engine: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     lang: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-#     sample_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-#     duration_sec: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-#     full_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-#     confidence: Mapped[Optional[float]] = mapped_column(Numeric(5, 2), nullable=True)
-
-#     user: Mapped[User] = relationship("User", back_populates="transcription_sessions")
-#     notebook: Mapped[Notebook] = relationship("Notebook", back_populates="transcription_sessions")
-#     attachment: Mapped[Optional[Attachment]] = relationship("Attachment")
-#     segments: Mapped[List[TranscriptionSegment]] = relationship(
-#         "TranscriptionSegment", back_populates="session", cascade="all, delete-orphan", order_by="TranscriptionSegment.seq"
-#     )
-
-#     __table_args__ = (
-#         Index("idx_ts_user_created", "user_id", "created_at"),
-#         Index("idx_ts_notebook_created", "notebook_id", "created_at"),
-#         Index("idx_ts_attachment_created", "attachment_id", "created_at"),
-#     )
-
-
-# class TranscriptionSegment(Base):
-#     __tablename__ = "transcription_segments"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("transcription_sessions.id", ondelete="CASCADE"))
-#     seq: Mapped[int] = mapped_column(Integer, nullable=False)
-#     item_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-#     content_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-#     ts_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-#     timestamp: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-#     text: Mapped[str] = mapped_column(Text, nullable=False)
-#     confidence: Mapped[Optional[float]] = mapped_column(Numeric(5, 3), nullable=True)
-#     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-#     session: Mapped[TranscriptionSession] = relationship("TranscriptionSession", back_populates="segments")
-
-#     __table_args__ = (
-#         UniqueConstraint("session_id", "seq", name="uq_ts_segments_seq"),
-#         Index("idx_ts_segments_session", "session_id", "seq"),
-#     )
-
-
-# class Tag(Base):
-#     __tablename__ = "tags"
-
-#     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-#     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-#     name: Mapped[str] = mapped_column(String(64), nullable=False)
-
-#     user: Mapped[User] = relationship("User", back_populates="tags")
-#     notebooks: Mapped[List[Notebook]] = relationship("Notebook", secondary="note_tags", back_populates="tags")
-
-#     __table_args__ = (
-#         UniqueConstraint("user_id", "name", name="uq_tags_user_name"),
-#     )
-
-
-# class NoteTag(Base):
-#     __tablename__ = "note_tags"
-
-#     notebook_id: Mapped[uuid.UUID] = mapped_column(
-#         UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"), primary_key=True
-#     )
-#     tag_id: Mapped[uuid.UUID] = mapped_column(
-#         UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
-#     )
-
-
-# __all__ = [
-#     "User",
-#     "Membership",
-#     "MembershipStatus",
-#     "Notebook",
-#     "Note",
-#     "Attachment",
-#     "TranscriptionSession",
-#     "TranscriptionSegment",
-#     "TranscriptionSource",
-#     "Tag",
-#     "NoteTag",
-# ]

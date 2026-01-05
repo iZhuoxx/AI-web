@@ -1,28 +1,26 @@
 # AI Toolbox
 
-基于 Vue 3 + Vite 前端与 FastAPI 后端的全栈应用，支持会话笔记、文件/音频附件、S3 存储、PostgreSQL 永久化以及 CSRF/Session 登录。
+AI-powered study assistant built with Vue 3 + Vite (frontend) and FastAPI (backend). It supports file uploads, vector search, and audio transcription to help you organize and generate knowledge quickly.
 
-## 项目结构
-- `web/`：Vue 3 + TypeScript + Vite 前端，Ant Design Vue 组件库。
-- `api/`：FastAPI 后端，SQLAlchemy + Alembic，S3/音频等业务逻辑。
-- `docker-compose.yml`：PostgreSQL 16 与 Redis 7 的本地依赖。
-- `PROXY.md`：国内网络环境下的代理说明。
+## Stack & Layout
+- `web/`: Vue 3 + TypeScript + Vite (Ant Design Vue UI)
+- `api/`: FastAPI, SQLAlchemy, Alembic, S3/audio workflows
+- `docker-compose.yml`: PostgreSQL 16 (Redis optional)
 
-## 环境要求
-- Node.js ≥ 18，pnpm（或 npm/yarn）。
-- Python ≥ 3.8，pip 或 poetry。
-- PostgreSQL、Redis（可用 `docker compose` 一键启动）。
+## Prerequisites
+- Node.js ≥ 18 (pnpm or npm/yarn)
+- Python ≥ 3.10 (pip or poetry)
+- PostgreSQL and Redis (can be started via `docker compose`)
 
-## 本地快速开始
-1) 启动数据库与缓存（可选）  
+## Quick Start (Dev)
+1) Start databases  
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
-如需自建数据库，确保有可访问的 PostgreSQL 与 Redis 实例。
 
-2) 配置后端环境变量：复制 `api/.env`，填写关键项（与上面 docker-compose 默认账号保持一致）：  
+2) Backend env: copy `api/.env.example` if present (or create `api/.env`) and fill:  
 ```env
-DATABASE_URL=postgresql+psycopg://myuser:mypassword@localhost:5432/mydb
+DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/aiweb
 JWT_SECRET_KEY=your-long-random-secret
 CSRF_SECRET=another-random-secret
 SESSION_COOKIE_SECURE=false
@@ -34,49 +32,47 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 ```
 
-3) 安装依赖  
+3) Install deps  
 ```bash
 cd web && pnpm install
-cd ../api && pip install -r requirements.txt    # 或 poetry install
+cd ../api && pip install -r requirements.txt
 ```
 
-4) 初始化数据库（首次）  
+4) Init database (first time)  
 ```bash
 cd api
 alembic upgrade head
 ```
 
-5) 启动开发服务（两个终端）  
+5) Run dev servers (two terminals)  
 ```bash
-# 后端：FastAPI + 热重载
+# Backend: FastAPI with reload
 cd api
-uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
+python3 -m uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 
-# 前端：Vite 开发服务器，带 /api 代理
+# Frontend: Vite dev server with /api proxy
 cd web
 pnpm run dev  # http://localhost:5173
 ```
 
-## 生产构建与部署
+## Production
 ```bash
-# 构建前端
+# Build frontend assets
 cd web && pnpm build
 
-# 启动后端并同时托管前端静态资源
+# Serve frontend via FastAPI
 cd ../api
 SERVE_SPA=true uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
-将进程交给 systemd/supervisor，并在外层加反向代理与 TLS 即可。
+Use systemd/supervisor to keep the process running and place a TLS reverse proxy in front.
 
-## 数据库与迁移
-- 生成新迁移：`cd api && alembic revision --autogenerate -m "describe change"`  
-- 应用迁移：`alembic upgrade head`  
-- 常用 `psql`：`\dt` 查看表，`\d <table>` 看结构，`\l` 列数据库，`\q` 退出。
+## Database & Migrations
+- Migration scripts live in `api/alembic/versions`.
+- First-time setup: run `cd api && alembic upgrade head` to create all tables.
+- Create migration (after changing models): `cd api && alembic revision --autogenerate -m "describe change"`
+- Apply latest migration: `alembic upgrade head` (or target a revision hash; roll back with `alembic downgrade <rev>`).
+- Handy psql: `\dt` list tables, `\d <table>` describe, `\l` list DBs, `\q` quit.
 
-## 前端配置提示
-- 默认通过 Vite 代理访问 `http://localhost:8000/api`。如后端域名不同，可在 `web/.env.development` 设置 `VITE_API_BASE_URL=https://your-api.com/api`。
-- 流式/转写端点也可在同一文件里设置 `VITE_RESPONSES_ENDPOINT`、`VITE_TRANSCRIBE_STREAM_ENDPOINT`、`VITE_TRANSCRIBE_REALTIME_WS`。
-
-## 语音转写流程
-- 选择音频附件或点击麦克风录制后，前端会异步调用 `POST /api/audio/transcriptions`（默认模型 `gpt-4o-transcribe`），完成后把识别文本填入输入框。
-- 后端同样支持常规文件上传、S3 预签名上传和下载、以及 OpenAI File linking（见 `api/README.md`）。
+## Frontend Config
+- Default API proxy: `http://localhost:8000/api`. Override in `web/.env.development` with `VITE_API_BASE_URL=https://your-api.com/api`.
+- Streaming/transcription endpoints can also be set there: `VITE_RESPONSES_ENDPOINT`, `VITE_TRANSCRIBE_STREAM_ENDPOINT`, `VITE_TRANSCRIBE_REALTIME_WS`.

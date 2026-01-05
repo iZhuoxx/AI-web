@@ -26,13 +26,13 @@ async def catch_exceptions_middleware(request: Request, call_next):
     try:
         return await call_next(request)
     except StarletteHTTPException as http_exc:
-        # 保留原始状态码
+        # Preserve the original status code from Starlette HTTP exceptions.
         return JSONResponse(
             status_code=http_exc.status_code,
             content={"error": {"message": http_exc.detail}},
         )
     except Exception as exc:
-        # 其他未知异常才用 500
+        # Only unexpected exceptions fall back to a 500.
         return JSONResponse(
             status_code=500,
             content={"error": {"message": f"{type(exc).__name__}: {exc}"}},
@@ -58,7 +58,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 关键：传入的是“路由对象”，不是模块
+# Important: include router objects, not the modules.
 app.include_router(responses_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(audio_router.router, prefix="/api")

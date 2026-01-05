@@ -49,6 +49,7 @@ def presign_upload(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PresignUploadResponse:
+    """Generate a presigned S3 upload URL and create an attachment record for the notebook."""
     try:
         notebook_id = uuid.UUID(payload.notebook_id)
     except ValueError as exc:
@@ -94,6 +95,7 @@ def attachment_download_url(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PresignDownloadResponse:
+    """Return a short-lived download URL for the caller’s own attachment."""
     attachment = db.get(models.Attachment, attachment_id)
     if not attachment or attachment.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
@@ -122,6 +124,7 @@ def update_attachment_metadata(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, str | None]:
+    """Rename an attachment owned by the caller."""
     attachment = db.get(models.Attachment, attachment_id)
     if not attachment or attachment.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
@@ -146,6 +149,7 @@ def attach_openai_file(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    """Link an uploaded OpenAI file to this attachment, creating a vector store if needed."""
     attachment = db.get(models.Attachment, attachment_id)
     if not attachment or attachment.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
@@ -187,6 +191,7 @@ def delete_attachment(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete an attachment and its corresponding S3 object/OpenAI file when present."""
     attachment = db.get(models.Attachment, attachment_id)
     if not attachment or attachment.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")

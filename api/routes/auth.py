@@ -82,12 +82,14 @@ def _session_info(user: models.User, db: Session) -> SessionInfo:
 
 @router.get('/csrf')
 def get_csrf_token(response: Response) -> dict[str, str]:
+    """Issue a fresh CSRF token cookie and return it for subsequent form submissions."""
     token = _set_csrf_cookie(response)
     return {"csrf_token": token}
 
 
 @router.post("/register", response_model=SessionInfo, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf)])
 def register_user(payload: UserCreate, response: Response, db: Session = Depends(get_db)) -> SessionInfo:
+    """Create a new user, set session/CSRF cookies, and return the session payload."""
     existing = db.execute(select(models.User).where(models.User.email == payload.email)).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
@@ -109,6 +111,7 @@ def register_user(payload: UserCreate, response: Response, db: Session = Depends
 
 @router.post("/login", response_model=SessionInfo, dependencies=[Depends(require_csrf)])
 def login_user(payload: UserLogin, response: Response, db: Session = Depends(get_db)) -> SessionInfo:
+    """Authenticate a user, refresh session/CSRF cookies, and return session info."""
     user = db.execute(select(models.User).where(models.User.email == payload.email)).scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
@@ -123,6 +126,7 @@ def login_user(payload: UserLogin, response: Response, db: Session = Depends(get
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)])
 def logout_user(response: Response) -> Response:
+    """Clear the session cookie and refresh CSRF cookie."""
     _clear_session_cookie(response)
     _set_csrf_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -131,4 +135,5 @@ def logout_user(response: Response) -> Response:
 
 @router.get("/me", response_model=SessionInfo)
 def get_current_session(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)) -> SessionInfo:
+    """Return the current authenticated session details."""
     return _session_info(user, db)

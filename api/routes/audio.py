@@ -55,7 +55,7 @@ def _normalize_confidence(value: Optional[float]) -> Optional[float]:
 
 
 def _compute_segment_confidence(segment: Dict[str, Any]) -> Optional[float]:
-    """计算单个分段置信度"""
+    """Compute a confidence score for a single transcription segment."""
     primary = _normalize_confidence(segment.get("confidence"))
     if primary is not None:
         return primary
@@ -92,7 +92,7 @@ def _filter_confident_segments(
     threshold: Optional[float],
     missing_default: float = 0.5,
 ) -> Optional[Dict[str, Any]]:
-    """过滤低置信度文本段"""
+    """Filter out low-confidence segments and return merged text with average confidence."""
     if not isinstance(raw, dict):
         return None
     segments = raw.get("segments")
@@ -175,7 +175,7 @@ async def create_transcription(
     prompt: Optional[str] = Form(None),
     min_confidence: Optional[float] = Form(None),
 ):
-    """上传音频并按置信度过滤文字"""
+    """Upload audio, transcribe it, and optionally filter by confidence."""
     _check_auth(request)
     filename, contents, content_type = await _prepare_audio_upload(file)
 
@@ -203,7 +203,7 @@ async def create_transcription(
             pass
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # --- 置信度过滤 ---
+    # --- Confidence filtering ---
     confidence_threshold = None
     if isinstance(min_confidence, (int, float)):
         confidence_threshold = max(0.0, min(1.0, float(min_confidence)))
@@ -220,7 +220,7 @@ async def create_transcription(
         payload["text"] = filtered["text"]
         payload["confidence"] = filtered.get("confidence")
 
-    # 附带额外信息
+    # Attach extra metadata when available
     if isinstance(raw, dict):
         if isinstance(raw.get("duration"), (int, float)):
             payload["duration"] = raw["duration"]
@@ -251,6 +251,7 @@ async def stream_transcriptions(
     temperature: Optional[float] = Form(None),
     prompt: Optional[str] = Form(None),
 ):
+    """Upload audio and stream incremental transcription chunks over SSE."""
     _check_auth(request)
     filename, contents, content_type = await _prepare_audio_upload(file)
 
@@ -337,6 +338,7 @@ async def _relay_realtime_transcription(client_ws: WebSocket, openai_ws: Any) ->
 
 @router.websocket("/transcriptions/live")
 async def realtime_transcriptions(websocket: WebSocket):
+    """Full-duplex realtime transcription bridge between client WS and OpenAI realtime API."""
     await websocket.accept()
     try:
         await _ensure_ws_auth(websocket)
@@ -384,20 +386,20 @@ async def realtime_transcriptions(websocket: WebSocket):
     session_update = {
         "type": "transcription_session.update",
         "session": {
-            # 输入音频格式
+            # Audio format expected by realtime transcription.
             "input_audio_format": "pcm16",
-            # 语音转写配置
+            # Transcription model and language settings.
             "input_audio_transcription": transcription_config,
-            # 服务端 VAD
+            # Server-side VAD configuration.
             "turn_detection": {
                 "type": "server_vad",
                 "threshold": max(0.0, min(1.0, vad_threshold)),
                 "silence_duration_ms": max(100, silence_ms),
                 "prefix_padding_ms": max(0, prefix_ms),
             },
-            # （可选）降噪
+            # Optional noise-reduction settings.
             **({"input_audio_noise_reduction": noise_reduction_config} if noise_reduction_config else {}),
-            # （可选）include 字段放这里
+            # Optional include fields for additional response data.
             **({"include": include_fields} if include_fields else {}),
         }
     }
@@ -405,18 +407,18 @@ async def realtime_transcriptions(websocket: WebSocket):
 
     try:
         async with websockets.connect(openai_client.OPENAI_REALTIME_TRANSCRIBE_URL, extra_headers=headers, max_size=None) as openai_ws:
-            # 1) 等待服务端创建消息
+            # 1) Wait for OpenAI to acknowledge session creation.
             created = await openai_ws.recv()
-            # 2) 发送会话更新（注意此处是上面的 session_update）
+            # 2) Send the post-creation session update (session_update above).
             await openai_ws.send(json.dumps(session_update))
-            # 3) 告知前端“session_started”（可选）
+            # 3) Notify the client that the session is ready (optional).
             await websocket.send_text(json.dumps({
                 "event": "session_started",
                 "model": model,
                 "sample_rate": sample_rate,
                 "min_confidence": confidence_threshold,
             }))
-            # 4) 进入双向转发
+            # 4) Start bidirectional relaying.
             await _relay_realtime_transcription(websocket, openai_ws)
 
     except websockets.exceptions.InvalidStatusCode as exc:

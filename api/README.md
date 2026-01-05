@@ -9,13 +9,12 @@ This backend now supports PostgreSQL storage via SQLAlchemy + Alembic, email/pas
    ```bash
    cd api
    pip install -r requirements.txt
-   # or: poetry install
    ```
 
 2. Copy `.env` and fill in the following keys:
 
    ```env
-   DATABASE_URL=postgresql+psycopg://noteai:password@localhost:5432/appdb
+   DATABASE_URL= your-postgres-database-url
    JWT_SECRET_KEY=your-very-long-random-secret
    CSRF_SECRET=another-random-secret
    SESSION_COOKIE_SECURE=false        # true in production over HTTPS
@@ -56,17 +55,6 @@ This backend now supports PostgreSQL storage via SQLAlchemy + Alembic, email/pas
 ```bash
 uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
 ```
-
-New REST endpoints (all prefixed with `/api`):
-
-- `GET /auth/csrf` – issues a CSRF token cookie/JSON payload.
-- `POST /auth/register` – email registration (requires CSRF header).
-- `POST /auth/login` / `POST /auth/logout`.
-- `GET /auth/me` – session info with memberships.
-- `GET|POST|PUT|DELETE /notebooks` – CRUD for user notebooks (each contains multiple notes).
-- `POST /notebooks/{notebook_id}/messages` – append chat entries to a notebook.
-- `POST /attachments/presign-upload` – returns S3 form data and creates an attachment row.
-- `GET /attachments/{attachment_id}/download-url` – presigned download links.
 
 All mutating requests must include `X-CSRF-Token` that matches the `csrf_token` cookie, and requests should always be sent with `credentials: 'include'` so the HttpOnly session cookie works.
 

@@ -184,12 +184,14 @@ def _flashcard_to_schema(card: models.Flashcard) -> FlashcardOut:
 
 @router.get("", response_model=List[NotebookOut])
 def list_notebooks(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)) -> List[NotebookOut]:
+    """List all notebooks for the user, including notes, attachments, and folders."""
     notebooks = db.execute(_notebook_query(user.id)).scalars().unique().all()
     return [_notebook_to_schema(notebook) for notebook in notebooks]
 
 
 @router.post("", response_model=NotebookOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf)])
 def create_notebook(payload: NotebookCreate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)) -> NotebookOut:
+    """Create a notebook with optional nested notes and folder memberships."""
     notebook = models.Notebook(
         user_id=user.id,
         title=payload.title,
@@ -235,6 +237,7 @@ def _get_notebook_for_user(notebook_id: uuid.UUID, user: models.User, db: Sessio
 def get_notebook(
     notebook_id: uuid.UUID, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> NotebookOut:
+    """Fetch a single notebook by id, including nested relationships."""
     notebook = _get_notebook_for_user(notebook_id, user, db)
     return _notebook_to_schema(notebook)
 
@@ -243,6 +246,7 @@ def get_notebook(
 def update_notebook(
     notebook_id: uuid.UUID, payload: NotebookUpdate, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> NotebookOut:
+    """Update notebook metadata, notes ordering/content, and folder membership."""
     notebook = _get_notebook_for_user(notebook_id, user, db)
 
     notebook.title = payload.title
@@ -275,7 +279,7 @@ def update_notebook(
                 )
             updated_notes.append(note)
 
-        # 两阶段重排，先把现存的所有笔记（包括将被删除的）移到临时 seq，再写入最终 seq
+        # Two-phase reorder: push existing notes (even ones being deleted) to a temp seq before final ordering.
         temp_offset = 1_000_000
         for i, note in enumerate(notebook.notes):
             note.seq = temp_offset + i
@@ -300,6 +304,7 @@ def update_notebook(
 def delete_notebook(
     notebook_id: uuid.UUID, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> Response:
+    """Delete a notebook and its dependent entities."""
     notebook = _get_notebook_for_user(notebook_id, user, db)
     db.delete(notebook)
     db.commit()
@@ -385,6 +390,7 @@ async def generate_flashcards_from_openai(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardGenerateResponse:
+    """Use OpenAI Responses API + selected attachments to generate flashcards into a folder."""
     notebook = _get_notebook_for_user(notebook_id, user, db)
 
     target_folder = None
@@ -559,13 +565,17 @@ def _build_mind_elixir_node(node: StructuredMindMapNode, *, is_root: bool = Fals
     return data
 
 
-def _structured_mindmap_to_data(mindmap: StructuredMindMap) -> dict:
+def _structured_mindmap_to_data(mindmap: StructuredMindMap, sources: list[str] | None = None) -> dict:
+    meta: dict[str, Any] = {"title": mindmap.title}
+    if sources:
+        meta["sources"] = sources
+
     return {
         "nodeData": _build_mind_elixir_node(mindmap.root, is_root=True),
         "linkData": {},
         "template": "right",
         "direction": 1,
-        "meta": {"title": mindmap.title},
+        "meta": meta,
     }
 
 
@@ -581,6 +591,7 @@ async def generate_mindmap_from_openai(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MindMapOut:
+    """Use OpenAI Responses API to build a structured mind map from notebook attachments."""
     notebook = _get_notebook_for_user(notebook_id, user, db)
 
     attachment_map = {att.id: att for att in notebook.attachments}
@@ -669,7 +680,11 @@ async def generate_mindmap_from_openai(
     title = (payload.title or result.title or notebook.title or "AI 思维导图").strip()
     if len(title) > 255:
         title = title[:255]
-    data_payload = _structured_mindmap_to_data(result)
+    sources = [
+        att.filename or getattr(att, "s3_object_key", None) or str(att.id)
+        for att in selected
+    ]
+    data_payload = _structured_mindmap_to_data(result, sources)
 
     mindmap = models.MindMap(
         user_id=user.id,
@@ -694,7 +709,8 @@ async def generate_note_title(
     payload: TitleGenerateRequest,
     user: models.User = Depends(get_current_user),
 ) -> TitleGenerateResponse:
-    # 用户鉴权由依赖处理，这里只需确认内容有效
+    """Return a concise title suggestion for note content using OpenAI Responses API."""
+    # Authorization is handled by dependencies; just validate payload here.
     content = payload.content.strip()
     if not content:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="内容不能为空")
@@ -705,7 +721,7 @@ async def generate_note_title(
         "标题不要使用引号、句号或多余的标点，并保持与内容语言一致。"
     )
 
-    # Responses API 需要使用 input_text 而不是 text
+    # Responses API expects input_text instead of text.
     messages = [
         {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
         {"role": "user", "content": [{"type": "input_text", "text": content}]},
@@ -719,7 +735,7 @@ async def generate_note_title(
             temperature=0.3,
             timeout=20.0,
         )
-    except Exception as exc:  # pragma: no cover - 网络异常兜底
+    except Exception as exc:  # pragma: no cover - fallback when network errors occur
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"请求标题生成失败：{exc}")
 
     def _extract_text(payload: dict) -> str:
@@ -745,7 +761,7 @@ async def generate_note_title(
     if not title:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="生成标题失败：模型未返回结果")
 
-    # 确保长度限制，避免过长标题
+    # Enforce length limit to avoid overly long titles.
     if len(title) > 15:
         title = title[:15]
 

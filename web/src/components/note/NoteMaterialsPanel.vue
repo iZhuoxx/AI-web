@@ -28,7 +28,7 @@
                 <a-dropdown
                   :trigger="['click']"
                   placement="bottomRight"
-                  overlay-class-name="materials-actions-dropdown"
+                  overlay-class-name="rounded-dropdown materials-actions-dropdown"
                 >
                   <button class="more-btn" type="button" @click.stop>
                     <MoreVerticalIcon class="more-icon" />
@@ -664,7 +664,7 @@ defineExpose({ focusAttachmentByCitation })
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
-  padding-bottom: 72px; /* 留空间给悬浮上传按钮 */
+  padding-bottom: 72px; /* 为悬浮上传按钮预留空间 */
 }
 
 .materials-list {
@@ -792,26 +792,36 @@ defineExpose({ focusAttachmentByCitation })
 }
 
 .more-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: rgba(0, 0, 0, 0.55);
 }
 
 :deep(.materials-actions-dropdown .ant-dropdown-menu) {
-  min-width: 160px;
+  min-width: 170px;
   padding: 6px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
 }
 
 :deep(.materials-actions-dropdown .ant-dropdown-menu-item) {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 12px;
+  line-height: 1.2;
 }
 
 :deep(.materials-actions-dropdown .menu-icon) {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
   color: rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
 }
 
 :deep(.materials-actions-dropdown .ant-dropdown-menu-item-disabled .menu-icon) {

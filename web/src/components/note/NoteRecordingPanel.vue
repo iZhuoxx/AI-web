@@ -1,7 +1,7 @@
 <template>
   <a-card class="rec-panel" :body-style="panelBodyStyle">
     <div class="row">
-      <!-- 左侧：录制按钮 + 时间 -->
+      <!-- 左侧：录制按钮与计时 -->
       <div class="left-group">
         <button
           class="rec-btn"
@@ -15,7 +15,7 @@
           <component :is="isRecording ? SquareIcon : MicIcon" class="btn-icon" />
         </button>
 
-        <!-- 时间显示（与主背景一致、无边框） -->
+        <!-- 时间显示（与主背景一致） -->
         <div class="time">
           <svg viewBox="0 0 24 24" class="clk" aria-hidden="true">
             <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.8" />
@@ -25,7 +25,7 @@
         </div>
       </div>
 
-      <!-- 中间：中心对称波形（从中线向上下扩散） -->
+      <!-- 中间：对称波形显示 -->
       <div class="wave-wrapper" role="img" aria-label="audio level">
         <div class="wave" :class="{ on: isRecording }">
           <span
@@ -41,13 +41,13 @@
         </div>
       </div>
 
-      <!-- 右侧：仅错误/不可用提示（不显示"连接中"） -->
+      <!-- 右侧：错误/不可用提示 -->
       <div v-if="statusText" class="hint" :class="statusClass">
         <span class="dot" /> {{ statusText }}
       </div>
     </div>
 
-    <!-- 实时转写（可选） -->
+    <!-- 实时转写文案 -->
     <div v-if="liveText" class="live">{{ liveText }}</div>
   </a-card>
 </template>
@@ -96,16 +96,16 @@ const statusClass = computed(() => {
   return 'muted'
 })
 
-/* 现代音频频谱 - 中心对称上下扩散 */
+/* 中心对称的音频频谱 */
 const waveBars = computed(() => {
-  const bars = 64 // 64条频谱
+  const bars = 64
   const base = Math.min(1, Math.max(0, props.audioLevel || 0))
   const intensity = props.isRecording ? base : base * 0.6
   const arr: number[] = []
-  const time = Date.now() * 0.003 // 加快动画速度
+  const time = Date.now() * 0.003 // 加快动画节奏
   
   for (let i = 0; i < bars; i++) {
-    // 多层波形模拟真实频谱，增大振幅
+    // 多层波形叠加模拟真实频谱
     const wave1 = Math.sin((i + 1) * 0.28 + time) * 0.5
     const wave2 = Math.sin((i + 1) * 0.45 + time * 1.5) * 0.4
     const wave3 = Math.sin((i + 1) * 0.68 + time * 0.8) * 0.35
@@ -115,12 +115,11 @@ const waveBars = computed(() => {
     const distanceFromCenter = Math.abs(i - bars / 2) / (bars / 2)
     const centerBoost = Math.pow(1 - distanceFromCenter, 1.2) * 0.6 + 0.4
     
-    // 组合波形
     const combined = (wave1 + wave2 + wave3 + wave4) * centerBoost
     
-    // 大幅增加高度范围，让波动更明显
-    const baseHeight = 15 // 增加最小高度
-    const dynamicHeight = intensity * 120 * (combined + 1.2) * centerBoost // 大幅增加动态范围
+    // 提升动态范围，让波动更明显
+    const baseHeight = 15 // 提高最小高度
+    const dynamicHeight = intensity * 120 * (combined + 1.2) * centerBoost // 扩大动态范围
     const finalHeight = baseHeight + dynamicHeight
     
     arr.push(Math.max(12, Math.min(98, finalHeight)))

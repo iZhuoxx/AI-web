@@ -203,7 +203,7 @@ type ViewerPDFDocumentProxy = Parameters<
   NonNullable<InstanceType<typeof VuePdfEmbed>['$props']['onLoaded']>
 >[0]
 
-// 修复: 设置 worker 路径
+// 显式配置 pdf.js worker 路径
 if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -239,7 +239,7 @@ const viewerId = 'pdf-viewer'
 const loading = ref(true)
 const error = ref<string | null>(null)
 const pdfEmbedRef = ref<PdfEmbedInstance | null>(null)
-// 修复: 使用与 VuePdfEmbed 事件一致的 PDF 类型
+// 与 VuePdfEmbed 事件类型对齐
 const pdfDoc = ref<ViewerPDFDocumentProxy | PdfDocumentLike | null>(null)
 const showThumbs = ref(false)
 const showSearch = ref(false)
@@ -256,7 +256,7 @@ const textCache = ref<Record<number, string>>({})
 const searchDoc = ref<PdfDocumentLike | null>(null)
 const searchLoadingTask = ref<PdfDocumentLoadingTaskLike | null>(null)
 const scaleOptions = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
-// 修复: 添加独立的 render key 来强制重新渲染
+// 渲染 key 用于强制刷新
 const renderKey = ref(0)
 
 const thumbnails = computed(() => Array.from({ length: total.value }, (_, idx) => idx + 1))
@@ -297,7 +297,7 @@ const cleanupSearchDoc = async () => {
 }
 
 const loadSearchDocument = async (): Promise<PdfDocumentLike | null> => {
-  // Prefer the actual pdf.js document from the viewer ref
+  // 优先复用组件内部的 pdf.js 文档实例
   if (pdfEmbedRef.value?.document) {
     return pdfEmbedRef.value.document
   }
@@ -378,7 +378,7 @@ watch(
   },
 )
 
-// 修复: 监听 scale 变化并强制重新渲染
+// 缩放变化时强制重新渲染
 watch([() => scale.value, () => fitScale.value, () => scaleMode.value], () => {
   renderKey.value++
 })
@@ -404,7 +404,7 @@ const onLoaded = (pdf: ViewerPDFDocumentProxy) => {
   }
 }
 
-// 修复: 添加 rendered 事件处理
+// 处理 rendered 事件以更新状态
 const onRendered = () => {
   loading.value = false
 }
@@ -527,7 +527,7 @@ const scrollToPage = (targetPage: number) => {
   }
 }
 
-// 修复: 使用正确的 pdfjs API 获取页面文本
+// 使用 pdfjs 官方 API 抽取文本
 const getPageText = async (pageNumber: number, doc?: PdfDocumentLike | null): Promise<string> => {
   if (textCache.value[pageNumber]) return textCache.value[pageNumber]
   const targetDoc = doc ?? (await loadSearchDocument())

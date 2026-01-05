@@ -49,6 +49,7 @@ def list_mindmaps(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[MindMapOut]:
+    """List mind maps for the user; optionally filter by notebook id."""
     query = (
         select(models.MindMap)
         .where(models.MindMap.user_id == user.id)
@@ -67,6 +68,7 @@ def get_mindmap(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MindMapOut:
+    """Fetch a single mind map by id."""
     mindmap = _get_mindmap(mindmap_id, user, db)
     return _mindmap_to_schema(mindmap)
 
@@ -82,6 +84,7 @@ def create_mindmap(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MindMapOut:
+    """Create a mind map under a notebook."""
     _ensure_notebook_owned(db, user, payload.notebook_id)
     mindmap = models.MindMap(
         user_id=user.id,
@@ -106,6 +109,7 @@ def update_mindmap(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MindMapOut:
+    """Update a mind map’s notebook, title, or data payload."""
     mindmap = _get_mindmap(mindmap_id, user, db)
 
     if payload.notebook_id is not None and payload.notebook_id != mindmap.notebook_id:
@@ -132,6 +136,7 @@ def delete_mindmap(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete a mind map owned by the user."""
     mindmap = _get_mindmap(mindmap_id, user, db)
     db.delete(mindmap)
     db.commit()

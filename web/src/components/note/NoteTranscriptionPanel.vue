@@ -1,6 +1,5 @@
 <template>
   <a-card class="transcription-panel" :bordered="false" :body-style="{ padding: '0', height: '100%' }">
-    <!-- Body -->
     <div class="panel-body">
       <div class="floating-controls">
         <a-segmented
@@ -145,7 +144,7 @@ const searchValue = ref('')
 const userTyped = ref(false) // 是否为用户输入
 const showSearchInput = ref(false)
 const inlineSearchInputRef = ref<HTMLInputElement | null>(null)
-// 自动滚动：无UI开关，滚动与按钮控制
+// 自动滚动交由内容与浮动按钮控制
 const autoScroll = ref(true)
 const showScrollBtn = ref(false)
 const density = ref<'comfortable' | 'cozy' | 'compact'>('cozy')
@@ -256,7 +255,7 @@ const animateLiveText = (nextRaw: string) => {
   liveAnimationFrame = requestAnimationFrame(step)
 }
 
-// ---- 搜索行为 ----
+// 搜索行为
 const onUserInput = () => { userTyped.value = true }
 const clearSearch = () => {
   searchValue.value = ''
@@ -323,7 +322,7 @@ const handleSearch = async () => {
   }
 }
 
-// ---- 滚动逻辑 ----
+// 滚动与定位
 const scrollToBottom = () => {
   const el = scrollRef.value
   if (!el) return
@@ -382,7 +381,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ===== Theme tokens ===== */
+/* 主题变量 */
 :root {
   --panel-bg: #fff;
   --border: rgba(15, 23, 42, 0.08);

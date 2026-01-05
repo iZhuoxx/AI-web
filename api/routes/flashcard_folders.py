@@ -93,6 +93,7 @@ def list_flashcard_folders(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[FlashcardFolderOut]:
+    """List flashcard folders for the user; optionally filter by notebook id."""
     query = (
         select(models.FlashcardFolder)
         .where(models.FlashcardFolder.user_id == user.id)
@@ -117,6 +118,7 @@ def create_flashcard_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardFolderOut:
+    """Create a flashcard folder under a notebook and optionally link existing cards."""
     _ensure_notebook_owned(db, user, payload.notebook_id)
     folder = models.FlashcardFolder(
         user_id=user.id,
@@ -142,6 +144,7 @@ def update_flashcard_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardFolderOut:
+    """Rename/update a flashcard folder and reset its card membership."""
     folder = _get_folder(folder_id, user, db)
     if payload.name is not None:
         folder.name = payload.name
@@ -166,6 +169,7 @@ def delete_flashcard_folder(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    """Delete a flashcard folder (cards remain)."""
     folder = _get_folder(folder_id, user, db)
     db.delete(folder)
     db.commit()
