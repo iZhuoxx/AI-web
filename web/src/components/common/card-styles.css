@@ -1,0 +1,361 @@
+/**
+ * 卡片统一样式
+ *
+ * 包含各种卡片布局样式：
+ * - 文件夹卡片 (.folder-card)
+ * - 内容卡片 (.card-row)
+ * - 空状态面板 (.empty-panel)
+ * - 快速复习卡片 (.fast-card)
+ *
+ * 使用方法：
+ * 在组件中导入此文件，然后直接使用对应的类名
+ */
+
+/* ============================================
+   1. 文件夹卡片 (Folder Card)
+   ============================================ */
+
+.folder-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 18px 20px;
+  border: 1.5px solid rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.folder-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.folder-card:hover {
+  transform: translateY(-3px);
+}
+
+/* 文件夹卡片颜色变体 */
+.folder-card--color-0 {
+  background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.folder-card--color-1 {
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.folder-card--color-2 {
+  background: linear-gradient(135deg, #fce7f3 0%, #fdf2f8 100%);
+  border-color: rgba(236, 72, 153, 0.2);
+}
+
+.folder-card--color-3 {
+  background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.folder-card--color-4 {
+  background: linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.folder-card--color-5 {
+  background: linear-gradient(135deg, #ffedd5 0%, #fff7ed 100%);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+/* Hover 状态边框颜色 */
+.folder-card--color-0:hover {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.folder-card--color-1:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.folder-card--color-2:hover {
+  border-color: rgba(236, 72, 153, 0.4);
+}
+
+.folder-card--color-3:hover {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.folder-card--color-4:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.folder-card--color-5:hover {
+  border-color: rgba(249, 115, 22, 0.4);
+}
+
+/* 文件夹卡片内容 */
+.folder-card__head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+}
+
+.folder-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.folder-desc {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 10px;
+}
+
+.folder-materials {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.materials-inline {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.material-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+  color: #475569;
+  font-size: 11px;
+}
+
+.material-more {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* ============================================
+   2. 内容卡片行 (Card Row)
+   ============================================ */
+
+.card-row {
+  background: #fff;
+  border-radius: 16px;
+  border: 1.5px solid rgba(0, 0, 0, 0.04);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.card-row:hover {
+  border-color: rgba(99, 102, 241, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+/* 卡片列表容器 */
+.card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 20px;
+}
+
+/* ============================================
+   3. 空状态面板 (Empty Panel)
+   ============================================ */
+
+.empty-panel {
+  flex: 1;
+  min-height: 0;
+  border: 1px dashed rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(59, 130, 246, 0.03));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 36px;
+  height: 36px;
+  color: #6366f1;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.empty-desc {
+  margin: 0;
+  color: #64748b;
+}
+
+.empty-inner {
+  margin-top: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+.muted {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ============================================
+   4. 快速复习卡片 (Fast Review Card)
+   ============================================ */
+
+.fast-card {
+  width: 100%;
+  max-width: 600px;
+  perspective: 1000px;
+  cursor: pointer;
+  min-height: 280px;
+}
+
+.fast-card__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.fast-card--flipped .fast-card__inner {
+  transform: rotateY(180deg);
+}
+
+.fast-card__front,
+.fast-card__back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  background: #fff;
+  border-radius: 20px;
+  padding: 20px;
+  border: 1.5px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.fast-card__back {
+  transform: rotateY(180deg);
+}
+
+.fast-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.fast-card__body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 10px;
+}
+
+.fast-text {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.7;
+  color: #0f172a;
+  text-align: center;
+}
+
+.flip-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-top: -4px;
+}
+
+/* ============================================
+   5. 网格布局
+   ============================================ */
+
+.folders-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 2px 0 80px;
+}
+
+/* ============================================
+   6. 面板 Shell
+   ============================================ */
+
+.panel-shell {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px;
+}
+
+.panel-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  border-radius: 16px;
+}
+
+/* ============================================
+   7. 响应式设计
+   ============================================ */
+
+@media (max-width: 768px) {
+  .panel-shell {
+    padding: 12px;
+  }
+
+  .folder-card {
+    padding: 14px 16px;
+  }
+
+  .card-row {
+    padding: 14px 16px;
+  }
+
+  .folders-grid {
+    gap: 12px;
+  }
+}

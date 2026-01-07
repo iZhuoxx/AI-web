@@ -64,15 +64,17 @@
               <div class="item-title">{{ resolveTitle(element.title) }}</div>
             </div>
             <div v-if="!element.isPlaceholder" class="item-actions">
-              <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="note-actions-dropdown">
+              <a-dropdown :trigger="['click']" placement="bottomRight" overlay-class-name="rounded-dropdown note-actions-dropdown">
                 <button class="more-btn" type="button" @click.stop>
                   <MoreVerticalIcon class="more-icon" />
                 </button>
                 <template #overlay>
                   <a-menu @click="onMenuClick(element, $event)">
-                    <a-menu-item key="delete">
-                      <Trash2Icon class="menu-icon" />
-                      <span>删除</span>
+                    <a-menu-item key="delete" class="delete-menu-item">
+                      <template #icon>
+                        <DeleteOutlined />
+                      </template>
+                      删除
                     </a-menu-item>
                   </a-menu>
                 </template>
@@ -83,48 +85,32 @@
       </Draggable>
     </a-spin>
   </a-card>
-  <a-modal
-    v-model:visible="deleteModal.open"
-    :footer="null"
-    :maskClosable="false"
-    :width="360"
-    centered
-    destroy-on-close
-    wrap-class-name="note-delete-modal"
-    @cancel="handleDeleteCancel"
-    @afterClose="resetDeleteModal"
+  <ConfirmModal
+    v-model="deleteModal.open"
+    variant="danger"
+    confirm-text="删除"
+    cancel-text="取消"
+    :on-confirm="handleDeleteConfirm"
   >
-    <div class="delete-modal__body">
-      <p class="delete-modal__title">
-        要删除
-        <span class="delete-modal__note">
-          <FileTextIcon class="delete-modal__note-icon" />
-          <span>{{ resolveTitle(deleteModal.note?.title || '') }}</span>
-        </span>
-        吗？
-      </p>
-      <div class="delete-modal__actions">
-        <a-button class="delete-modal__btn" @click="handleDeleteCancel">取消</a-button>
-        <a-button
-          type="primary"
-          danger
-          class="delete-modal__btn delete-modal__btn--danger"
-          :loading="deleteModal.loading"
-          @click="handleDeleteConfirm"
-        >
-          删除
-        </a-button>
-      </div>
-    </div>
-  </a-modal>
+    <template v-if="deleteModal.note">
+      要删除
+      <span class="item-name-box">
+        <FileTextIcon class="delete-modal__note-icon" />
+        <span>{{ resolveTitle(deleteModal.note.title || '') }}</span>
+      </span>
+      吗？
+    </template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch, defineComponent, type SlotsType } from 'vue'
-import { BotIcon, FileTextIcon, GripVerticalIcon, Loader2Icon, MoreVerticalIcon, PlusIcon, Trash2Icon } from 'lucide-vue-next'
+import { BotIcon, FileTextIcon, GripVerticalIcon, Loader2Icon, MoreVerticalIcon, PlusIcon } from 'lucide-vue-next'
+import { DeleteOutlined } from '@ant-design/icons-vue'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
 import DraggableComponent from 'vuedraggable'
 import type { SortableEvent } from 'sortablejs'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { NoteItem } from '@/types/notes'
 import { useNotebookStore } from '@/composables/useNotes'
 
@@ -177,15 +163,7 @@ const resetDeleteModal = () => {
 
 const handleDeleteConfirm = async () => {
   if (!deleteModal.note) return
-  deleteModal.loading = true
-  try {
-    await notebookStore.removeNoteFromActiveNotebook(deleteModal.note.id)
-    deleteModal.open = false
-  } catch (err) {
-    // 错误提示由 store 统一处理
-  } finally {
-    deleteModal.loading = false
-  }
+  await notebookStore.removeNoteFromActiveNotebook(deleteModal.note.id)
 }
 
 const syncWorkingNotes = (next: ReadonlyArray<NoteItem>) => {
@@ -522,22 +500,45 @@ const onDragEnd = () => {
   pointer-events: auto;
 }
 
+/* Dropdown menu container */
 :deep(.note-actions-dropdown .ant-dropdown-menu) {
+  min-width: 170px;
   padding: 6px 0;
-  border-radius: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
 }
 
+/* Menu item base styles */
 :deep(.note-actions-dropdown .ant-dropdown-menu-item) {
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+:deep(.note-actions-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
 }
 
-.menu-icon {
-  width: 16px;
-  height: 16px;
-  color: #dc2626;
+/* Icon styles */
+:deep(.note-actions-dropdown .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
+}
+
+/* Delete option styles */
+:deep(.note-actions-dropdown .delete-menu-item) {
+  color: #ff4d4f;
+}
+
+:deep(.note-actions-dropdown .delete-menu-item:hover) {
+  color: #ff4d4f;
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+:deep(.note-actions-dropdown .delete-menu-item .anticon) {
+  color: #ff4d4f;
 }
 
 :deep(.note-delete-modal .ant-modal-content) {
@@ -545,55 +546,53 @@ const onDragEnd = () => {
   padding: 20px;
 }
 
-.delete-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
-}
-
-.delete-modal__title {
-  margin: 0;
-  text-align: center;
-  color: #111827;
-  line-height: 1.5;
-}
-
-.delete-modal__note {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: #f3f4f6;
-  color: #111827;
-  font-weight: 600;
-}
-
 .delete-modal__note-icon {
   width: 16px;
   height: 16px;
   color: #2563eb;
 }
+</style>
 
-.delete-modal__actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
+<style>
+/* 弹窗全局样式 - 不带 scoped */
+.rounded-modal .ant-modal-content {
+  border-radius: 28px !important;
+  overflow: hidden;
 }
 
-.delete-modal__btn {
-  min-width: 80px;
+.rounded-modal .ant-modal-header {
+  border-radius: 28px 28px 0 0 !important;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.delete-modal__btn--danger {
-  background: #dc2626;
-  border-color: #dc2626;
+.rounded-modal .ant-modal-body {
+  padding: 20px 24px;
 }
 
-.delete-modal__btn--danger:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+.rounded-modal .ant-modal-footer {
+  border-radius: 0 0 28px 28px !important;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rounded-modal .ant-input,
+.rounded-modal .ant-input-number-input,
+.rounded-modal .ant-select-selector,
+.rounded-modal .ant-input-textarea-show-count textarea {
+  border-radius: 12px !important;
+}
+
+.rounded-modal .ant-btn {
+  border-radius: 12px !important;
+  padding: 6px 16px;
+  height: auto;
+  font-weight: 600;
+  font-size: 14px;
 }
 </style>

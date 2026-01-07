@@ -171,12 +171,14 @@
               v-for="(folder, index) in folders"
               :key="folder.id"
               class="folder-card"
-              :class="`folder-card--color-${index % 6}`"
               @click="openFolder(folder.id)"
             >
                 <div class="folder-card__head">
                   <div class="folder-info">
-                    <div class="folder-title">{{ folder.name }}</div>
+                    <div class="folder-title">
+                      <SquareStackIcon class="folder-icon" />
+                      <span class="folder-title-text">{{ folder.name }}</span>
+                    </div>
                     <div v-if="folder.description" class="folder-desc">{{ folder.description }}</div>
                     <div class="folder-materials">
                       <a-tooltip
@@ -249,6 +251,8 @@
     v-model:visible="generateModal.open"
     :confirm-loading="generateModal.loading"
     title="生成闪卡"
+    okText="确认"
+    cancelText="取消"
     :maskClosable="false"
     :width="560"
     centered
@@ -331,14 +335,46 @@
     </div>
   </a-modal>
 
+  <ConfirmModal
+    v-model="deleteCardModal.open"
+    variant="danger"
+    confirm-text="删除"
+    cancel-text="取消"
+    :on-confirm="handleDeleteCard"
+  >
+    <template v-if="deleteCardModal.target">
+      要删除
+      <span class="item-name-box">
+        {{ deleteCardModal.target.question }}
+      </span>
+      吗?
+    </template>
+  </ConfirmModal>
+
+  <ConfirmModal
+    v-model="deleteFolderModal.open"
+    variant="danger"
+    confirm-text="删除"
+    cancel-text="取消"
+    :on-confirm="handleDeleteFolder"
+  >
+    <template v-if="deleteFolderModal.target">
+      要删除合集
+      <span class="item-name-box">
+        {{ deleteFolderModal.target.name }}
+      </span>
+      吗?
+    </template>
+  </ConfirmModal>
 
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch, h } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import { DeleteOutlined } from '@ant-design/icons-vue'
-import { ArrowLeftIcon, Edit3Icon, ShuffleIcon, SparklesIcon, PlusIcon, DownloadIcon, MoreVerticalIcon } from 'lucide-vue-next'
+import { ArrowLeftIcon, Edit3Icon, ShuffleIcon, SparklesIcon, PlusIcon, DownloadIcon, MoreVerticalIcon, SquareStackIcon } from 'lucide-vue-next'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { NoteAttachment } from '@/types/notes'
 import {
@@ -391,14 +427,15 @@ const addCardModal = reactive({
   answer: '',
 })
 
-const deleteFolderModal = reactive({
+const deleteCardModal = reactive({
   open: false,
-  loading: false,
-  targetId: '' as string | null,
-  targetName: '',
+  target: null as Flashcard | null,
 })
 
-const deletingCardId = ref<string | null>(null)
+const deleteFolderModal = reactive({
+  open: false,
+  target: null as FlashcardFolder | null,
+})
 
 const activeNotebookId = computed(() => notebookStore.activeNotebook.value?.id ?? null)
 const attachments = computed<NoteAttachment[]>(() => notebookStore.activeNotebook.value?.attachments ?? [])
@@ -734,77 +771,47 @@ const handleAddCard = async () => {
 }
 
 const promptDeleteCard = (card: Flashcard) => {
-  Modal.confirm({
-    title: '删除闪卡',
-    icon: null,
-    content: h('div', [
-      '确定要删除闪卡 ',
-      h('span', { 
-        class: 'delete-modal-name-tag'
-      }, card.question),
-      ' 吗？'
-    ]),
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    centered: true,
-    wrapClassName: 'custom-delete-modal',
-    onOk: async () => {
-      deletingCardId.value = card.id
-      try {
-        await deleteFlashcard(card.id)
-        flashcards.value = flashcards.value.filter(item => item.id !== card.id)
-        folders.value = folders.value.map(folder =>
-          folder.flashcardIds.includes(card.id)
-            ? { ...folder, flashcardIds: folder.flashcardIds.filter(id => id !== card.id) }
-            : folder,
-        )
-        message.success('已删除闪卡')
-      } catch (err) {
-        message.error(getErrorMessage(err))
-        throw err
-      } finally {
-        deletingCardId.value = null
-      }
-    },
-  })
+  deleteCardModal.target = card
+  deleteCardModal.open = true
+}
+
+const handleDeleteCard = async () => {
+  if (!deleteCardModal.target) return
+
+  try {
+    await deleteFlashcard(deleteCardModal.target.id)
+    flashcards.value = flashcards.value.filter(item => item.id !== deleteCardModal.target!.id)
+    folders.value = folders.value.map(folder =>
+      folder.flashcardIds.includes(deleteCardModal.target!.id)
+        ? { ...folder, flashcardIds: folder.flashcardIds.filter(id => id !== deleteCardModal.target!.id) }
+        : folder,
+    )
+    message.success('已删除闪卡')
+  } catch (err) {
+    message.error(getErrorMessage(err))
+    throw err
+  }
 }
 
 const promptDeleteFolder = (folder: FlashcardFolder) => {
-  deleteFolderModal.targetId = folder.id
-  deleteFolderModal.targetName = folder.name
-  Modal.confirm({
-    title: '',
-    icon: null,
-    content: h('div', [
-      '确定删除 ',
-      h('span', { 
-        class: 'delete-modal-name-tag'
-      }, folder.name),
-      ' 吗？'
-    ]),
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    centered: true,
-    wrapClassName: 'custom-delete-modal',
-    onOk: async () => {
-      deleteFolderModal.loading = true
-      try {
-        await deleteFlashcardFolder(folder.id)
-        folders.value = folders.value.filter(item => item.id !== folder.id)
-        if (selectedFolderId.value === folder.id) {
-          selectedFolderId.value = null
-        }
-        message.success('已删除闪卡合集')
-      } catch (err) {
-        message.error(getErrorMessage(err))
-        throw err
-      } finally {
-        deleteFolderModal.loading = false
-      }
-    },
-  })
+  deleteFolderModal.target = folder
+  deleteFolderModal.open = true
+}
+
+const handleDeleteFolder = async () => {
+  if (!deleteFolderModal.target) return
+
+  try {
+    await deleteFlashcardFolder(deleteFolderModal.target.id)
+    folders.value = folders.value.filter(item => item.id !== deleteFolderModal.target!.id)
+    if (selectedFolderId.value === deleteFolderModal.target.id) {
+      selectedFolderId.value = null
+    }
+    message.success('已删除闪卡合集')
+  } catch (err) {
+    message.error(getErrorMessage(err))
+    throw err
+  }
 }
 
 const openGenerateInFolderModal = () => {
@@ -918,14 +925,15 @@ const exportFlashcards = () => {
 }
 
 .folder-card {
-  background: #fff;
-  border-radius: 20px;
-  padding: 18px 20px;
-  border: 1.5px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .folder-card::before {
@@ -933,69 +941,28 @@ const exportFlashcards = () => {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease;
   pointer-events: none;
 }
 
-.folder-card--color-0 {
-  background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
-  border-color: rgba(251, 191, 36, 0.2);
-}
-
-.folder-card--color-1 {
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.folder-card--color-2 {
-  background: linear-gradient(135deg, #fce7f3 0%, #fdf2f8 100%);
-  border-color: rgba(236, 72, 153, 0.2);
-}
-
-.folder-card--color-3 {
-  background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.folder-card--color-4 {
-  background: linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%);
-  border-color: rgba(99, 102, 241, 0.2);
-}
-
-.folder-card--color-5 {
-  background: linear-gradient(135deg, #ffedd5 0%, #fff7ed 100%);
-  border-color: rgba(249, 115, 22, 0.2);
-}
-
 .folder-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  border-color: rgba(59, 130, 246, 0.15);
 }
 
-.folder-card--color-0:hover {
-  border-color: rgba(251, 191, 36, 0.4);
+.folder-card:hover::before {
+  opacity: 1;
 }
 
-.folder-card--color-1:hover {
-  border-color: rgba(59, 130, 246, 0.4);
-}
-
-.folder-card--color-2:hover {
-  border-color: rgba(236, 72, 153, 0.4);
-}
-
-.folder-card--color-3:hover {
-  border-color: rgba(34, 197, 94, 0.4);
-}
-
-.folder-card--color-4:hover {
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-.folder-card--color-5:hover {
-  border-color: rgba(249, 115, 22, 0.4);
+.folder-card:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .folder-card__head {
@@ -1011,16 +978,30 @@ const exportFlashcards = () => {
 }
 
 .folder-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1f2937;
   margin-bottom: 6px;
 }
 
+.folder-title-text {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.folder-icon {
+  width: 18px;
+  height: 18px;
+  color: #3b82f6;
+}
+
 .folder-desc {
-  font-size: 13px;
-  color: #475569;
+  font-size: 14px;
+  color: #6b7280;
   margin-bottom: 10px;
+  line-height: 1.5;
 }
 
 .folder-materials {
@@ -1040,17 +1021,18 @@ const exportFlashcards = () => {
 .material-tag {
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 10px;
-  color: #475569;
-  font-size: 11px;
+  padding: 3px 10px;
+  background: transparent;
+  border-radius: 12px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .material-more {
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 600;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
 }
 
 /* 文件夹菜单按钮 - 右上角悬浮 */
@@ -1702,7 +1684,13 @@ const exportFlashcards = () => {
   font-weight: 600;
   color: #0f172a;
   margin-top: 4px;
-  font-size: 14px;
+  font-size: 15px;
+}
+
+.generate-form .ant-input,
+.generate-form .ant-select-selector,
+.generate-form .ant-input-textarea-show-count textarea {
+  font-size: 15px;
 }
 
 @media (max-width: 768px) {
@@ -1771,103 +1759,11 @@ const exportFlashcards = () => {
   padding: 6px 16px;
   height: auto;
   font-weight: 600;
+  font-size: 14px;
 }
 
 .flashcard-edit-modal .ant-modal-footer {
   display: none;
-}
-
-/* 自定义删除确认弹窗样式 */
-.custom-delete-modal .ant-modal-content {
-  border-radius: 24px !important;
-  overflow: hidden;
-  background: #fff;
-}
-
-.custom-delete-modal .ant-modal-header {
-  border-radius: 24px 24px 0 0 !important;
-  padding: 32px 28px 0;
-  border-bottom: none;
-  background: transparent;
-}
-
-.custom-delete-modal .ant-modal-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.custom-delete-modal .ant-modal-body {
-  padding: 20px 28px 28px;
-  font-size: 16px;
-  line-height: 1.7;
-  color: #475569;
-}
-
-.custom-delete-modal .ant-modal-footer {
-  border-radius: 0 0 24px 24px !important;
-  padding: 16px 28px 28px;
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
-  background: transparent;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.custom-delete-modal .ant-btn {
-  border-radius: 10px !important;
-  padding: 8px 14px;
-  height: auto;
-  font-weight: 600;
-  font-size: 13px;
-  transition: all 0.2s ease;
-  border: 1px solid;
-  box-shadow: none;
-}
-
-.custom-delete-modal .ant-btn-default {
-  background: #fff;
-  border-color: #d4d8df;
-  color: #334155;
-}
-
-.custom-delete-modal .ant-btn-default:hover {
-  background: #f6f7fb;
-  border-color: #c8ced8;
-  color: #1f2937;
-}
-
-.custom-delete-modal .ant-btn-dangerous {
-  background: #ef4444;
-  border-color: #ef4444;
-  color: #fff;
-  box-shadow: none;
-}
-
-.custom-delete-modal .ant-btn-dangerous:hover {
-  background: #dc2626;
-  border-color: #dc2626;
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-
-.custom-delete-modal .ant-modal-close {
-  top: 20px;
-  right: 20px;
-}
-
-.custom-delete-modal .ant-modal-close-x {
-  width: 40px;
-  height: 40px;
-  line-height: 40px;
-  border-radius: 12px;
-  transition: all 0.2s ease;
-  color: #94a3b8;
-}
-
-.custom-delete-modal .ant-modal-close:hover .ant-modal-close-x {
-  background: rgba(0, 0, 0, 0.04);
-  color: #475569;
 }
 
 .rounded-dropdown .ant-dropdown-menu {
@@ -1911,18 +1807,6 @@ const exportFlashcards = () => {
   color: #ff4d4f;
 }
 
-/* 删除弹窗中的名称标签样式 */
-.delete-modal-name-tag {
-  display: inline-block;
-  background: rgba(0, 0, 0, 0.04);
-  color: #0f172a;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 15px;
-  margin: 0 2px;
-}
-
 .folder-materials-tooltip .ant-tooltip-inner {
   white-space: pre-wrap;
   max-width: 280px;
@@ -1936,5 +1820,17 @@ const exportFlashcards = () => {
 .folder-materials-tooltip .ant-tooltip-arrow-content {
   background: #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* 确认弹窗中的项目名称框 */
+.item-name-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-weight: 500;
 }
 </style>

@@ -1,0 +1,417 @@
+/**
+ * 按钮统一样式
+ *
+ * 包含各种常用按钮样式：
+ * - 工具栏按钮 (.toolbar-btn)
+ * - 图标按钮 (.icon-btn)
+ * - Pill 按钮 (.pill-btn)
+ * - 返回按钮 (.back-btn)
+ * - Ghost 按钮 (.ghost-btn)
+ *
+ * 使用方法：
+ * 在组件中导入此文件，然后直接使用对应的类名
+ */
+
+/* ============================================
+   1. 工具栏按钮 (Toolbar Buttons)
+   ============================================ */
+
+.toolbar-btn {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 12px;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* 主要工具栏按钮 */
+.toolbar-btn--primary {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.toolbar-btn--primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.toolbar-btn--primary:disabled {
+  background: #93c5fd;
+  border-color: #93c5fd;
+  color: #fff;
+}
+
+/* 按钮内图标 */
+.btn-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 按钮内加载图标 */
+.btn-spin {
+  width: 14px;
+  height: 14px;
+}
+
+/* ============================================
+   2. 图标按钮 (Icon Buttons)
+   ============================================ */
+
+.icon-btn {
+  border: 1.5px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
+  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.icon-btn.ghost {
+  border-color: transparent;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.icon-btn .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn .icon.small {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-btn.small {
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+}
+
+/* ============================================
+   3. Pill 按钮 (Pill Buttons)
+   ============================================ */
+
+.pill-btn {
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  padding: 9px 16px;
+  border-radius: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  color: #334155;
+}
+
+.pill-btn:hover:not(:disabled) {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.pill-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Pill 标签（非按钮） */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pill--soft {
+  background: rgba(0, 0, 0, 0.04);
+  color: #0f172a;
+  padding: 7px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pill--answer {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  padding: 7px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ============================================
+   4. 返回按钮 (Back Button)
+   ============================================ */
+
+.back-btn {
+  border: none;
+  background: transparent;
+  padding: 8px;
+  border-radius: 12px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #334155;
+}
+
+.back-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ============================================
+   5. Ghost 按钮 (Ghost Button)
+   ============================================ */
+
+.ghost-btn {
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  background: #fff;
+  padding: 9px 14px;
+  border-radius: 14px;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.ghost-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.ghost-btn .icon.small {
+  color: #94a3b8;
+}
+
+/* ============================================
+   6. FAB 按钮 (Floating Action Button)
+   ============================================ */
+
+.generate-fab-center {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 26px;
+  height: 48px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.22s ease, filter 0.22s ease;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+}
+
+.generate-fab-center:hover {
+  transform: translateX(-50%) translateY(-2px) scale(1.02);
+  filter: brightness(1.04);
+}
+
+.generate-fab-center:active {
+  transform: translateX(-50%) translateY(0);
+  filter: brightness(0.98);
+}
+
+.fab-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* ============================================
+   7. 模式切换按钮 (Mode Switch)
+   ============================================ */
+
+.mode-switch-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 16px;
+  gap: 4px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  padding: 9px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+}
+
+.mode-btn--active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ============================================
+   8. 卡片内操作按钮
+   ============================================ */
+
+/* 卡片菜单按钮 - 右上角悬浮 */
+.card-menu-btn,
+.folder-menu-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #94a3b8;
+  opacity: 0;
+  z-index: 2;
+}
+
+.folder-menu-btn {
+  top: 10px;
+  right: 10px;
+  color: #64748b;
+}
+
+.card-row:hover .card-menu-btn,
+.folder-card:hover .folder-menu-btn {
+  opacity: 1;
+}
+
+.card-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #475569;
+}
+
+.folder-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #334155;
+}
+
+.card-menu-btn .menu-icon,
+.folder-menu-btn .menu-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* 卡片编辑按钮 - 右下角悬浮 */
+.card-edit-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #94a3b8;
+  opacity: 0;
+  z-index: 2;
+}
+
+.card-row:hover .card-edit-btn {
+  opacity: 1;
+}
+
+.card-edit-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.card-edit-btn .edit-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ============================================
+   9. 按钮组样式
+   ============================================ */
+
+.nav-group,
+.action-group,
+.card-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

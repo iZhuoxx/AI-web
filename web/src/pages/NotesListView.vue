@@ -127,30 +127,27 @@
       :footer="null"
       :maskClosable="false"
       :closable="false"
-      :width="420"
+      :width="480"
       centered
       destroy-on-close
-      wrap-class-name="note-modal note-modal--rename"
+      wrap-class-name="rounded-modal note-modal note-modal--rename"
       @cancel="handleRenameCancel"
       @afterClose="resetRenameModal"
     >
-      <div class="note-modal__body">
-        <label class="note-modal__label" for="note-rename-input">笔记本名称*</label>
+      <div class="edit-modal__body">
+        <div class="edit-modal__title">重命名笔记本</div>
+        <label class="edit-label">新名称</label>
         <a-input
-          id="note-rename-input"
           ref="renameInputRef"
           v-model:value="renameModal.value"
           allow-clear
           :maxlength="60"
-          size="large"
           placeholder="输入新的笔记名称"
           autofocus
-          class="note-modal__input"
         />
-        <div class="note-modal__actions">
-          <a-button class="note-modal__btn note-modal__btn--ghost" @click="handleRenameCancel">取消</a-button>
+        <div class="modal-actions">
+          <a-button @click="handleRenameCancel">取消</a-button>
           <a-button
-            class="note-modal__btn note-modal__btn--primary"
             type="primary"
             :loading="renameModal.loading"
             @click="handleRenameSubmit"
@@ -161,54 +158,36 @@
       </div>
     </a-modal>
 
-    <a-modal
-      v-model:visible="deleteModal.open"
-      :footer="null"
-      :maskClosable="false"
-      :closable="false"
-      :width="360"
-      centered
-      destroy-on-close
-      wrap-class-name="note-modal note-modal--delete"
-      @cancel="handleDeleteCancel"
-      @afterClose="resetDeleteModal"
+    <ConfirmModal
+      v-model="deleteModal.open"
+      variant="danger"
+      confirm-text="删除"
+      cancel-text="取消"
+      :on-confirm="handleDeleteConfirm"
     >
-      <div class="note-modal__body note-modal__body--delete">
-        <p class="note-modal__delete-title">
-          要删除
-          <span class="note-modal__note-title">
-            <BookOutlined />
-            <span>{{ deleteModal.note?.title || '未命名笔记' }}</span>
-          </span>
-          吗?
-        </p>
-        <div class="note-modal__actions">
-          <a-button class="note-modal__btn note-modal__btn--ghost" @click="handleDeleteCancel">取消</a-button>
-          <a-button
-            class="note-modal__btn note-modal__btn--danger"
-            type="primary"
-            :loading="deleteModal.loading"
-            @click="handleDeleteConfirm"
-          >
-            删除
-          </a-button>
-        </div>
-      </div>
-    </a-modal>
+      <template v-if="deleteModal.note">
+        要删除
+        <span class="item-name-box">
+          <BookOutlined class="delete-modal__note-icon" />
+          <span>{{ deleteModal.note.title || '未命名笔记' }}</span>
+        </span>
+        吗？
+      </template>
+    </ConfirmModal>
 
     <a-modal
       v-model:visible="colorModal.open"
       :footer="null"
-      :maskClosable="true"
-      :width="320"
+      :maskClosable="false"
+      :width="420"
       centered
       destroy-on-close
-      wrap-class-name="note-modal note-modal--color"
+      wrap-class-name="rounded-modal"
       @cancel="handleColorCancel"
       @afterClose="resetColorModal"
     >
-      <div class="note-modal__body note-modal__body--color">
-        <h3 class="color-modal__title">选择笔记颜色</h3>
+      <div class="edit-modal__body">
+        <div class="edit-modal__title">选择笔记颜色</div>
         <div class="color-picker">
           <button
             v-for="color in noteColors"
@@ -231,6 +210,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { BookOutlined, BgColorsOutlined, CheckOutlined, DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { MenuInfo } from 'ant-design-vue/es/menu/src/interface'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useNotebookStore } from '@/composables/useNotes'
 import type { NotebookSummary } from '@/types/notes'
@@ -440,13 +420,7 @@ const resetDeleteModal = () => {
 
 const handleDeleteConfirm = async () => {
   if (!deleteModal.note) return
-  deleteModal.loading = true
-  try {
-    await removeNotebook(deleteModal.note.id)
-    deleteModal.open = false
-  } finally {
-    deleteModal.loading = false
-  }
+  await removeNotebook(deleteModal.note.id)
 }
 
 const openColorModal = (notebook: NotebookSummary) => {
@@ -926,156 +900,39 @@ const handleColorSelect = async (color: string) => {
   color: #ff4d4f;
 }
 
-/* ==================== 模态框样式 ==================== */
-:deep(.ant-modal-wrap.note-modal .ant-modal) {
-  border-radius: 16px !important;
-  overflow: hidden;
+/* ==================== 删除弹窗图标 ==================== */
+.delete-modal__note-icon {
+  font-size: 14px;
+  color: #64748b;
 }
 
-:deep(.ant-modal-wrap.note-modal .ant-modal-content) {
-  border-radius: 16px !important;
-  padding: 32px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-}
-
-.note-modal__body {
+/* ==================== 弹窗样式 ==================== */
+.edit-modal__body {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 24px;
+  gap: 12px;
+  padding: 8px 0;
 }
 
-.note-modal__body--delete {
-  gap: 28px;
+.edit-modal__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
 }
 
-.note-modal__avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1a73e8;
-  color: #ffffff;
-  font-size: 40px;
-  box-shadow: 0 4px 16px rgba(26, 115, 232, 0.25);
+.edit-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+  margin-top: 4px;
 }
 
-.note-modal__label {
-  font-size: 15px;
-  font-weight: 500;
-  color: #1a1a1a;
-  align-self: flex-start;
-  letter-spacing: 0.1px;
-}
-
-.note-modal__input {
-  width: 100%;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-  transition: all 0.3s ease;
-}
-
-.note-modal__input :deep(.ant-input) {
-  border: none;
-  padding: 14px 16px;
-  font-size: 15px;
-  color: #1a1a1a;
-}
-
-.note-modal__input:hover {
-  border-color: #d0d0d0;
-}
-
-.note-modal__input:focus-within {
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
-}
-
-.note-modal__actions {
+.modal-actions {
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  width: 100%;
-}
-
-.note-modal__btn {
-  border-radius: 8px !important;
-  font-weight: 500 !important;
-  height: 36px !important;
-  padding: 0 20px !important;
-  font-size: 14px !important;
-  transition: all 0.2s ease !important;
-  box-shadow: none !important;
-  border: none !important;
-}
-
-.note-modal__btn--ghost {
-  background: #f5f5f5 !important;
-  color: #5f6368 !important;
-}
-
-.note-modal__btn--ghost:hover {
-  background: #e8e8e8 !important;
-  color: #3c4043 !important;
-}
-
-.note-modal__btn--primary {
-  background: #1a73e8 !important;
-  color: #ffffff !important;
-}
-
-.note-modal__btn--primary:hover {
-  background: #1557b0 !important;
-}
-
-.note-modal__btn--danger {
-  background: #d93025 !important;
-  color: #ffffff !important;
-}
-
-.note-modal__btn--danger:hover {
-  background: #c5221f !important;
-}
-
-.note-modal__delete-title {
-  margin: 0;
-  font-size: 17px;
-  color: #1a1a1a;
-  text-align: center;
-  line-height: 1.6;
-  font-weight: 400;
-}
-
-.note-modal__note-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: #f5f5f5;
-  color: #1a1a1a;
-  font-weight: 500;
-}
-
-/* ==================== 颜色选择器模态框 ==================== */
-.note-modal--color :deep(.ant-modal-content) {
-  padding: 28px;
-  border-radius: 16px;
-}
-
-.note-modal__body--color {
-  gap: 24px;
-}
-
-.color-modal__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 500;
-  color: #1a1a1a;
-  text-align: center;
-  letter-spacing: -0.2px;
+  gap: 10px;
 }
 
 .color-picker {
@@ -1164,13 +1021,49 @@ const handleColorSelect = async (color: string) => {
 </style>
 
 <style>
-/* Modal 全局样式 - 确保圆角生效 */
-.ant-modal-wrap.note-modal .ant-modal {
-  border-radius: 16px !important;
-  overflow: hidden !important;
+/* 弹窗全局样式 - 不带 scoped */
+.rounded-modal .ant-modal-content {
+  border-radius: 28px !important;
+  overflow: hidden;
 }
 
-.ant-modal-wrap.note-modal .ant-modal-content {
-  border-radius: 16px !important;
+.rounded-modal .ant-modal-header {
+  border-radius: 28px 28px 0 0 !important;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-body {
+  padding: 20px 24px;
+}
+
+.rounded-modal .ant-modal-footer {
+  border-radius: 0 0 28px 28px !important;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rounded-modal .ant-input,
+.rounded-modal .ant-input-number-input,
+.rounded-modal .ant-select-selector,
+.rounded-modal .ant-input-textarea-show-count textarea {
+  border-radius: 12px !important;
+}
+
+.rounded-modal .ant-btn {
+  border-radius: 12px !important;
+  padding: 6px 16px;
+  height: auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.note-modal--rename .ant-modal-footer {
+  display: none;
 }
 </style>

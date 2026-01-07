@@ -29,6 +29,7 @@ declare module '@vue/runtime-core' {
     AttachmentDocViewer: typeof import('./src/components/note/AttachmentDocViewer.vue')['default']
     AttachmentPdfViewer: typeof import('./src/components/note/AttachmentPdfViewer.vue')['default']
     AuthPopup: typeof import('./src/components/AuthPopup.vue')['default']
+    ConfirmModal: typeof import('./src/components/common/ConfirmModal.vue')['default']
     MarkdownRenderer: typeof import('./src/components/MarkdownRenderer.vue')['default']
     Message: typeof import('./src/components/message.vue')['default']
     NotebookNotesList: typeof import('./src/components/note/NotebookNotesList.vue')['default']

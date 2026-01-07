@@ -53,13 +53,37 @@
             <RedoIcon class="icon" />
           </button>
 
-          <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+          <a-dropdown
+            :trigger="['click']"
+            overlay-class-name="rounded-dropdown note-export-dropdown"
+            :get-popup-container="getToolbarPopupContainer"
+          >
             <template #overlay>
               <a-menu :selectable="false" @click="handleExportClick">
-                <a-menu-item key="markdown">导出 Markdown</a-menu-item>
-                <a-menu-item key="html">导出 HTML</a-menu-item>
-                <a-menu-item key="pdf">导出 PDF</a-menu-item>
-                <a-menu-item key="txt">导出 TXT</a-menu-item>
+                <a-menu-item key="markdown">
+                  <template #icon>
+                    <FileMarkdownOutlined />
+                  </template>
+                  导出 Markdown
+                </a-menu-item>
+                <a-menu-item key="html">
+                  <template #icon>
+                    <Html5Outlined />
+                  </template>
+                  导出 HTML
+                </a-menu-item>
+                <a-menu-item key="pdf">
+                  <template #icon>
+                    <FilePdfOutlined />
+                  </template>
+                  导出 PDF
+                </a-menu-item>
+                <a-menu-item key="txt">
+                  <template #icon>
+                    <FileTextOutlined />
+                  </template>
+                  导出 TXT
+                </a-menu-item>
               </a-menu>
             </template>
             <button class="toolbar-btn" type="button" aria-label="导出">
@@ -89,7 +113,11 @@
       >
         <div class="bubble-toolbar">
           <div class="bubble-toolbar__group">
-            <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+            <a-dropdown
+              :trigger="['click']"
+              overlay-class-name="rounded-dropdown block-style-dropdown"
+              :get-popup-container="getToolbarPopupContainer"
+            >
               <template #overlay>
                 <a-menu :selectable="false" @click="handleHeadingSelect">
                   <a-menu-item key="paragraph">
@@ -118,12 +146,31 @@
               </button>
             </a-dropdown>
 
-            <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+            <a-dropdown
+              :trigger="['click']"
+              overlay-class-name="rounded-dropdown list-style-dropdown"
+              :get-popup-container="getToolbarPopupContainer"
+            >
               <template #overlay>
                 <a-menu :selectable="false" @click="handleListSelect">
-                  <a-menu-item key="bulletList">项目符号列表</a-menu-item>
-                  <a-menu-item key="orderedList">编号列表</a-menu-item>
-                  <a-menu-item key="taskList">待办列表</a-menu-item>
+                  <a-menu-item key="bulletList">
+                    <template #icon>
+                      <span class="menu-leading-icon menu-leading-icon--bullet">•</span>
+                    </template>
+                    项目符号列表
+                  </a-menu-item>
+                  <a-menu-item key="orderedList">
+                    <template #icon>
+                      <span class="menu-leading-icon menu-leading-icon--ordered">1.</span>
+                    </template>
+                    编号列表
+                  </a-menu-item>
+                  <a-menu-item key="taskList">
+                    <template #icon>
+                      <span class="menu-leading-icon menu-leading-icon--task">✓</span>
+                    </template>
+                    待办列表
+                  </a-menu-item>
                 </a-menu>
               </template>
               <button class="toolbar-btn bubble-btn" type="button" aria-label="列表样式">
@@ -152,7 +199,11 @@
                 </span>
               </button>
 
-              <a-dropdown :trigger="['click']" :get-popup-container="getToolbarPopupContainer">
+              <a-dropdown
+                :trigger="['click']"
+                overlay-class-name="rounded-dropdown color-merge-dropdown-overlay"
+                :get-popup-container="getToolbarPopupContainer"
+              >
                 <template #overlay>
                   <div class="color-merge-dropdown">
                     <div class="color-merge-dropdown__section">
@@ -311,6 +362,11 @@
       title="插入链接"
       ok-text="插入"
       cancel-text="取消"
+      :width="480"
+      :maskClosable="false"
+      centered
+      destroy-on-close
+      wrap-class-name="rounded-modal"
       @ok="applyLink"
       @cancel="closeLinkModal"
     >
@@ -342,6 +398,12 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Markdown } from 'tiptap-markdown'
+import {
+  FileMarkdownOutlined,
+  Html5Outlined,
+  FilePdfOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons-vue'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -1510,5 +1572,121 @@ onBeforeUnmount(() => {
   border: none;
   border-top: 2px solid #e5e7eb;
   margin: 2em 0;
+}
+</style>
+
+<style>
+/* 弹窗全局样式 - 不带 scoped */
+.rounded-modal .ant-modal-content {
+  border-radius: 28px !important;
+  overflow: hidden;
+}
+
+.rounded-modal .ant-modal-header {
+  border-radius: 28px 28px 0 0 !important;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-body {
+  padding: 20px 24px;
+}
+
+.rounded-modal .ant-modal-footer {
+  border-radius: 0 0 28px 28px !important;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rounded-modal .ant-input,
+.rounded-modal .ant-input-number-input,
+.rounded-modal .ant-select-selector,
+.rounded-modal .ant-input-textarea-show-count textarea {
+  border-radius: 12px !important;
+}
+
+.rounded-modal .ant-btn {
+  border-radius: 12px !important;
+  padding: 6px 16px;
+  height: auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.rounded-dropdown .ant-dropdown-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  padding: 6px 0;
+}
+
+.rounded-dropdown .ant-dropdown-menu-item {
+  border-radius: 0;
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+/* Export dropdown styles */
+:deep(.note-export-dropdown .ant-dropdown-menu-item) {
+  padding: 10px 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+:deep(.note-export-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content) {
+  display: flex;
+  align-items: center;
+}
+
+:deep(.note-export-dropdown .ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+  margin-right: 12px;
+}
+
+/* Export dropdown icon colors */
+:deep(.note-export-dropdown .ant-dropdown-menu-item:nth-child(1) .anticon) {
+  color: #6366f1;
+}
+
+:deep(.note-export-dropdown .ant-dropdown-menu-item:nth-child(2) .anticon) {
+  color: #f97316;
+}
+
+:deep(.note-export-dropdown .ant-dropdown-menu-item:nth-child(3) .anticon) {
+  color: #ef4444;
+}
+
+:deep(.note-export-dropdown .ant-dropdown-menu-item:nth-child(4) .anticon) {
+  color: #0ea5e9;
+}
+
+.list-style-dropdown .menu-leading-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.list-style-dropdown .menu-leading-icon--bullet {
+  color: #10b981;
+  font-size: 18px;
+}
+
+.list-style-dropdown .menu-leading-icon--ordered {
+  color: #0ea5e9;
+  font-size: 13px;
+}
+
+.list-style-dropdown .menu-leading-icon--task {
+  color: #8b5cf6;
+  font-size: 13px;
 }
 </style>

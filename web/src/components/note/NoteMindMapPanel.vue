@@ -53,13 +53,12 @@
               v-for="(item, index) in mindmaps"
               :key="item.id"
               class="folder-card"
-              :class="`folder-card--color-${index % 6}`"
               @click="openMindmap(item.id)"
             >
               <div class="folder-card__head">
               <div class="folder-info">
                 <div class="folder-title">
-                  <MapIcon class="folder-icon" />
+                  <NetworkIcon class="folder-icon" />
                   <span class="folder-title-text">{{ item.title }}</span>
                 </div>
                 <div class="folder-materials">
@@ -165,20 +164,37 @@
       />
     </div>
   </a-modal>
+
+  <ConfirmModal
+    v-model="deleteMindmapModal.open"
+    variant="danger"
+    confirm-text="删除"
+    cancel-text="取消"
+    :on-confirm="handleDeleteMindmap"
+  >
+    <template v-if="deleteMindmapModal.target">
+      要删除
+      <span class="item-name-box">
+        {{ deleteMindmapModal.target.title }}
+      </span>
+      吗?
+    </template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, toRaw, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { DeleteOutlined } from '@ant-design/icons-vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import {
   ArrowLeftIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
-  MapIcon,
   Maximize2Icon,
   Minimize2Icon,
   MoreVerticalIcon,
+  NetworkIcon,
   SparklesIcon,
 } from 'lucide-vue-next'
 import type { MindElixirData, MindElixirInstance } from 'mind-elixir'
@@ -232,6 +248,11 @@ const generateModal = reactive({
   attachments: [] as string[],
   focus: '',
   title: '',
+})
+
+const deleteMindmapModal = reactive({
+  open: false,
+  target: null as MindMap | null,
 })
 
 const mindmapContainer = ref<HTMLElement | null>(null)
@@ -771,28 +792,30 @@ const resetMindmap = async () => {
 }
 
 const promptDeleteMindmap = (mindmap: MindMap) => {
-  Modal.confirm({
-    title: '',
-    icon: null,
-    content: `确定删除「${mindmap.title}」吗？`,
-    okText: '删除',
-    okType: 'danger',
-    cancelText: '取消',
-    centered: true,
-    onOk: async () => {
-      try {
-        await deleteMindMap(mindmap.id)
-        mindmaps.value = sortMindmaps(mindmaps.value.filter(item => item.id !== mindmap.id))
-        if (activeMindmapId.value === mindmap.id) {
-          activeMindmapId.value = null
-        }
-        message.success('已删除思维导图')
-      } catch (err) {
-        message.error(getErrorMessage(err))
-        throw err
-      }
-    },
-  })
+  deleteMindmapModal.target = mindmap
+  deleteMindmapModal.open = true
+}
+
+const handleDeleteMindmap = async () => {
+  const target = deleteMindmapModal.target
+  if (!target) return
+
+  try {
+    await deleteMindMap(target.id)
+    mindmaps.value = sortMindmaps(
+      mindmaps.value.filter(item => item.id !== target.id),
+    )
+    if (activeMindmapId.value === target.id) {
+      activeMindmapId.value = null
+    }
+    message.success('已删除思维导图')
+  } catch (err) {
+    message.error(getErrorMessage(err))
+    throw err
+  } finally {
+    deleteMindmapModal.target = null
+    deleteMindmapModal.open = false
+  }
 }
 
 const openGenerateModal = () => {
@@ -991,7 +1014,6 @@ watch(
   flex-direction: column;
   overflow: auto;
   width: 100%;
-  position: relative;
 }
 
 .folders-grid {
@@ -1003,14 +1025,15 @@ watch(
 }
 
 .folder-card {
-  background: #fff;
-  border-radius: 20px;
-  padding: 18px 20px;
-  border: 1.5px solid rgba(0, 0, 0, 0.05);
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .folder-card::before {
@@ -1018,46 +1041,28 @@ watch(
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #16a34a, #15803d);
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease;
   pointer-events: none;
 }
 
 .folder-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  border-color: rgba(22, 163, 74, 0.15);
 }
 
-.folder-card--color-0 {
-  background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
-  border-color: rgba(251, 191, 36, 0.2);
+.folder-card:hover::before {
+  opacity: 1;
 }
 
-.folder-card--color-1 {
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.folder-card--color-2 {
-  background: linear-gradient(135deg, #fce7f3 0%, #fdf2f8 100%);
-  border-color: rgba(236, 72, 153, 0.2);
-}
-
-.folder-card--color-3 {
-  background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.folder-card--color-4 {
-  background: linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%);
-  border-color: rgba(99, 102, 241, 0.2);
-}
-
-.folder-card--color-5 {
-  background: linear-gradient(135deg, #ffedd5 0%, #fff7ed 100%);
-  border-color: rgba(249, 115, 22, 0.2);
+.folder-card:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .folder-card__head {
@@ -1078,18 +1083,19 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .folder-title-text {
-  font-size: 17px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
 }
 
 .folder-icon {
   width: 18px;
   height: 18px;
-  color: #0f172a;
+  color: #16a34a;
 }
 
 .folder-materials {
@@ -1109,17 +1115,18 @@ watch(
 .material-tag {
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 10px;
-  color: #475569;
-  font-size: 11px;
+  padding: 3px 10px;
+  background: transparent;
+  border-radius: 12px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .material-more {
-  font-size: 11px;
-  color: #64748b;
-  font-weight: 600;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
 }
 
 .folder-menu-btn {
@@ -1708,5 +1715,17 @@ watch(
 
 :deep(.mindmap-actions-dropdown .delete-menu-item .anticon) {
   color: #ff4d4f;
+}
+
+/* 确认弹窗中的项目名称框 */
+.item-name-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  font-weight: 500;
 }
 </style>

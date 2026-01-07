@@ -158,24 +158,23 @@
     :width="420"
     centered
     destroy-on-close
-    wrap-class-name="rename-modal"
+    wrap-class-name="rounded-modal materials-rename-modal"
     @cancel="handleRenameCancel"
     @afterClose="resetRenameModal"
   >
-    <div class="rename-modal__body">
-      <p class="rename-modal__title">要重命名“{{ renameModal.target ? resolveName(renameModal.target) : '' }}”吗？</p>
-      <label class="rename-modal__label" for="rename-input">来源名称 *</label>
+    <div class="edit-modal__body">
+      <div class="edit-modal__title">重命名资料</div>
+      <div class="rename-modal__subtitle">{{ renameModal.target ? resolveName(renameModal.target) : '' }}</div>
+      <label class="edit-label">新名称</label>
       <a-input
-        id="rename-input"
         v-model:value="renameModal.value"
         :maxlength="255"
         placeholder="请输入新的文件名"
       />
       <div class="modal-actions">
-        <a-button class="modal-btn" @click="handleRenameCancel">取消</a-button>
+        <a-button @click="handleRenameCancel">取消</a-button>
         <a-button
           type="primary"
-          class="modal-btn modal-btn--primary"
           :loading="renameModal.loading"
           @click="handleRenameConfirm"
         >
@@ -185,33 +184,21 @@
     </div>
   </a-modal>
 
-  <a-modal
-    v-model:visible="deleteModal.open"
-    :footer="null"
-    :maskClosable="false"
-    :width="460"
-    centered
-    destroy-on-close
-    wrap-class-name="delete-modal"
-    @cancel="handleDeleteCancel"
-    @afterClose="resetDeleteModal"
+  <ConfirmModal
+    v-model="deleteModal.open"
+    variant="danger"
+    confirm-text="删除"
+    cancel-text="取消"
+    :on-confirm="handleDeleteConfirm"
   >
-    <div class="delete-modal__body">
-      <p class="delete-modal__title">要删除“{{ deleteModal.target ? resolveName(deleteModal.target) : '' }}”吗？</p>
-      <div class="modal-actions">
-        <a-button class="modal-btn" @click="handleDeleteCancel">取消</a-button>
-        <a-button
-          type="primary"
-          danger
-          class="modal-btn modal-btn--danger"
-          :loading="deleteModal.loading"
-          @click="handleDeleteConfirm"
-        >
-          删除
-        </a-button>
-      </div>
-    </div>
-  </a-modal>
+    <template v-if="deleteModal.target">
+      要删除
+      <span class="item-name-box">
+        {{ resolveName(deleteModal.target) }}
+      </span>
+      吗？
+    </template>
+  </ConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -239,6 +226,7 @@ import {
 } from 'lucide-vue-next'
 import AttachmentDocViewer from './AttachmentDocViewer.vue'
 import AttachmentPdfViewer from './AttachmentPdfViewer.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { NoteAttachment } from '@/types/notes'
 import {
   deleteAttachment,
@@ -417,21 +405,12 @@ const resetDeleteModal = () => {
 
 const handleDeleteConfirm = async () => {
   if (!deleteModal.target) return
-  deleteModal.loading = true
-  try {
-    await deleteAttachment(deleteModal.target.id)
-    message.success('附件已删除')
-    if (previewingId.value === deleteModal.target.id) {
-      exitPreview()
-    }
-    deleteModal.open = false
-    emit('updated')
-  } catch (err: any) {
-    const error = err?.message || '删除失败'
-    message.error(error)
-  } finally {
-    deleteModal.loading = false
+  await deleteAttachment(deleteModal.target.id)
+  message.success('附件已删除')
+  if (previewingId.value === deleteModal.target.id) {
+    exitPreview()
   }
+  emit('updated')
 }
 
 const applyFocusText = (text?: string | null) => {
@@ -773,6 +752,10 @@ defineExpose({ focusAttachmentByCitation })
   display: flex;
   align-items: center;
   align-self: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0.16s ease;
 }
 
 .more-btn {
@@ -803,6 +786,13 @@ defineExpose({ focusAttachmentByCitation })
   width: 16px;
   height: 16px;
   color: rgba(0, 0, 0, 0.55);
+}
+
+.material-item:hover .material-actions,
+.material-item:focus-within .material-actions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 :deep(.materials-actions-dropdown .ant-dropdown-menu) {
@@ -913,8 +903,11 @@ defineExpose({ focusAttachmentByCitation })
 }
 
 .preview-name {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  color: #0f172a;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1019,21 +1012,38 @@ defineExpose({ focusAttachmentByCitation })
   flex: 1;
 }
 
+.edit-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.edit-modal__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.rename-modal__subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.edit-label {
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
 .modal-actions {
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.modal-btn {
-  border-radius: 999px;
-  padding: 6px 16px;
-}
-
-.modal-btn--primary,
-.modal-btn--danger {
-  box-shadow: none;
+  gap: 10px;
 }
 
 .upload-floating {
@@ -1074,34 +1084,52 @@ defineExpose({ focusAttachmentByCitation })
   filter: brightness(0.98);
 }
 
-.rename-modal__body,
-.delete-modal__body {
-  padding: 6px 2px;
+</style>
+
+<style>
+/* 弹窗全局样式 - 不带 scoped */
+.rounded-modal .ant-modal-content {
+  border-radius: 28px !important;
+  overflow: hidden;
 }
 
-.rename-modal__title,
-.delete-modal__title {
+.rounded-modal .ant-modal-header {
+  border-radius: 28px 28px 0 0 !important;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-body {
+  padding: 20px 24px;
+}
+
+.rounded-modal .ant-modal-footer {
+  border-radius: 0 0 28px 28px !important;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.rounded-modal .ant-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rounded-modal .ant-input,
+.rounded-modal .ant-input-number-input,
+.rounded-modal .ant-select-selector,
+.rounded-modal .ant-input-textarea-show-count textarea {
+  border-radius: 12px !important;
+}
+
+.rounded-modal .ant-btn {
+  border-radius: 12px !important;
+  padding: 6px 16px;
+  height: auto;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 12px;
-  line-height: 1.5;
+  font-size: 14px;
 }
 
-.rename-modal__label {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.6);
-  margin-bottom: 6px;
-  display: block;
-}
-
-:deep(.rename-modal .ant-modal-content),
-:deep(.delete-modal .ant-modal-content) {
-  border-radius: 16px;
-  padding: 22px 24px;
-}
-
-:deep(.rename-modal .ant-modal-body),
-:deep(.delete-modal .ant-modal-body) {
-  padding: 0;
+.materials-rename-modal .ant-modal-footer {
+  display: none;
 }
 </style>

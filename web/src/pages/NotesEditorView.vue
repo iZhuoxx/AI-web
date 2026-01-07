@@ -212,11 +212,12 @@ import {
   ChevronUpIcon,
   ClipboardListIcon,
   FolderOpenIcon,
-  MapIcon,
   MessageSquareIcon,
   MicIcon,
+  NetworkIcon,
   PlusCircleIcon,
   SparklesIcon,
+  SquareStackIcon,
 } from 'lucide-vue-next'
 import type { ActiveNoteForEditor, TranscriptSegment } from '@/types/notes'
 import NotebookNotesList from '@/components/note/NotebookNotesList.vue'
@@ -281,9 +282,9 @@ const chatHasMessages = ref(false)
 const tabOptions: InsightTabOption[] = [
   { key: 'chat', label: 'AI 助手', icon: MessageSquareIcon },
   { key: 'realtime', label: '实时字幕', icon: MicIcon },
-  { key: 'flashcards', label: '闪卡', icon: SparklesIcon },
+  { key: 'flashcards', label: '闪卡', icon: SquareStackIcon },
   { key: 'quiz', label: '测验', icon: ClipboardListIcon },
-  { key: 'learning', label: '思维导图', icon: MapIcon },
+  { key: 'learning', label: '思维导图', icon: NetworkIcon },
   { key: 'materials', label: '资料库', icon: FolderOpenIcon },
 ]
 const showNewChatButton = computed(() => activeTab.value === 'chat' && chatHasMessages.value)
