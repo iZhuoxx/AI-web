@@ -516,9 +516,10 @@ const handleColorSelect = async (color: string) => {
 .header-content h2 {
   margin: 0;
   font-size: 36px;
-  font-weight: 300;
-  color: #1a1a1a;
-  letter-spacing: -0.8px;
+  font-weight: 400;
+  color: #3c4043;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
 }
 
 .header-subtitle {

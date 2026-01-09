@@ -91,6 +91,12 @@
                   </button>
                   <template #overlay>
                     <a-menu @click="(e: any) => e.domEvent?.stopPropagation?.()">
+                      <a-menu-item @click.stop="openRenameMindmapModal(item)">
+                        <template #icon>
+                          <Edit3Icon class="dropdown-icon" />
+                        </template>
+                        重命名
+                      </a-menu-item>
                       <a-menu-item @click.stop="promptDeleteMindmap(item)" class="delete-menu-item">
                         <template #icon>
                           <DeleteOutlined />
@@ -165,6 +171,17 @@
     </div>
   </a-modal>
 
+  <RenameModal
+    v-model="renameMindmapModal.open"
+    v-model:value="renameMindmapModal.title"
+    title="重命名思维导图"
+    label="名称"
+    placeholder="输入导图名称"
+    :loading="renameMindmapModal.loading"
+    @confirm="handleRenameMindmapSave"
+    @cancel="closeRenameMindmapModal"
+  />
+
   <ConfirmModal
     v-model="deleteMindmapModal.open"
     variant="danger"
@@ -191,6 +208,7 @@ import {
   ArrowLeftIcon,
   ChevronsUpDownIcon,
   DownloadIcon,
+  Edit3Icon,
   Maximize2Icon,
   Minimize2Icon,
   MoreVerticalIcon,
@@ -200,7 +218,8 @@ import {
 import type { MindElixirData, MindElixirInstance } from 'mind-elixir'
 import type { MindMap } from '@/types/mindmaps'
 import type { NoteAttachment } from '@/types/notes'
-import { deleteMindMap, generateMindMapForNotebook, listMindMaps } from '@/services/api'
+import RenameModal from '@/components/common/RenameModal.vue'
+import { deleteMindMap, generateMindMapForNotebook, listMindMaps, updateMindMap } from '@/services/api'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
 
@@ -248,6 +267,13 @@ const generateModal = reactive({
   attachments: [] as string[],
   focus: '',
   title: '',
+})
+
+const renameMindmapModal = reactive({
+  open: false,
+  loading: false,
+  title: '',
+  target: null as MindMap | null,
 })
 
 const deleteMindmapModal = reactive({
@@ -789,6 +815,43 @@ const resetMindmap = async () => {
   allExpanded.value = false
   await nextTick()
   await renderMindmap()
+}
+
+const openRenameMindmapModal = (mindmap: MindMap) => {
+  renameMindmapModal.target = mindmap
+  renameMindmapModal.title = mindmap.title
+  renameMindmapModal.open = true
+}
+
+const closeRenameMindmapModal = () => {
+  renameMindmapModal.open = false
+  renameMindmapModal.loading = false
+  renameMindmapModal.title = ''
+  renameMindmapModal.target = null
+}
+
+const handleRenameMindmapSave = async () => {
+  if (!renameMindmapModal.target) return
+  if (!renameMindmapModal.title.trim()) {
+    message.warning('请输入导图名称')
+    return
+  }
+
+  renameMindmapModal.loading = true
+  try {
+    const updated = await updateMindMap(renameMindmapModal.target.id, {
+      title: renameMindmapModal.title.trim(),
+    })
+    mindmaps.value = sortMindmaps(
+      mindmaps.value.map(item => (item.id === updated.id ? updated : item)),
+    )
+    message.success('已重命名思维导图')
+    closeRenameMindmapModal()
+  } catch (err) {
+    message.error(getErrorMessage(err))
+  } finally {
+    renameMindmapModal.loading = false
+  }
 }
 
 const promptDeleteMindmap = (mindmap: MindMap) => {
@@ -1657,6 +1720,11 @@ watch(
   font-weight: 600;
   color: #475569;
   margin-top: 4px;
+}
+
+.dropdown-icon {
+  width: 14px;
+  height: 14px;
 }
 </style>
 

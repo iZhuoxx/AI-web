@@ -13,7 +13,6 @@ from .routes import notebooks as notebooks_router
 from .routes import attachments as attachments_router
 from .routes import notebook_folders as notebook_folders_router
 from .routes import flashcards as flashcards_router
-from .routes import flashcard_folders as flashcard_folders_router
 from .routes import quizzes as quizzes_router
 from .routes import mindmaps as mindmaps_router
 
@@ -66,7 +65,6 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(notebooks_router.router, prefix="/api")
 app.include_router(attachments_router.router, prefix="/api")
 app.include_router(notebook_folders_router.router, prefix="/api")
-app.include_router(flashcard_folders_router.router, prefix="/api")
 app.include_router(flashcards_router.router, prefix="/api")
 app.include_router(quizzes_router.router, prefix="/api")
 app.include_router(mindmaps_router.router, prefix="/api")

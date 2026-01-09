@@ -211,6 +211,12 @@
                 </button>
                 <template #overlay>
                   <a-menu @click="(e: any) => e.domEvent?.stopPropagation?.()">
+                    <a-menu-item @click.stop="openRenameFolderModal(folder)">
+                      <template #icon>
+                        <Edit3Icon class="dropdown-icon" />
+                      </template>
+                      重命名
+                    </a-menu-item>
                     <a-menu-item @click.stop="promptDeleteFolder(folder)" class="delete-menu-item">
                       <template #icon>
                         <DeleteOutlined />
@@ -335,6 +341,17 @@
     </div>
   </a-modal>
 
+  <RenameModal
+    v-model="renameFolderModal.open"
+    v-model:value="renameFolderModal.name"
+    title="重命名闪卡合集"
+    label="名称"
+    placeholder="输入合集名称"
+    :loading="renameFolderModal.loading"
+    @confirm="handleRenameFolderSave"
+    @cancel="closeRenameFolderModal"
+  />
+
   <ConfirmModal
     v-model="deleteCardModal.open"
     variant="danger"
@@ -375,6 +392,7 @@ import { message } from 'ant-design-vue'
 import { DeleteOutlined } from '@ant-design/icons-vue'
 import { ArrowLeftIcon, Edit3Icon, ShuffleIcon, SparklesIcon, PlusIcon, DownloadIcon, MoreVerticalIcon, SquareStackIcon } from 'lucide-vue-next'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import RenameModal from '@/components/common/RenameModal.vue'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { NoteAttachment } from '@/types/notes'
 import {
@@ -382,6 +400,7 @@ import {
   generateFlashcardsForNotebook,
   listFlashcardFolders,
   listFlashcards,
+  updateFlashcardFolder,
   updateFlashcard,
   deleteFlashcardFolder,
   deleteFlashcard,
@@ -425,6 +444,13 @@ const addCardModal = reactive({
   loading: false,
   question: '',
   answer: '',
+})
+
+const renameFolderModal = reactive({
+  open: false,
+  loading: false,
+  name: '',
+  target: null as FlashcardFolder | null,
 })
 
 const deleteCardModal = reactive({
@@ -773,6 +799,41 @@ const handleAddCard = async () => {
 const promptDeleteCard = (card: Flashcard) => {
   deleteCardModal.target = card
   deleteCardModal.open = true
+}
+
+const openRenameFolderModal = (folder: FlashcardFolder) => {
+  renameFolderModal.target = folder
+  renameFolderModal.name = folder.name
+  renameFolderModal.open = true
+}
+
+const closeRenameFolderModal = () => {
+  renameFolderModal.open = false
+  renameFolderModal.loading = false
+  renameFolderModal.name = ''
+  renameFolderModal.target = null
+}
+
+const handleRenameFolderSave = async () => {
+  if (!renameFolderModal.target) return
+  if (!renameFolderModal.name.trim()) {
+    message.warning('请输入合集名称')
+    return
+  }
+
+  renameFolderModal.loading = true
+  try {
+    const updated = await updateFlashcardFolder(renameFolderModal.target.id, {
+      name: renameFolderModal.name.trim(),
+    })
+    folders.value = folders.value.map(folder => (folder.id === updated.id ? updated : folder))
+    message.success('已重命名闪卡合集')
+    closeRenameFolderModal()
+  } catch (err) {
+    message.error(getErrorMessage(err))
+  } finally {
+    renameFolderModal.loading = false
+  }
 }
 
 const handleDeleteCard = async () => {
@@ -1671,6 +1732,11 @@ const exportFlashcards = () => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.dropdown-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .generate-form {

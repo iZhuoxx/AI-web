@@ -5,6 +5,7 @@ export const MODEL_CONFIG = {
   chat: 'gpt-4o-mini',
   noteChat: 'gpt-5-mini-2025-08-07',
   flashcard: 'gpt-5-mini-2025-08-07',
+  quiz:'gpt-5-mini-2025-08-07',
   mindmap: 'gpt-5-mini-2025-08-07',
   title: 'gpt-4.1-nano',
   audioTranscribe: DEFAULT_AUDIO_MODEL,

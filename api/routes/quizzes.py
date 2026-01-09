@@ -1,4 +1,4 @@
-"""Routes for quiz question management."""
+"""Routes for quiz question and folder management."""
 
 from __future__ import annotations
 
@@ -7,12 +7,19 @@ from typing import List, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from api.dependencies import get_current_user, require_csrf
 from api.db import models
 from api.db.database import get_db
-from api.schemas import QuizQuestionCreate, QuizQuestionOut, QuizQuestionUpdate
+from api.schemas import (
+    QuizQuestionCreate,
+    QuizQuestionOut,
+    QuizQuestionUpdate,
+    QuizFolderCreate,
+    QuizFolderOut,
+    QuizFolderUpdate,
+)
 
 
 router = APIRouter(prefix="/quizzes", tags=["quiz"])
@@ -37,6 +44,18 @@ def _question_to_schema(question: models.QuizQuestion) -> QuizQuestionOut:
         is_favorite=question.is_favorite,
         created_at=question.created_at,
         updated_at=question.updated_at,
+        folder_ids=[folder.id for folder in question.folders],
+    )
+
+
+def _folder_to_schema(folder: models.QuizFolder) -> QuizFolderOut:
+    return QuizFolderOut(
+        id=folder.id,
+        notebook_id=folder.notebook_id,
+        name=folder.name,
+        created_at=folder.created_at,
+        updated_at=folder.updated_at,
+        question_ids=[q.id for q in folder.questions],
     )
 
 
@@ -47,9 +66,145 @@ def _get_question(question_id: uuid.UUID, user: models.User, db: Session) -> mod
     return question
 
 
+def _get_folder(folder_id: uuid.UUID, user: models.User, db: Session) -> models.QuizFolder:
+    folder = (
+        db.execute(
+            select(models.QuizFolder)
+            .where(models.QuizFolder.id == folder_id, models.QuizFolder.user_id == user.id)
+            .options(selectinload(models.QuizFolder.questions))
+        )
+        .scalars()
+        .first()
+    )
+    if not folder:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz folder not found")
+    return folder
+
+
 def _validate_index(options: Sequence[str], correct_index: int) -> None:
     if correct_index < 0 or correct_index >= len(options):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="correct_index is out of range")
+
+
+# ---------------------------------------------------------------------------
+# Quiz Folders
+# ---------------------------------------------------------------------------
+
+
+@router.get("/folders", response_model=List[QuizFolderOut])
+def list_quiz_folders(
+    notebook_id: uuid.UUID | None = Query(default=None),
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[QuizFolderOut]:
+    """List quiz folders for the user; optionally filter by notebook id."""
+    query = (
+        select(models.QuizFolder)
+        .where(models.QuizFolder.user_id == user.id)
+        .options(selectinload(models.QuizFolder.questions))
+        .order_by(models.QuizFolder.created_at.desc())
+    )
+    if notebook_id is not None:
+        query = query.where(models.QuizFolder.notebook_id == notebook_id)
+
+    folders = db.execute(query).scalars().all()
+    return [_folder_to_schema(folder) for folder in folders]
+
+
+@router.post(
+    "/folders",
+    response_model=QuizFolderOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def create_quiz_folder(
+    payload: QuizFolderCreate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> QuizFolderOut:
+    """Create a quiz folder under a notebook."""
+    _ensure_notebook_owned(db, user, payload.notebook_id)
+
+    folder = models.QuizFolder(
+        user_id=user.id,
+        notebook_id=payload.notebook_id,
+        name=payload.name,
+    )
+
+    if payload.question_ids:
+        questions = (
+            db.execute(
+                select(models.QuizQuestion).where(
+                    models.QuizQuestion.id.in_(payload.question_ids),
+                    models.QuizQuestion.user_id == user.id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        folder.questions = list(questions)
+
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return _folder_to_schema(folder)
+
+
+@router.put(
+    "/folders/{folder_id}",
+    response_model=QuizFolderOut,
+    dependencies=[Depends(require_csrf)],
+)
+def update_quiz_folder(
+    folder_id: uuid.UUID,
+    payload: QuizFolderUpdate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> QuizFolderOut:
+    """Update quiz folder name or question membership."""
+    folder = _get_folder(folder_id, user, db)
+
+    if payload.name is not None:
+        folder.name = payload.name
+    if payload.question_ids is not None:
+        questions = (
+            db.execute(
+                select(models.QuizQuestion).where(
+                    models.QuizQuestion.id.in_(payload.question_ids),
+                    models.QuizQuestion.user_id == user.id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        folder.questions = list(questions)
+
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return _folder_to_schema(folder)
+
+
+@router.delete(
+    "/folders/{folder_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def delete_quiz_folder(
+    folder_id: uuid.UUID,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Delete a quiz folder owned by the user."""
+    folder = _get_folder(folder_id, user, db)
+    db.delete(folder)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Quiz Questions
+# ---------------------------------------------------------------------------
 
 
 @router.get("", response_model=List[QuizQuestionOut])
@@ -62,6 +217,7 @@ def list_quiz_questions(
     query = (
         select(models.QuizQuestion)
         .where(models.QuizQuestion.user_id == user.id)
+        .options(selectinload(models.QuizQuestion.folders))
         .order_by(models.QuizQuestion.created_at.desc())
     )
     if notebook_id is not None:

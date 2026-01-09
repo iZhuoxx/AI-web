@@ -1,6 +1,7 @@
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteAttachment } from '@/types/notes'
 import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { MindMap } from '@/types/mindmaps'
+import type { QuizQuestion, QuizFolder } from '@/types/quizzes'
 import type { MindElixirData } from 'mind-elixir'
 import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 import { getModelFor } from '@/composables/setting'
@@ -121,6 +122,35 @@ interface ApiMindMap {
   updated_at: string
 }
 
+interface ApiQuizQuestion {
+  id: string
+  notebook_id: string
+  question: string
+  options: string[]
+  correct_index: number
+  hint: string | null
+  meta: Record<string, unknown> | null
+  is_favorite: boolean
+  folder_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+interface ApiQuizFolder {
+  id: string
+  notebook_id: string
+  name: string
+  description: string | null
+  question_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+interface ApiQuizGenerateResponse {
+  folder: ApiQuizFolder
+  questions: ApiQuizQuestion[]
+}
+
 const mapNotebookNote = (note: ApiNotebookNote): NotebookNote => ({
   id: note.id,
   title: note.title,
@@ -224,6 +254,30 @@ const mapMindMap = (item: ApiMindMap): MindMap => {
     updatedAt: item.updated_at,
   }
 }
+
+const mapQuizQuestion = (item: ApiQuizQuestion): QuizQuestion => ({
+  id: item.id,
+  notebookId: item.notebook_id,
+  question: item.question,
+  options: item.options,
+  correctIndex: item.correct_index,
+  hint: item.hint,
+  meta: item.meta,
+  isFavorite: item.is_favorite,
+  folderIds: item.folder_ids ?? [],
+  createdAt: item.created_at,
+  updatedAt: item.updated_at,
+})
+
+const mapQuizFolder = (item: ApiQuizFolder): QuizFolder => ({
+  id: item.id,
+  notebookId: item.notebook_id,
+  name: item.name,
+  description: item.description,
+  questionIds: item.question_ids ?? [],
+  createdAt: item.created_at,
+  updatedAt: item.updated_at,
+})
 
 export const ensureCsrfToken = async (force = false): Promise<string | null> => {
   if (!force && csrfToken) return csrfToken
@@ -433,15 +487,28 @@ export const deleteAttachment = async (attachmentId: string): Promise<void> => {
 
 export const listFlashcardFolders = async (options?: { notebookId?: string }): Promise<FlashcardFolder[]> => {
   const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
-  const data = await apiFetch<ApiFlashcardFolder[]>(`/flashcard-folders${query}`, {
+  const data = await apiFetch<ApiFlashcardFolder[]>(`/flashcards/folders${query}`, {
     method: 'GET',
     skipCsrf: true,
   })
   return data.map(mapFlashcardFolder)
 }
 
+export const updateFlashcardFolder = async (
+  folderId: string,
+  payload: { name?: string; description?: string | null; flashcardIds?: string[] },
+): Promise<FlashcardFolder> => {
+  const body: Record<string, unknown> = {}
+  if (payload.name !== undefined) body.name = payload.name
+  if (payload.description !== undefined) body.description = payload.description
+  if (payload.flashcardIds !== undefined) body.flashcard_ids = payload.flashcardIds
+
+  const data = await apiFetch<ApiFlashcardFolder>(`/flashcards/folders/${folderId}`, { method: 'PUT', body })
+  return mapFlashcardFolder(data)
+}
+
 export const deleteFlashcardFolder = async (folderId: string): Promise<void> => {
-  await apiFetch<void>(`/flashcard-folders/${folderId}`, { method: 'DELETE' })
+  await apiFetch<void>(`/flashcards/folders/${folderId}`, { method: 'DELETE' })
 }
 
 export const listFlashcards = async (options?: { notebookId?: string }): Promise<Flashcard[]> => {
@@ -650,4 +717,128 @@ export const transcribeAudio = async (
     skipCsrf: true,
     ...(headers ? { headers } : {}),
   })
+}
+
+export const listQuizFolders = async (options?: { notebookId?: string }): Promise<QuizFolder[]> => {
+  const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
+  const data = await apiFetch<ApiQuizFolder[]>(`/quizzes/folders${query}`, { method: 'GET', skipCsrf: true })
+  return data.map(mapQuizFolder)
+}
+
+export const createQuizFolder = async (payload: {
+  notebookId: string
+  name: string
+  description?: string | null
+  questionIds?: string[]
+}): Promise<QuizFolder> => {
+  const body: Record<string, unknown> = {
+    notebook_id: payload.notebookId,
+    name: payload.name,
+  }
+  if (payload.description !== undefined) body.description = payload.description
+  if (payload.questionIds) body.question_ids = payload.questionIds
+
+  const data = await apiFetch<ApiQuizFolder>('/quizzes/folders', { method: 'POST', body })
+  return mapQuizFolder(data)
+}
+
+export const updateQuizFolder = async (
+  folderId: string,
+  payload: {
+    name?: string
+    description?: string | null
+    questionIds?: string[]
+  },
+): Promise<QuizFolder> => {
+  const body: Record<string, unknown> = {}
+  if (payload.name !== undefined) body.name = payload.name
+  if (payload.description !== undefined) body.description = payload.description
+  if (payload.questionIds !== undefined) body.question_ids = payload.questionIds
+
+  const data = await apiFetch<ApiQuizFolder>(`/quizzes/folders/${folderId}`, { method: 'PUT', body })
+  return mapQuizFolder(data)
+}
+
+export const deleteQuizFolder = async (folderId: string): Promise<void> => {
+  await apiFetch<void>(`/quizzes/folders/${folderId}`, { method: 'DELETE' })
+}
+
+export const listQuizQuestions = async (options?: { notebookId?: string }): Promise<QuizQuestion[]> => {
+  const query = options?.notebookId ? `?notebook_id=${encodeURIComponent(options.notebookId)}` : ''
+  const data = await apiFetch<ApiQuizQuestion[]>(`/quizzes${query}`, { method: 'GET', skipCsrf: true })
+  return data.map(mapQuizQuestion)
+}
+
+export const createQuizQuestion = async (payload: {
+  notebookId: string
+  question: string
+  options: string[]
+  correctIndex: number
+  hint?: string | null
+  meta?: Record<string, unknown> | null
+  isFavorite?: boolean
+}): Promise<QuizQuestion> => {
+  const body: Record<string, unknown> = {
+    notebook_id: payload.notebookId,
+    question: payload.question,
+    options: payload.options,
+    correct_index: payload.correctIndex,
+  }
+  if (payload.hint !== undefined) body.hint = payload.hint
+  if (payload.meta !== undefined) body.meta = payload.meta
+  if (payload.isFavorite !== undefined) body.is_favorite = payload.isFavorite
+
+  const data = await apiFetch<ApiQuizQuestion>('/quizzes', { method: 'POST', body })
+  return mapQuizQuestion(data)
+}
+
+export const updateQuizQuestion = async (
+  questionId: string,
+  payload: {
+    question?: string
+    options?: string[]
+    correctIndex?: number
+    hint?: string | null
+    meta?: Record<string, unknown> | null
+    isFavorite?: boolean
+  },
+): Promise<QuizQuestion> => {
+  const body: Record<string, unknown> = {}
+  if (payload.question !== undefined) body.question = payload.question
+  if (payload.options !== undefined) body.options = payload.options
+  if (payload.correctIndex !== undefined) body.correct_index = payload.correctIndex
+  if (payload.hint !== undefined) body.hint = payload.hint
+  if (payload.meta !== undefined) body.meta = payload.meta
+  if (payload.isFavorite !== undefined) body.is_favorite = payload.isFavorite
+
+  const data = await apiFetch<ApiQuizQuestion>(`/quizzes/${questionId}`, { method: 'PUT', body })
+  return mapQuizQuestion(data)
+}
+
+export const deleteQuizQuestion = async (questionId: string): Promise<void> => {
+  await apiFetch<void>(`/quizzes/${questionId}`, { method: 'DELETE' })
+}
+
+export const generateQuizForNotebook = async (
+  notebookId: string,
+  payload?: {
+    attachmentIds?: string[]
+    count?: number
+    focus?: string
+    model?: string
+    folderName?: string
+  },
+): Promise<{ folder: QuizFolder; questions: QuizQuestion[] }> => {
+  const body: Record<string, unknown> = {}
+  if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
+  if (payload?.count) body.count = payload.count
+  if (payload?.focus) body.focus = payload.focus
+  if (payload?.model) body.model = payload.model
+  if (payload?.folderName) body.folder_name = payload.folderName
+
+  const data = await apiFetch<ApiQuizGenerateResponse>(`/notebooks/${notebookId}/quizzes/generate`, { method: 'POST', body })
+  return {
+    folder: mapQuizFolder(data.folder),
+    questions: (data.questions ?? []).map(mapQuizQuestion),
+  }
 }

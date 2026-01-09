@@ -16,10 +16,10 @@ declare module '@vue/runtime-core' {
     AInput: typeof import('ant-design-vue/es')['Input']
     AInputPassword: typeof import('ant-design-vue/es')['InputPassword']
     AMenu: typeof import('ant-design-vue/es')['Menu']
-    AMenuDivider: typeof import('ant-design-vue/es')['MenuDivider']
     AMenuItem: typeof import('ant-design-vue/es')['MenuItem']
     AModal: typeof import('ant-design-vue/es')['Modal']
     AppSidebar: typeof import('./src/components/AppSidebar.vue')['default']
+    ARadio: typeof import('ant-design-vue/es')['Radio']
     ASelect: typeof import('ant-design-vue/es')['Select']
     ASelectOption: typeof import('ant-design-vue/es')['SelectOption']
     ASpin: typeof import('ant-design-vue/es')['Spin']
@@ -41,8 +41,8 @@ declare module '@vue/runtime-core' {
     NoteQuizPanel: typeof import('./src/components/note/NoteQuizPanel.vue')['default']
     NoteRecordingPanel: typeof import('./src/components/note/NoteRecordingPanel.vue')['default']
     NoteTranscriptionPanel: typeof import('./src/components/note/NoteTranscriptionPanel.vue')['default']
+    RenameModal: typeof import('./src/components/common/RenameModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    Setting: typeof import('./src/components/setting.vue')['default']
   }
 }

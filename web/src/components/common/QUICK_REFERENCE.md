@@ -32,6 +32,19 @@
 </ConfirmModal>
 ```
 
+### 创建重命名弹窗
+```vue
+<RenameModal
+  v-model="renameModal.open"
+  v-model:value="renameModal.value"
+  title="重命名"
+  label="名称"
+  placeholder="请输入名称"
+  :loading="renameModal.loading"
+  @confirm="handleRename"
+/>
+```
+
 ### 创建编辑表单弹窗
 ```vue
 <a-modal :footer="null" wrap-class-name="rounded-modal">

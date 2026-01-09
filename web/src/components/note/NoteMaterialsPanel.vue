@@ -151,38 +151,17 @@
     </div>
   </a-card>
 
-  <a-modal
-    v-model:visible="renameModal.open"
-    :footer="null"
-    :maskClosable="false"
+  <RenameModal
+    v-model="renameModal.open"
+    v-model:value="renameModal.value"
+    title="重命名资料"
+    label="名称"
+    placeholder="输入新的文件名"
     :width="420"
-    centered
-    destroy-on-close
-    wrap-class-name="rounded-modal materials-rename-modal"
+    :loading="renameModal.loading"
+    @confirm="handleRenameConfirm"
     @cancel="handleRenameCancel"
-    @afterClose="resetRenameModal"
-  >
-    <div class="edit-modal__body">
-      <div class="edit-modal__title">重命名资料</div>
-      <div class="rename-modal__subtitle">{{ renameModal.target ? resolveName(renameModal.target) : '' }}</div>
-      <label class="edit-label">新名称</label>
-      <a-input
-        v-model:value="renameModal.value"
-        :maxlength="255"
-        placeholder="请输入新的文件名"
-      />
-      <div class="modal-actions">
-        <a-button @click="handleRenameCancel">取消</a-button>
-        <a-button
-          type="primary"
-          :loading="renameModal.loading"
-          @click="handleRenameConfirm"
-        >
-          保存
-        </a-button>
-      </div>
-    </div>
-  </a-modal>
+  />
 
   <ConfirmModal
     v-model="deleteModal.open"
@@ -209,6 +188,7 @@ import {
   DownloadOutlined
 } from '@ant-design/icons-vue'
 import { computed, reactive, ref, watch } from 'vue'
+import RenameModal from '@/components/common/RenameModal.vue'
 import {
   ArrowLeftIcon,
   DownloadIcon,
@@ -359,7 +339,9 @@ const openRenameModal = (item: NoteAttachment) => {
 }
 
 const handleRenameCancel = () => {
+  if (renameModal.loading) return
   renameModal.open = false
+  resetRenameModal()
 }
 
 const resetRenameModal = () => {
@@ -380,6 +362,7 @@ const handleRenameConfirm = async () => {
     await updateAttachment(renameModal.target.id, { filename })
     message.success('文件名已更新')
     renameModal.open = false
+    resetRenameModal()
     emit('updated')
   } catch (err: any) {
     const error = err?.message || '重命名失败'
@@ -903,19 +886,22 @@ defineExpose({ focusAttachmentByCitation })
 }
 
 .preview-name {
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.02em;
   color: #0f172a;
-  line-height: 1.25;
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .preview-meta {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: #475569;
+  line-height: 1.5;
 }
 
 .preview-actions {
@@ -1012,40 +998,6 @@ defineExpose({ focusAttachmentByCitation })
   flex: 1;
 }
 
-.edit-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-.edit-modal__title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 4px;
-}
-
-.rename-modal__subtitle {
-  font-size: 14px;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-
-.edit-label {
-  font-size: 13px;
-  color: #475569;
-  font-weight: 600;
-  margin-top: 4px;
-}
-
-.modal-actions {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 .upload-floating {
   position: absolute;
   left: 50%;
@@ -1129,7 +1081,4 @@ defineExpose({ focusAttachmentByCitation })
   font-size: 14px;
 }
 
-.materials-rename-modal .ant-modal-footer {
-  display: none;
-}
 </style>

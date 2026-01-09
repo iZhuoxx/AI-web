@@ -80,6 +80,9 @@ class User(Base, TimestampMixin):
     )
 
     # Quiz relationships.
+    quiz_folders: Mapped[List["QuizFolder"]] = relationship(
+        "QuizFolder", back_populates="user", cascade="all, delete-orphan"
+    )
     quiz_questions: Mapped[List["QuizQuestion"]] = relationship(
         "QuizQuestion", back_populates="user", cascade="all, delete-orphan"
     )
@@ -171,6 +174,9 @@ class Notebook(Base, TimestampMixin):
     )
     flashcards: Mapped[List["Flashcard"]] = relationship(
         "Flashcard", back_populates="notebook", cascade="all, delete-orphan"
+    )
+    quiz_folders: Mapped[List["QuizFolder"]] = relationship(
+        "QuizFolder", back_populates="notebook", cascade="all, delete-orphan"
     )
     quiz_questions: Mapped[List["QuizQuestion"]] = relationship(
         "QuizQuestion", back_populates="notebook", cascade="all, delete-orphan"
@@ -515,8 +521,40 @@ class FlashcardFolderItem(Base):
 # ---------------------------------------------------------------------------
 
 
+class QuizFolder(Base, TimestampMixin):
+    """Quiz folder/collection scoped to a Notebook."""
+
+    __tablename__ = "quiz_folders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    notebook_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"), nullable=False
+    )
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="quiz_folders")
+    notebook: Mapped["Notebook"] = relationship("Notebook", back_populates="quiz_folders")
+    questions: Mapped[List["QuizQuestion"]] = relationship(
+        "QuizQuestion",
+        secondary="quiz_folder_items",
+        back_populates="folders",
+        order_by="QuizFolderItem.seq",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "notebook_id", "name", name="uq_quiz_folders_user_nb_name"
+        ),
+        Index("idx_quiz_folders_user_nb", "user_id", "notebook_id"),
+    )
+
+
 class QuizQuestion(Base, TimestampMixin):
-    """Multiple-choice quiz question with options, correct index, and optional hint."""
+    """Multiple-choice quiz question with options, correct index."""
 
     __tablename__ = "quiz_questions"
 
@@ -537,19 +575,47 @@ class QuizQuestion(Base, TimestampMixin):
     # Index of the correct option in options (0-3).
     correct_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Optional hint.
+    # hint.
     hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # explaination.
+    explaination: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Additional metadata (difficulty, source, etc.).
     meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     user: Mapped["User"] = relationship("User", back_populates="quiz_questions")
     notebook: Mapped["Notebook"] = relationship("Notebook", back_populates="quiz_questions")
-
-    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    folders: Mapped[List["QuizFolder"]] = relationship(
+        "QuizFolder",
+        secondary="quiz_folder_items",
+        back_populates="questions",
+    )
 
     __table_args__ = (
         Index("idx_quiz_questions_user_nb", "user_id", "notebook_id"),
+    )
+
+
+class QuizFolderItem(Base):
+    """Join table mapping quiz questions to folders (with optional ordering)."""
+
+    __tablename__ = "quiz_folder_items"
+
+    folder_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("quiz_folders.id", ondelete="CASCADE"), primary_key=True
+    )
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("quiz_questions.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    seq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index("idx_quiz_folder_items_folder", "folder_id"),
+        Index("idx_quiz_folder_items_question", "question_id"),
     )
 
 
@@ -597,6 +663,8 @@ __all__ = [
     "FlashcardFolder",
     "Flashcard",
     "FlashcardFolderItem",
+    "QuizFolder",
     "QuizQuestion",
+    "QuizFolderItem",
     "MindMap",
 ]

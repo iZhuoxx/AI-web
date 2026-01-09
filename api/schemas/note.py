@@ -186,6 +186,66 @@ class MindMapGenerateRequest(BaseModel):
     model: Optional[str] = Field(default=None, max_length=100)
 
 
+class QuizGenerateRequest(BaseModel):
+    attachment_ids: List[UUID] = Field(default_factory=list)
+    count: Optional[int] = Field(default=None, ge=1, le=30)
+    focus: Optional[str] = Field(default=None, max_length=600)
+    model: Optional[str] = Field(default=None, max_length=100)
+    folder_name: Optional[str] = Field(default=None, max_length=255)
+
+
+class TitleGenerateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=12000)
+
+
+class TitleGenerateResponse(BaseModel):
+    title: str
+
+
+class StructuredFlashcard(BaseModel):
+    question: str = Field(..., description="清晰的提问或提示，用于闪卡正面")
+    answer: str = Field(..., description="简洁的答案，用于闪卡背面，50-120字以内")
+    sources: List[str] = Field(default_factory=list, description="引用的文件名或 file_id")
+
+
+class StructuredFlashcardSet(BaseModel):
+    folder_name: str = Field(..., description="闪卡合集的名称")
+    flashcards: List[StructuredFlashcard]
+
+
+class StructuredQuizOption(BaseModel):
+    text: str = Field(..., description="选项文本")
+    is_correct: bool = Field(..., description="是否为正确答案")
+
+
+class StructuredQuizQuestion(BaseModel):
+    question: str = Field(..., description="题目内容")
+    options: List[StructuredQuizOption] = Field(..., description="选项列表，通常4个选项")
+    hint: Optional[str] = Field(default=None, description="提示")
+    explaination: Optional[str] = Field(default=None, description="解释为什么正确答案是对的，为什么错误答案是错的")
+    sources: List[str] = Field(default_factory=list, description="引用的文件名或 file_id")
+
+
+class StructuredQuizSet(BaseModel):
+    folder_name: str = Field(..., description="测试合集的名称")
+    questions: List[StructuredQuizQuestion]
+
+
+class StructuredMindMapNode(BaseModel):
+    title: str = Field(..., description="节点标题")
+    summary: Optional[str] = Field(default=None, description="节点的简短备注")
+    children: List["StructuredMindMapNode"] = Field(default_factory=list, description="子节点")
+
+
+class StructuredMindMap(BaseModel):
+    title: str = Field(..., description="思维导图名称")
+    root: StructuredMindMapNode
+
+
+StructuredMindMapNode.model_rebuild()
+StructuredMindMap.model_rebuild()
+
+
 class NotebookQuizBase(BaseModel):
     notebook_id: UUID
     question: str
@@ -214,8 +274,37 @@ class QuizQuestionOut(NotebookQuizBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    folder_ids: List[UUID] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QuizFolderBase(BaseModel):
+    notebook_id: UUID
+    name: str = Field(max_length=255)
+
+
+class QuizFolderCreate(QuizFolderBase):
+    question_ids: List[UUID] = Field(default_factory=list)
+
+
+class QuizFolderUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=255)
+    question_ids: Optional[List[UUID]] = None
+
+
+class QuizFolderOut(QuizFolderBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    question_ids: List[UUID] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuizGenerateResponse(BaseModel):
+    folder: QuizFolderOut
+    questions: List[QuizQuestionOut]
 
 
 class MindMapBase(BaseModel):
