@@ -310,10 +310,10 @@ const handleFileChange = async (event: Event) => {
       throw new Error('未能获取 OpenAI 文件 ID')
     }
     await linkAttachmentToOpenAI(response.attachmentId, openAIFile.id)
-    message.success('资料上传成功并同步至 OpenAI资料库')
     emit('updated')
   } catch (err: any) {
     const error = err?.message || '上传失败，请稍后再试'
+    console.error('Failed to upload attachment:', err)
     message.error(error)
   } finally {
     uploading.value = false
@@ -360,12 +360,12 @@ const handleRenameConfirm = async () => {
   renameModal.loading = true
   try {
     await updateAttachment(renameModal.target.id, { filename })
-    message.success('文件名已更新')
     renameModal.open = false
     resetRenameModal()
     emit('updated')
   } catch (err: any) {
     const error = err?.message || '重命名失败'
+    console.error('Failed to rename attachment:', err)
     message.error(error)
   } finally {
     renameModal.loading = false
@@ -389,7 +389,6 @@ const resetDeleteModal = () => {
 const handleDeleteConfirm = async () => {
   if (!deleteModal.target) return
   await deleteAttachment(deleteModal.target.id)
-  message.success('附件已删除')
   if (previewingId.value === deleteModal.target.id) {
     exitPreview()
   }
@@ -413,6 +412,7 @@ const openPreview = async (item: NoteAttachment, options?: { focusText?: string 
   } catch (err: any) {
     const error = err?.message || '预览加载失败'
     previewError.value = error
+    console.error('Failed to load preview:', err)
     message.error(error)
   } finally {
     previewLoading.value = false
@@ -440,6 +440,7 @@ const handleDownload = async (id: string) => {
     window.open(url, '_blank', 'noopener')
   } catch (err: any) {
     const error = err?.message || '获取下载链接失败'
+    console.error('Failed to download attachment:', err)
     message.error(error)
   } finally {
     if (downloading.value === id) downloading.value = null
@@ -1018,7 +1019,7 @@ defineExpose({ focusAttachmentByCitation })
   font-size: 15px;
   font-weight: 700;
   gap: 8px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: #1d77ec;
   color: #fff;
   display: inline-flex;
   align-items: center;

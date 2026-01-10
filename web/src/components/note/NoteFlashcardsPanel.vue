@@ -577,6 +577,7 @@ const loadFlashcards = async () => {
     folders.value = folderList
     flashcards.value = cardList
   } catch (err) {
+    console.error('Failed to load flashcards:', err)
     message.error(getErrorMessage(err))
     folders.value = []
     flashcards.value = []
@@ -700,8 +701,8 @@ const handleGenerate = async () => {
     generateModal.open = false
     generateTargetFolderId.value = null
     await loadFlashcards()
-    message.success(targetFolderId ? '已为当前合集生成闪卡' : '已提交生成请求')
   } catch (err) {
+    console.error('Failed to generate flashcards:', err)
     message.error(getErrorMessage(err))
   } finally {
     generateModal.loading = false
@@ -733,9 +734,9 @@ const handleEditSave = async () => {
       answer: editModal.answer,
     })
     flashcards.value = flashcards.value.map(card => (card.id === updated.id ? updated : card))
-    message.success('已更新闪卡')
     closeEdit()
   } catch (err) {
+    console.error('Failed to update flashcard:', err)
     message.error(getErrorMessage(err))
   } finally {
     editModal.loading = false
@@ -787,9 +788,9 @@ const handleAddCard = async () => {
       const folder = folders.value[folderIndex]
       folders.value.splice(folderIndex, 1, { ...folder, flashcardIds: [...folder.flashcardIds, newCard.id] })
     }
-    message.success('闪卡已添加')
     closeAddCardModal()
   } catch (err) {
+    console.error('Failed to create flashcard:', err)
     message.error(getErrorMessage(err))
   } finally {
     addCardModal.loading = false
@@ -827,9 +828,9 @@ const handleRenameFolderSave = async () => {
       name: renameFolderModal.name.trim(),
     })
     folders.value = folders.value.map(folder => (folder.id === updated.id ? updated : folder))
-    message.success('已重命名闪卡合集')
     closeRenameFolderModal()
   } catch (err) {
+    console.error('Failed to rename flashcard folder:', err)
     message.error(getErrorMessage(err))
   } finally {
     renameFolderModal.loading = false
@@ -847,8 +848,8 @@ const handleDeleteCard = async () => {
         ? { ...folder, flashcardIds: folder.flashcardIds.filter(id => id !== deleteCardModal.target!.id) }
         : folder,
     )
-    message.success('已删除闪卡')
   } catch (err) {
+    console.error('Failed to delete flashcard:', err)
     message.error(getErrorMessage(err))
     throw err
   }
@@ -868,8 +869,8 @@ const handleDeleteFolder = async () => {
     if (selectedFolderId.value === deleteFolderModal.target.id) {
       selectedFolderId.value = null
     }
-    message.success('已删除闪卡合集')
   } catch (err) {
+    console.error('Failed to delete flashcard folder:', err)
     message.error(getErrorMessage(err))
     throw err
   }
@@ -918,7 +919,6 @@ const exportFlashcards = () => {
   link.click()
   document.body.removeChild(link)
   
-  message.success('闪卡已导出')
 }
 </script>
 
@@ -1156,7 +1156,7 @@ const exportFlashcards = () => {
   gap: 8px;
   padding: 0 26px;
   height: 48px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: #1d77ec;
   border: none;
   font-size: 15px;
   font-weight: 700;

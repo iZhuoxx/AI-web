@@ -444,7 +444,7 @@ watch(
       notebookStore.clearActiveNotebook()
       resetEditorState()
       if (isEditorRoute.value) {
-        message.info('请先登录后查看笔记')
+        message.warning('请先登录后查看笔记')
         await router.replace({ name: 'notes-list' })
       }
       return
@@ -517,7 +517,10 @@ watch(isRecording, (value) => {
 })
 
 watch(recordingError, (value) => {
-  if (value) message.error(value)
+  if (value) {
+    console.error('Recording error:', value)
+    message.error(value)
+  }
 })
 
 const handleEditorChange = (payload: { title: string; content: string }) => {
@@ -575,12 +578,11 @@ const handleNoteEdited = () => {
 
 const restoreAutoSync = () => {
   if (!selectedNoteId.value) {
-    message.info('请选择一个笔记以同步实时内容')
+    message.warning('请选择一个笔记以同步实时内容')
     return
   }
   shouldAutoSyncNotes.value = true
   extractSegmentsAsNote()
-  message.success('已根据实时转写内容同步笔记')
   persistDraft()
 }
 
@@ -696,6 +698,7 @@ const handleStartRecording = async () => {
   try {
     await startRecording()
   } catch (err: any) {
+    console.error('Failed to start recording:', err)
     message.error(err?.message || '无法开始录音')
   }
 }
@@ -833,7 +836,8 @@ const handleBackToList = async () => {
             notebookStore.clearDraft(noteId)
           }
           notebookStore.clearDraft(nextId)
-        } catch {
+        } catch (err) {
+          console.error('Failed to save note before leaving editor:', err)
           message.error('返回前保存笔记失败，请稍后重试')
           leavingEditor.value = false
           return

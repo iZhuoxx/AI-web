@@ -19,27 +19,6 @@
                 <div class="quiz-name">{{ selectedFolder?.name || '测验' }}</div>
                 <div v-if="selectedFolder?.description" class="quiz-desc">{{ selectedFolder.description }}</div>
               </div>
-              <a-dropdown trigger="click" placement="bottomRight" overlay-class-name="rounded-dropdown quiz-actions-dropdown">
-                <button class="folder-menu-btn" type="button">
-                  <MoreVerticalIcon class="menu-icon" />
-                </button>
-                <template #overlay>
-                  <a-menu>
-                    <a-menu-item @click="openEditFolderModal(selectedFolder!)">
-                      <template #icon>
-                        <Edit3Icon class="dropdown-icon" />
-                      </template>
-                      重命名
-                    </a-menu-item>
-                    <a-menu-item @click="promptDeleteFolder(selectedFolder!)" class="delete-menu-item">
-                      <template #icon>
-                        <DeleteOutlined />
-                      </template>
-                      删除
-                    </a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
             </div>
 
             <div v-if="currentQuestion" class="quiz-content">
@@ -87,29 +66,28 @@
                     <XCircleIcon class="feedback-icon" />
                     <span>回答错误，正确答案是 {{ optionLetters[currentQuestion.correctIndex] }}</span>
                   </div>
-                  <div v-if="currentQuestion.hint" class="hint-box">
-                    <LightbulbIcon class="hint-icon" />
-                    <span>{{ currentQuestion.hint }}</span>
+                  <div v-if="currentQuestion.explaination" class="explanation-box">
+                    <LightbulbIcon class="explanation-icon" />
+                    <span>{{ currentQuestion.explaination }}</span>
                   </div>
                 </div>
               </div>
 
               <div class="quiz-footer">
+                <button
+                  v-if="currentQuestion.hint && !answered"
+                  class="hint-toggle-btn hint-toggle-btn--inline"
+                  type="button"
+                  @click="showHint = !showHint"
+                >
+                  <component :is="showHint ? ChevronUpIcon : ChevronDownIcon" class="hint-toggle-icon" />
+                  提示
+                </button>
                 <div class="nav-group">
                   <button class="pill-btn" type="button" :disabled="currentIndex === 0" @click="prevQuestion">
                     上一题
                   </button>
                   <button
-                    v-if="!answered"
-                    class="pill-btn pill-btn--primary"
-                    type="button"
-                    :disabled="selectedAnswer === null"
-                    @click="confirmAnswer"
-                  >
-                    确认
-                  </button>
-                  <button
-                    v-else
                     class="pill-btn pill-btn--primary"
                     type="button"
                     @click="nextQuestion"
@@ -117,15 +95,9 @@
                     {{ currentIndex >= quizQueue.length - 1 ? '完成' : '下一题' }}
                   </button>
                 </div>
-                <div class="score-display">
-                  得分: {{ correctCount }} / {{ answeredCount }}
-                </div>
-                <div class="action-group">
-                  <button class="ghost-btn" type="button" @click="toggleShuffle">
-                    <ShuffleIcon class="btn-icon" />
-                    {{ shuffleEnabled ? '顺序' : '随机' }}
-                  </button>
-                </div>
+              </div>
+              <div v-if="showHint && currentQuestion.hint && !answered" class="hint-content">
+                {{ currentQuestion.hint }}
               </div>
             </div>
             <div v-else class="empty-inner">
@@ -218,11 +190,6 @@
     @cancel="closeGenerateModal"
   >
     <div class="generate-form">
-      <label class="form-label">测验名称</label>
-      <a-input
-        v-model:value="generateModal.folderName"
-        placeholder="默认使用笔记本标题"
-      />
 
       <label class="form-label">题目数量</label>
       <a-input
@@ -291,12 +258,13 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ClipboardListIcon,
   Edit3Icon,
   FolderIcon,
   LightbulbIcon,
   MoreVerticalIcon,
-  ShuffleIcon,
   SparklesIcon,
   StarIcon,
   XIcon,
@@ -331,6 +299,7 @@ const selectedAnswer = ref<number | null>(null)
 const answered = ref(false)
 const correctCount = ref(0)
 const answeredCount = ref(0)
+const showHint = ref(false)
 
 const optionLetters = ['A', 'B', 'C', 'D']
 
@@ -417,7 +386,11 @@ const loadData = async () => {
     ])
     folders.value = foldersData
     quizQuestions.value = questionsData
+    if (import.meta.env.DEV && questionsData.length) {
+      console.debug('[NoteQuizPanel] quiz question sample:', questionsData[0])
+    }
   } catch (err) {
+    console.error('Failed to load quiz data:', err)
     message.error(getErrorMessage(err))
     folders.value = []
     quizQuestions.value = []
@@ -450,11 +423,13 @@ const goBackToList = () => {
   currentIndex.value = 0
   selectedAnswer.value = null
   answered.value = false
+  showHint.value = false
 }
 
 const selectAnswer = (idx: number) => {
   if (!answered.value) {
     selectedAnswer.value = idx
+    confirmAnswer()
   }
 }
 
@@ -469,13 +444,13 @@ const confirmAnswer = () => {
 
 const nextQuestion = () => {
   if (currentIndex.value >= quizQueue.value.length - 1) {
-    message.success(`测验完成! 得分: ${correctCount.value}/${answeredCount.value}`)
     goBackToList()
     return
   }
   currentIndex.value += 1
   selectedAnswer.value = null
   answered.value = false
+  showHint.value = false
 }
 
 const prevQuestion = () => {
@@ -483,6 +458,7 @@ const prevQuestion = () => {
     currentIndex.value -= 1
     selectedAnswer.value = null
     answered.value = false
+    showHint.value = false
   }
 }
 
@@ -516,6 +492,7 @@ const toggleFavorite = async (question: QuizQuestion) => {
       q.id === updated.id ? updated : q
     )
   } catch (err) {
+    console.error('Failed to toggle favorite:', err)
     message.error(getErrorMessage(err))
   }
 }
@@ -532,7 +509,7 @@ const openGenerateModal = () => {
   generateModal.attachments = selectableAttachments.value.map(item => item.id)
   generateModal.count = ''
   generateModal.focus = ''
-  generateModal.folderName = ''
+
   generateModal.open = true
 }
 
@@ -561,14 +538,13 @@ const handleGenerate = async () => {
       attachmentIds: generateModal.attachments,
       count,
       focus: generateModal.focus.trim() || undefined,
-      model,
-      folderName: generateModal.folderName.trim() || undefined,
+      model
     })
     generateModal.open = false
     folders.value = [result.folder, ...folders.value]
     quizQuestions.value = [...result.questions, ...quizQuestions.value]
-    message.success(`已生成测验 "${result.folder.name}"，包含 ${result.questions.length} 道题`)
   } catch (err) {
+    console.error('Failed to generate quiz:', err)
     message.error(getErrorMessage(err))
   } finally {
     generateModal.loading = false
@@ -603,9 +579,9 @@ const handleEditFolderSave = async () => {
     folders.value = folders.value.map(f =>
       f.id === updated.id ? updated : f
     )
-    message.success('已重命名测验')
     closeEditFolderModal()
   } catch (err) {
+    console.error('Failed to rename quiz folder:', err)
     message.error(getErrorMessage(err))
   } finally {
     editFolderModal.loading = false
@@ -626,8 +602,8 @@ const handleDeleteFolder = async () => {
     if (selectedFolderId.value === deleteFolderModal.target.id) {
       selectedFolderId.value = null
     }
-    message.success('已删除测验')
   } catch (err) {
+    console.error('Failed to delete quiz folder:', err)
     message.error(getErrorMessage(err))
     throw err
   }
@@ -831,7 +807,7 @@ const handleDeleteFolder = async () => {
   gap: 8px;
   padding: 0 26px;
   height: 48px;
-  background: linear-gradient(135deg, #fa8c16, #f59e0b);
+  background: #1d77ec;
   border: none;
   font-size: 15px;
   font-weight: 700;
@@ -957,8 +933,8 @@ const handleDeleteFolder = async () => {
   background: #fff;
   border-radius: 20px;
   padding: 24px;
-  border: 1.5px solid rgba(0, 0, 0, 0.04);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border: 1px solid #fff;
+  box-shadow: none;
 }
 
 .question-header {
@@ -1152,6 +1128,71 @@ const handleDeleteFolder = async () => {
   height: 20px;
 }
 
+.hint-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: transparent;
+  border: none;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hint-toggle-btn:hover {
+  color: #0f172a;
+}
+
+.hint-toggle-btn--inline {
+  padding: 8px 25px;
+  border-radius: 12px;
+  background: #fff;
+  border: none;
+  margin-left: 6px;
+}
+
+.hint-toggle-btn--inline:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.hint-toggle-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.hint-content {
+  margin-top: 4px;
+  padding: 14px 18px;
+  background: rgba(251, 191, 36, 0.18);
+  border-radius: 12px;
+  font-size: 14px;
+  color: #92400e;
+  line-height: 1.6;
+}
+
+.explanation-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: 12px;
+  font-size: 16px;
+  color: #1e40af;
+  line-height: 1.6;
+}
+
+.explanation-icon {
+  width: 18px;
+  height: 18px;
+  color: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .hint-box {
   display: flex;
   align-items: flex-start;
@@ -1175,6 +1216,7 @@ const handleDeleteFolder = async () => {
 .quiz-footer {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: wrap;
   margin-top: 8px;
@@ -1185,6 +1227,10 @@ const handleDeleteFolder = async () => {
   display: inline-flex;
   gap: 8px;
   align-items: center;
+}
+
+.nav-group {
+  margin-left: auto;
 }
 
 .pill-btn {
@@ -1222,39 +1268,6 @@ const handleDeleteFolder = async () => {
   border-color: transparent;
 }
 
-.score-display {
-  font-weight: 700;
-  color: #0f172a;
-  flex: 1;
-  text-align: center;
-  font-size: 14px;
-}
-
-.ghost-btn {
-  border: 1.5px solid rgba(0, 0, 0, 0.08);
-  background: #fff;
-  padding: 9px 14px;
-  border-radius: 14px;
-  color: #334155;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.ghost-btn:hover {
-  border-color: #fa8c16;
-  color: #fa8c16;
-  background: rgba(250, 140, 22, 0.04);
-}
-
-.btn-icon {
-  width: 14px;
-  height: 14px;
-}
 
 .panel-overlay {
   position: absolute;
@@ -1290,15 +1303,6 @@ const handleDeleteFolder = async () => {
 @media (max-width: 768px) {
   .panel-shell {
     padding: 12px;
-  }
-
-  .quiz-footer {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .score-display {
-    order: -1;
   }
 }
 </style>

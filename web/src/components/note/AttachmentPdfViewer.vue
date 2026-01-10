@@ -413,6 +413,7 @@ const onError = (err: any) => {
   const errorMsg = err?.message || 'PDF 预览失败'
   error.value = errorMsg
   loading.value = false
+  console.error('PDF preview error:', err)
   message.error(errorMsg)
 }
 
@@ -610,12 +611,9 @@ const runSearch = async (payload?: RunSearchOptions | Event) => {
 
     if (!results.length) {
       if (!options?.autoJump) {
-        message.info('未找到匹配内容')
+        message.warning('未找到匹配内容')
       }
     } else {
-      if (!options?.autoJump) {
-        message.success(`找到 ${results.length} 处匹配`)
-      }
       if (options?.autoJump) {
         jumpTo(results[0].page)
       }

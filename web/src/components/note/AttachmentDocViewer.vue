@@ -59,6 +59,7 @@ const renderDoc = async () => {
   } catch (err: any) {
     const errMsg = err?.message || '文档预览失败'
     error.value = errMsg
+    console.error('Failed to render document preview:', err)
     message.error(errMsg)
   } finally {
     loading.value = false

@@ -57,11 +57,12 @@ export const useAuth = () => {
     return bootstrapPromise
   }
 
-  const handleAuthError = (err: unknown) => {
-    const msg = err instanceof Error ? err.message : '请求失败，请稍后重试'
-    state.error = msg
-    message.error(msg)
-  }
+const handleAuthError = (err: unknown) => {
+  const msg = err instanceof Error ? err.message : '请求失败，请稍后重试'
+  state.error = msg
+  console.error('Auth request failed:', err)
+  message.error(msg)
+}
 
   const withLoading = async <T>(fn: () => Promise<T>): Promise<T> => {
     state.loading = true
@@ -81,7 +82,6 @@ export const useAuth = () => {
         setSession(session)
         clearCsrfToken()
         await ensureCsrfToken(true)
-        message.success('登录成功')
       } catch (err) {
         handleAuthError(err)
         throw err
@@ -97,7 +97,6 @@ export const useAuth = () => {
         setSession(session)
         clearCsrfToken()
         await ensureCsrfToken(true)
-        message.success('注册成功，已自动登录')
       } catch (err) {
         handleAuthError(err)
         throw err
@@ -112,7 +111,6 @@ export const useAuth = () => {
         await logoutUser()
         setSession(null)
         clearCsrfToken()
-        message.success('已退出登录')
       } catch (err) {
         handleAuthError(err)
         throw err

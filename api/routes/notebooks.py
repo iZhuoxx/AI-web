@@ -728,6 +728,7 @@ def _quiz_question_to_schema (q :models .QuizQuestion )->schemas.QuizQuestionOut
     options =q .options ,
     correct_index =q .correct_index ,
     hint =q .hint ,
+    explaination =q .explaination ,
     meta =q .meta ,
     is_favorite =q .is_favorite ,
     created_at =q .created_at ,

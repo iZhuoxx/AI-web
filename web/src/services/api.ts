@@ -129,6 +129,7 @@ interface ApiQuizQuestion {
   options: string[]
   correct_index: number
   hint: string | null
+  explaination: string | null
   meta: Record<string, unknown> | null
   is_favorite: boolean
   folder_ids: string[]
@@ -262,6 +263,7 @@ const mapQuizQuestion = (item: ApiQuizQuestion): QuizQuestion => ({
   options: item.options,
   correctIndex: item.correct_index,
   hint: item.hint,
+  explaination: item.explaination,
   meta: item.meta,
   isFavorite: item.is_favorite,
   folderIds: item.folder_ids ?? [],

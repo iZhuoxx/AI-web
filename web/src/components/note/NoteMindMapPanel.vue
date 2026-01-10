@@ -118,7 +118,7 @@
             @click="openGenerateModal"
           >
             <SparklesIcon class="fab-icon" />
-            AI生成
+            生成思维导图
           </a-button>
 
           <div v-if="!mindmaps.length && !loading" class="empty-inner">
@@ -137,7 +137,9 @@
   <a-modal
     v-model:visible="generateModal.open"
     :confirm-loading="generateModal.loading"
-    title="AI生成思维导图"
+    title="生成思维导图"
+    okText="确认"
+    cancelText="取消"
     :maskClosable="false"
     :width="560"
     centered
@@ -780,8 +782,6 @@ const renderMindmap = async () => {
     
     hasUnsavedChanges.value = false
     allExpanded.value = false
-    
-    console.log('思维导图渲染成功！')
   } catch (err) {
     console.error('渲染思维导图失败:', err)
     console.error('错误堆栈:', (err as Error).stack)
@@ -833,7 +833,6 @@ const closeRenameMindmapModal = () => {
 const handleRenameMindmapSave = async () => {
   if (!renameMindmapModal.target) return
   if (!renameMindmapModal.title.trim()) {
-    message.warning('请输入导图名称')
     return
   }
 
@@ -845,9 +844,9 @@ const handleRenameMindmapSave = async () => {
     mindmaps.value = sortMindmaps(
       mindmaps.value.map(item => (item.id === updated.id ? updated : item)),
     )
-    message.success('已重命名思维导图')
     closeRenameMindmapModal()
   } catch (err) {
+    console.error('Failed to rename mindmap:', err)
     message.error(getErrorMessage(err))
   } finally {
     renameMindmapModal.loading = false
@@ -871,8 +870,8 @@ const handleDeleteMindmap = async () => {
     if (activeMindmapId.value === target.id) {
       activeMindmapId.value = null
     }
-    message.success('已删除思维导图')
   } catch (err) {
+    console.error('Failed to delete mindmap:', err)
     message.error(getErrorMessage(err))
     throw err
   } finally {
@@ -883,11 +882,10 @@ const handleDeleteMindmap = async () => {
 
 const openGenerateModal = () => {
   if (!activeNotebookId.value) {
-    message.warning('请先选择一个笔记本')
     return
   }
   if (!selectableAttachments.value.length) {
-    message.warning('请先上传并同步资料到 OpenAI 后再生成思维导图')
+    message.warning('请先上传资料')
     return
   }
   generateModal.attachments = selectableAttachments.value.map(item => item.id)
@@ -905,7 +903,6 @@ const closeGenerateModal = () => {
 
 const handleGenerate = async () => {
   if (!activeNotebookId.value) {
-    message.warning('请先选择一个笔记本')
     return
   }
   if (!generateModal.attachments.length) {
@@ -928,7 +925,6 @@ const handleGenerate = async () => {
     activeMindmapId.value = mindmap.id
     await nextTick()
     await renderMindmap()
-    message.success('已生成思维导图')
   } catch (err) {
     console.error('生成思维导图失败:', err)
     message.error(getErrorMessage(err))
@@ -1237,7 +1233,7 @@ watch(
   gap: 8px;
   padding: 0 26px;
   height: 48px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: #1d77ec;
   border: none;
   font-size: 15px;
   font-weight: 700;

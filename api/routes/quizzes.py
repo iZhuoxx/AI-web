@@ -40,6 +40,7 @@ def _question_to_schema(question: models.QuizQuestion) -> QuizQuestionOut:
         options=question.options,
         correct_index=question.correct_index,
         hint=question.hint,
+        explaination=question.explaination,
         meta=question.meta,
         is_favorite=question.is_favorite,
         created_at=question.created_at,

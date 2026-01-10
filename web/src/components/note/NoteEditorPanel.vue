@@ -756,7 +756,6 @@ const exportMarkdown = (filename: string) => {
   
   const blob = new Blob([markdown], { type: 'text/markdown' })
   downloadBlob(blob, `${filename}.md`)
-  message.success('已导出 Markdown 文件')
 }
 
 const exportHTML = (filename: string) => {
@@ -792,14 +791,12 @@ const exportHTML = (filename: string) => {
 </html>`
   const blob = new Blob([fullHtml], { type: 'text/html' })
   downloadBlob(blob, `${filename}.html`)
-  message.success('已导出 HTML 文件')
 }
 
 const exportTXT = (filename: string) => {
   const text = editor.value?.getText() || ''
   const blob = new Blob([text], { type: 'text/plain' })
   downloadBlob(blob, `${filename}.txt`)
-  message.success('已导出 TXT 文件')
 }
 
 const exportPDF = (filename: string) => {
@@ -807,6 +804,7 @@ const exportPDF = (filename: string) => {
   const printWindow = window.open('', '_blank')
   
   if (!printWindow) {
+    console.error('Popup blocked while exporting PDF')
     message.error('浏览器阻止了弹窗')
     return
   }
@@ -859,7 +857,6 @@ const exportPDF = (filename: string) => {
   
   setTimeout(() => {
     printWindow.print()
-    message.success('已打开打印对话框')
   }, 250)
 }
 

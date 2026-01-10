@@ -252,6 +252,7 @@ class NotebookQuizBase(BaseModel):
     options: List[str] = Field(min_length=2)
     correct_index: int = Field(ge=0)
     hint: Optional[str] = None
+    explaination: Optional[str] = None
     meta: Optional[dict] = None
     is_favorite: bool = False
 

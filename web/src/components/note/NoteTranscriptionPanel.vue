@@ -277,7 +277,6 @@ const handleSearchBlur = () => {
 
 const handleClearAction = () => {
   clearSearch()
-  message.success('已清空搜索条件')
 }
 
 const escapeHtml = (str: string) =>
@@ -308,7 +307,6 @@ const copyAll = async () => {
   const text = exportSegments.value.map(s => `[${s.timestamp}] ${s.text}`).join('\n')
   try {
     await navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
   } catch (err) {
     console.error(err)
     message.error('复制失败，请手动选择文本')

@@ -5,6 +5,7 @@ export type QuizQuestion = {
   options: string[]
   correctIndex: number
   hint: string | null
+  explaination: string | null
   meta: Record<string, unknown> | null
   isFavorite: boolean
   folderIds: string[]

@@ -87,6 +87,7 @@ const fetchNotebookList = async () => {
     notebooksState.list = await listNotebooks()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '加载笔记失败'
+    console.error('Failed to fetch notebook list:', err)
     message.error(msg)
     notebooksState.list = []
     throw err
@@ -103,6 +104,7 @@ const openNotebook = async (id: string) => {
     refreshEditorNotes()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '加载笔记详情失败'
+    console.error('Failed to open notebook:', err)
     message.error(msg)
     throw err
   } finally {
@@ -125,6 +127,7 @@ const createNotebookWithFirstNote = async (payload?: NotebookPayload) => {
     pendingNotes.value = []
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建笔记失败'
+    console.error('Failed to create notebook:', err)
     message.error(msg)
     throw err
   } finally {
@@ -196,11 +199,11 @@ const saveNoteInActiveNotebook = async (
     notebooksState.activeNotebook = updated
     await fetchNotebookList()
     refreshEditorNotes()
-    message.success('笔记已保存')
     const targetId = items[targetIndex]?.id
     return updated.notes?.find(note => (targetId ? note.id === targetId : note.seq === targetSeq)) ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : '保存笔记失败'
+    console.error('Failed to save note:', err)
     message.error(msg)
     throw err
   } finally {
@@ -243,12 +246,10 @@ const addNoteToActiveNotebook = async (
     notebooksState.activeNotebook = updated
     await fetchNotebookList()
     refreshEditorNotes()
-    if (options?.successMessage !== null) {
-      message.success(options?.successMessage ?? '已创建新的笔记页')
-    }
     return updated.notes?.find(note => note.seq === 0) ?? null
   } catch (err) {
     const msg = err instanceof Error ? err.message : '创建新笔记页失败'
+    console.error('Failed to add note:', err)
     if (!options?.suppressErrorToast) {
       message.error(msg)
     }
@@ -312,9 +313,9 @@ const removeNoteFromActiveNotebook = async (noteId: string) => {
     await fetchNotebookList()
     refreshEditorNotes()
     clearDraft(noteId)
-    message.success('笔记已删除')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '删除笔记失败'
+    console.error('Failed to remove note:', err)
     message.error(msg)
     throw err
   } finally {
@@ -345,9 +346,9 @@ const updateActiveNotebookTitle = async (title: string) => {
     notebooksState.activeNotebook = updated
     await fetchNotebookList()
     refreshEditorNotes()
-    message.success('笔记本标题已更新')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '更新笔记本标题失败'
+    console.error('Failed to update notebook title:', err)
     message.error(msg)
     throw err
   } finally {
@@ -402,9 +403,9 @@ const renameNotebook = async (noteId: string, title: string) => {
         [noteId]: { ...draft, title: updated.title ?? '' },
       }
     }
-    message.success('笔记标题已更新')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '重命名笔记失败'
+    console.error('Failed to rename note:', err)
     message.error(msg)
     throw err
   } finally {
@@ -423,9 +424,9 @@ const removeNotebook = async (noteId: string) => {
     }
     clearDraft(noteId)
     await fetchNotebookList()
-    message.success('笔记已删除')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '删除笔记失败'
+    console.error('Failed to remove notebook:', err)
     message.error(msg)
     throw err
   } finally {
@@ -464,10 +465,10 @@ const updateNotebookColor = async (noteId: string, color: string) => {
       notebooksState.activeNotebook = updated
       refreshEditorNotes()
     }
-    message.success('笔记颜色已更新')
     return updated
   } catch (err) {
     const msg = err instanceof Error ? err.message : '更新笔记颜色失败'
+    console.error('Failed to update notebook color:', err)
     message.error(msg)
     throw err
   } finally {
@@ -529,6 +530,7 @@ const reorderActiveNotebookNotes = async (orderedIds: string[]) => {
     return updated
   } catch (err) {
     const msg = err instanceof Error ? err.message : '更新排序失败'
+    console.error('Failed to reorder notes:', err)
     message.error(msg)
     throw err
   } finally {
@@ -548,6 +550,7 @@ const reloadActiveNotebook = async () => {
     return updated
   } catch (err) {
     const msg = err instanceof Error ? err.message : '刷新笔记失败'
+    console.error('Failed to reload notebook:', err)
     message.error(msg)
     throw err
   } finally {
