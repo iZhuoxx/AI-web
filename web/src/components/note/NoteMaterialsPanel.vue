@@ -215,7 +215,7 @@ import {
   presignAttachmentUpload,
   updateAttachment,
   uploadOpenAIFile,
-} from '@/services/api'
+} from '@/services/api/attachments'
 
 const props = defineProps<{
   attachments: ReadonlyArray<NoteAttachment>

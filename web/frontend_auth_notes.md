@@ -29,4 +29,4 @@ This backend update adds REST endpoints for authentication (`/api/auth/*`), note
    - Before any mutating call (register/login/logout/create/update), ensure a fresh CSRF token by calling `/api/auth/csrf` and forwarding it through the `X-CSRF-Token` header.
    - If a call returns `403` due to CSRF failure, refresh the token and retry once.
 
-Implementation tip: encapsulate all HTTP calls in `web/src/services/api.ts` so components stay declarative and focused on rendering.
+Implementation tip: encapsulate all HTTP calls in `web/src/services/api/` modules so components stay declarative and focused on rendering.

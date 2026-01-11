@@ -7,8 +7,8 @@ import {
   getNotebook,
   listNotebooks,
   updateNotebook,
-  type NotebookPayload,
-} from '@/services/api'
+} from '@/services/api/notebooks'
+import type { NotebookPayload } from '@/services/api/types'
 import type { NotebookDetail, NotebookSummary, NotebookNote, NoteItem } from '@/types/notes'
 
 interface NotebooksState {

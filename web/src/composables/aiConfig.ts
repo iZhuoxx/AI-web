@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import { fetchAiConfig, type AiConfigOption } from '@/services/api'
+import { fetchAiConfig } from '@/services/api/ai'
+import type { AiConfigOption } from '@/services/api/types'
 
 export type AiConfigState = {
   modelOptions: AiConfigOption[]
@@ -8,6 +9,7 @@ export type AiConfigState = {
   toolDefaults: Record<string, string[]>
 }
 
+// Client-side cache of the server's AI configuration (keys + defaults).
 const state = ref<AiConfigState>({
   modelOptions: [],
   modelDefaults: {},
@@ -20,6 +22,7 @@ const loaded = ref(false)
 export const initAiConfig = async () => {
   if (loaded.value) return
   try {
+    // Fetch once on app startup to drive model/tool selectors and defaults.
     const data = await fetchAiConfig()
     state.value = {
       modelOptions: Array.isArray(data.model_options) ? data.model_options : [],

@@ -373,9 +373,8 @@ import {
   updateQuizFolder,
   deleteQuizFolder,
   submitQuizAttempt,
-  type QuizAttempt,
-  type QuizAttemptResultItem,
-} from '@/services/api'
+} from '@/services/api/quizzes'
+import type { QuizAttempt, QuizAttemptResultItem } from '@/services/api/types'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
 

@@ -1,16 +1,8 @@
 import { computed, reactive, readonly, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import {
-  clearCsrfToken,
-  ensureCsrfToken,
-  fetchSession,
-  loginUser,
-  logoutUser,
-  registerUser,
-  type SessionMembership,
-  type SessionResponse,
-  type SessionUser,
-} from '@/services/api'
+import { fetchSession, loginUser, logoutUser, registerUser } from '@/services/api/auth'
+import { clearCsrfToken, ensureCsrfToken } from '@/services/api/client'
+import type { SessionMembership, SessionResponse, SessionUser } from '@/services/api/types'
 
 interface AuthState {
   user: SessionUser | null

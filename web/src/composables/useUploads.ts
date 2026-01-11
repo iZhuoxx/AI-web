@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { TFileInMessage } from '@/types/chat'
-import { uploadOpenAIFile, transcribeAudio } from '@/services/api'
+import { transcribeAudio } from '@/services/api/ai'
+import { uploadOpenAIFile } from '@/services/api/attachments'
 
 export type GenericItem = {
   name: string

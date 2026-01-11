@@ -404,7 +404,7 @@ import {
   updateFlashcard,
   deleteFlashcardFolder,
   deleteFlashcard,
-} from '@/services/api'
+} from '@/services/api/flashcards'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
 

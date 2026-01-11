@@ -5,7 +5,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { ref, computed, watch } from 'vue'
 import { message as antdMessage } from 'ant-design-vue'
 import { Copy, ThumbsUp, ThumbsDown, Volume2, FilePlus2, Loader2, ChevronRight } from 'lucide-vue-next'
-import { generateNoteTitle } from '@/services/api'
+import { generateNoteTitle } from '@/services/api/notebooks'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
 

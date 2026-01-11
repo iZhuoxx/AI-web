@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuth } from '@/composables/useAuth'
 import { useNotebookStore } from '@/composables/useNotes'
+import { useLocale } from '@/composables/useLocale'
 import AuthPopup from '@/components/AuthPopup.vue'
 
 interface SidebarItem {
@@ -17,14 +19,29 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuth()
 const notebookStore = useNotebookStore()
+const { t } = useI18n()
+const { currentLocale, supportedLocales, setLocale } = useLocale()
 
 const navItems = computed<SidebarItem[]>(() => [
-  { label: '笔记', name: 'notes' },
-  { label: '聊天', name: 'chat' },
-  { label: '关于', name: 'about' },
+  { label: t('nav.notes'), name: 'notes' },
+  { label: t('nav.chat'), name: 'chat' },
+  { label: t('nav.about'), name: 'about' },
 ])
 
-const tooltipText = computed(() => (props.isOpen ? '收起侧栏' : '展开侧栏'))
+const tooltipText = computed(() => (props.isOpen ? t('nav.collapseSidebar') : t('nav.expandSidebar')))
+
+// 语言切换
+const langMenuOpen = ref(false)
+const toggleLangMenu = () => {
+  langMenuOpen.value = !langMenuOpen.value
+}
+const selectLocale = (locale: 'zh-CN' | 'en-US') => {
+  setLocale(locale)
+  langMenuOpen.value = false
+}
+const currentLocaleLabel = computed(() => {
+  return supportedLocales.find(l => l.value === currentLocale.value)?.label ?? currentLocale.value
+})
 const isActive = (name: string) => {
   if (name === 'notes') return route.name === 'notes-list' || route.name === 'note-editor'
   return route.name === name
@@ -60,10 +77,10 @@ const authPopupOpen = ref(false)
 
   const activeMembership = computed(() => auth.state.memberships.find(item => item.status === 'active'))
 const membershipLabel = computed(() => {
-  if (!auth.state.user) return '未登录 · 点击登录'
+  if (!auth.state.user) return t('auth.clickToLogin')
   const membership = activeMembership.value
-  if (!membership) return '标准用户'
-  const until = membership.ends_at ? new Date(membership.ends_at).toLocaleDateString('zh-CN') : '长期有效'
+  if (!membership) return t('auth.standardUser')
+  const until = membership.ends_at ? new Date(membership.ends_at).toLocaleDateString(currentLocale.value) : t('auth.validForever')
   return `${membership.plan} · ${until}`
 })
 
@@ -72,7 +89,7 @@ const userInitial = computed(() => {
   return source.slice(0, 1).toUpperCase()
 })
 
-const displayName = computed(() => auth.state.user?.name || auth.state.user?.email || '未登录')
+const displayName = computed(() => auth.state.user?.name || auth.state.user?.email || t('auth.notLoggedIn'))
 
 const handleUserChipClick = async () => {
   if (!auth.state.ready) {
@@ -142,13 +159,40 @@ onMounted(() => {
       </button>
     </nav>
 
+    <div class="sidebar__settings">
+      <div class="lang-switcher">
+        <button class="lang-btn" type="button" @click="toggleLangMenu">
+          <svg class="lang-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            <path d="M2 12h20"/>
+          </svg>
+          <span v-if="props.isOpen" class="lang-label">{{ currentLocaleLabel }}</span>
+        </button>
+        <div v-if="langMenuOpen" class="lang-menu">
+          <button
+            v-for="locale in supportedLocales"
+            :key="locale.value"
+            :class="['lang-menu-item', { 'is-active': currentLocale === locale.value }]"
+            type="button"
+            @click="selectLocale(locale.value)"
+          >
+            {{ locale.label }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <footer class="sidebar__footer">
       <button class="user-chip" type="button" @click="handleUserChipClick">
         <div class="avatar">{{ userInitial }}</div>
         <div v-if="props.isOpen" class="user-chip__text">
+          <span class="plan-badge">{{ membershipLabel }}</span>
           <span class="name">{{ displayName }}</span>
-          <span class="plan">{{ membershipLabel }}</span>
         </div>
+        <svg v-if="props.isOpen" class="chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
       </button>
     </footer>
   </aside>
@@ -214,6 +258,10 @@ onMounted(() => {
   pointer-events: none;
 }
 
+.sidebar.is-collapsed .sidebar__brand {
+  display: none;
+}
+
 .toggle-wrap {
   position: relative;
   display: flex;
@@ -221,9 +269,17 @@ onMounted(() => {
   margin-left: auto;
 }
 
+.sidebar.is-collapsed .sidebar__header {
+  justify-content: center;
+}
+
 .sidebar.is-collapsed .toggle-wrap {
   margin-left: 0;
-  transform: translateX(-4px);
+}
+
+.sidebar.is-collapsed .toggle-btn {
+  width: var(--rail-size);
+  height: var(--rail-size);
 }
 
 .toggle-btn {
@@ -315,7 +371,11 @@ onMounted(() => {
 
 .sidebar.is-collapsed .sidebar__item:not(.is-active) {
   border-color: transparent;
-  background: #f1f5f9;
+  background: transparent;
+}
+
+.sidebar.is-collapsed .sidebar__item:not(.is-active):hover {
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .sidebar__icon {
@@ -360,49 +420,75 @@ onMounted(() => {
 
 .user-chip {
   width: 100%;
-  border-radius: 16px;
-  border: none;
-  padding: 13px 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.07), rgba(14, 165, 233, 0.08));
+  gap: 10px;
+  background: #fff;
   cursor: pointer;
-  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.12);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .user-chip:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(14, 165, 233, 0.12));
+  background: #fafafa;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 .user-chip .avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: #f1f5f9;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  color: #1d4ed8;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+  font-weight: 600;
+  font-size: 14px;
+  color: #475569;
 }
 
 .user-chip__text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  flex: 1;
+  min-width: 0;
 }
 
-.user-chip__text .plan {
-  font-size: 12px;
-  color: #6b7280;
+.user-chip__text .plan-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #16a34a;
+  padding: 2px 8px;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  background: transparent;
+  margin-bottom: 2px;
 }
 
-.sidebar.is-collapsed .user-chip__text {
+.user-chip__text .name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.user-chip .chevron {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.sidebar.is-collapsed .user-chip__text,
+.sidebar.is-collapsed .user-chip .chevron {
   display: none;
 }
 
@@ -410,16 +496,113 @@ onMounted(() => {
   width: var(--rail-size);
   height: var(--rail-size);
   padding: 0;
-  border-radius: 12px;
-  background: rgba(37, 99, 235, 0.18);
-  box-shadow: none;
+  border-radius: 50%;
   justify-content: center;
 }
 
+.sidebar.is-collapsed .user-chip:hover {
+  background: #f1f5f9;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
 .sidebar.is-collapsed .user-chip .avatar {
+  width: 32px;
+  height: 32px;
+}
+
+/* 语言切换 */
+.sidebar__settings {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.lang-switcher {
+  position: relative;
+}
+
+.lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  height: 100%;
+  padding: 10px 12px;
+  border: none;
   border-radius: 12px;
-  box-shadow: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.lang-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.lang-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.lang-label {
+  white-space: nowrap;
+}
+
+.sidebar.is-collapsed .lang-btn {
+  width: var(--rail-size);
+  height: var(--rail-size);
+  padding: 0;
+  justify-content: center;
+  margin: 0 auto;
+  background: transparent;
+}
+
+.sidebar.is-collapsed .lang-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.sidebar.is-collapsed .lang-label {
+  display: none;
+}
+
+.lang-menu {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  margin-left: 8px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.15);
+  padding: 6px;
+  min-width: 120px;
+  z-index: 100;
+}
+
+.lang-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lang-menu-item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.lang-menu-item.is-active {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
 }
 </style>

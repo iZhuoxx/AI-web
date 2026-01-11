@@ -18,6 +18,7 @@ class ModelInfo:
 
 
 def _normalize_key(value: Optional[str]) -> Optional[str]:
+    # Normalize user-provided keys and reject empty strings.
     if value is None:
         return None
     if isinstance(value, str):
@@ -39,6 +40,7 @@ def _load_model_entry(key: str) -> Dict[str, Any]:
 
 
 def resolve_model_key(model_key: Optional[str], *, default_key: Optional[str]) -> ModelInfo:
+    # Resolve a model key to provider id + capabilities, falling back to defaults.
     resolved_key = _normalize_key(model_key) or _normalize_key(default_key)
     if not resolved_key:
         raise HTTPException(status_code=400, detail="Missing model_key")
@@ -69,6 +71,7 @@ def resolve_tools(
     default_keys: Optional[Iterable[str]] = None,
     overrides: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
+    # Build tool payloads from keys and apply allowlisted overrides.
     keys_source = tool_keys if tool_keys is not None else default_keys or []
     normalized_keys = []
     for key in keys_source:

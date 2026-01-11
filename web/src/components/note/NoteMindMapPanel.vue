@@ -221,7 +221,7 @@ import type { MindElixirData, MindElixirInstance } from 'mind-elixir'
 import type { MindMap } from '@/types/mindmaps'
 import type { NoteAttachment } from '@/types/notes'
 import RenameModal from '@/components/common/RenameModal.vue'
-import { deleteMindMap, generateMindMapForNotebook, listMindMaps, updateMindMap } from '@/services/api'
+import { deleteMindMap, generateMindMapForNotebook, listMindMaps, updateMindMap } from '@/services/api/mindmaps'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
 
