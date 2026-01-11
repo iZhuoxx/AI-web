@@ -1,20 +1,18 @@
 import { ref, computed, type Ref } from 'vue'
-import {
-  DEFAULT_AUDIO_MODEL,
-  TRANSCRIBE_ENDPOINT,
-} from '@/constants/audio'
+import { TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 import { getModelFor } from '@/composables/setting'
 
 export type TranscriptionResult = {
   text: string
   model?: string
+  model_key?: string
   language?: string
   response_format?: string
 }
 
 export type SpeechToTextOptions = {
   endpoint?: string
-  model?: string
+  modelKey?: string
   language?: string
 }
 
@@ -29,7 +27,7 @@ const supportsMediaRecorder = () => {
 
 export function useSpeechToText(options?: SpeechToTextOptions) {
   const endpoint = options?.endpoint?.trim() || TRANSCRIBE_ENDPOINT
-  const chosenModel = ref(options?.model || getModelFor('audioTranscribe') || DEFAULT_AUDIO_MODEL)
+  const chosenModel = ref(options?.modelKey || getModelFor('audioTranscribe'))
   const chosenLanguage = ref(options?.language || '')
 
   const isRecording = ref(false)
@@ -72,7 +70,7 @@ export function useSpeechToText(options?: SpeechToTextOptions) {
 
     const fd = new FormData()
     fd.append('file', file)
-    fd.append('model', chosenModel.value)
+    fd.append('model_key', chosenModel.value)
     fd.append('response_format', 'json')
     if (chosenLanguage.value) {
       fd.append('language', chosenLanguage.value)
@@ -168,9 +166,9 @@ export function useSpeechToText(options?: SpeechToTextOptions) {
     return transcribeBlob(blob)
   }
 
-  const setModel = (model: string) => {
-    if (model.trim()) {
-      chosenModel.value = model.trim()
+  const setModel = (modelKey: string) => {
+    if (modelKey.trim()) {
+      chosenModel.value = modelKey.trim()
     }
   }
 

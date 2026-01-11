@@ -912,12 +912,12 @@ const handleGenerate = async () => {
   generateModal.loading = true
   generating.value = true
   try {
-    const model = getModelFor('mindmap')
+    const modelKey = getModelFor('mindmap')
     const mindmap = await generateMindMapForNotebook(activeNotebookId.value, {
       attachmentIds: generateModal.attachments,
       focus: generateModal.focus.trim() || undefined,
       title: generateModal.title.trim() || undefined,
-      model,
+      modelKey,
     })
     
     mindmaps.value = sortMindmaps([mindmap, ...mindmaps.value.filter(item => item.id !== mindmap.id)])

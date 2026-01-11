@@ -13,9 +13,10 @@ from api .dependencies import get_current_user ,require_csrf
 from api .db .database import get_db 
 from api .db import models 
 from api .services import openai_client 
+from api .services .ai_registry import resolve_model_key 
 import api .schemas as schemas 
 from api .settings import settings 
-from api .services .openai_utils import build_responses_payload 
+from api .services .openai_utils import build_responses_payload ,extract_structured_output ,extract_text_from_response 
 
 router =APIRouter (prefix ="/notebooks",tags =["notebooks"])
 
@@ -283,53 +284,6 @@ def enforce_no_additional_properties (schema :dict ):
     walk (schema )
 
 
-def _extract_structured_output (payload :dict )->dict :
-    """Extract the first structured/json response block from Responses API payload."""
-    if not isinstance (payload ,dict ):
-        return {}
-
-        # Newer Responses API can expose parsed JSON at the top level or as the first parsed item.
-    parsed =payload .get ("output_parsed")
-    if isinstance (parsed ,dict ):
-        return parsed 
-    if isinstance (parsed ,list )and parsed :
-        first =parsed [0 ]
-        if isinstance (first ,dict ):
-            return first 
-
-    output =payload .get ("output")or []
-    for item in output :
-        if not isinstance (item ,dict ):
-            continue 
-            # Some SDKs place parsed JSON alongside content
-        item_parsed =item .get ("parsed")
-        if isinstance (item_parsed ,dict ):
-            return item_parsed 
-        if isinstance (item_parsed ,list ):
-            for candidate in item_parsed :
-                if isinstance (candidate ,dict ):
-                    return candidate 
-
-        content_list =item .get ("content")or []
-        for c in content_list :
-            if not isinstance (c ,dict ):
-                continue 
-            if "parsed"in c and c .get ("parsed")is not None :
-                return c .get ("parsed")or {}
-            json_val =c .get ("json")
-            if isinstance (json_val ,dict ):
-                return json_val 
-            text_val =c .get ("text")
-            if isinstance (text_val ,str )and text_val .strip ():
-                try :
-                    import json 
-
-                    return json .loads (text_val )
-                except Exception :
-                    continue 
-    return {}
-
-
 @router .post (
 "/{notebook_id}/flashcards/generate",
 response_model =schemas.FlashcardGenerateResponse ,
@@ -387,7 +341,8 @@ db :Session =Depends (get_db ),
 
     file_blocks =[{"type":"input_file","file_id":att .openai_file_id }for att in selected if att .openai_file_id ]
 
-    model_name =payload .model or getattr (settings ,"FLASHCARD_MODEL",None )or "gpt-4o-2024-08-06"
+    model_info =resolve_model_key (payload .model_key ,default_key =settings .AI_MODEL_DEFAULTS .get ("flashcard"))
+    model_name =model_info .model
     desired_count =payload .count 
     focus_text =(payload .focus or "").strip ()
 
@@ -437,7 +392,7 @@ db :Session =Depends (get_db ),
     }
     )
 
-    if not model_name .lower ().startswith ("gpt-5"):
+    if model_info .supports_temperature :
         openai_payload ["temperature"]=float (0.2 )
 
     try :
@@ -445,7 +400,7 @@ db :Session =Depends (get_db ),
     except RuntimeError as exc :
         raise HTTPException (status_code =status .HTTP_502_BAD_GATEWAY ,detail =str (exc ))
 
-    structured_payload =_extract_structured_output (data )
+    structured_payload =extract_structured_output (data )
 
     if not isinstance (structured_payload ,dict ):
         structured_payload ={}
@@ -566,7 +521,8 @@ db :Session =Depends (get_db ),
 
     file_blocks =[{"type":"input_file","file_id":att .openai_file_id }for att in selected if att .openai_file_id ]
 
-    model_name =payload .model or getattr (settings ,"MINDMAP_MODEL",None )or "gpt-4o-2024-08-06"
+    model_info =resolve_model_key (payload .model_key ,default_key =settings .AI_MODEL_DEFAULTS .get ("mindmap"))
+    model_name =model_info .model
     focus_text =(payload .focus or "").strip ()
     user_title =(payload .title or notebook .title or "AI 思维导图").strip ()
 
@@ -614,7 +570,7 @@ db :Session =Depends (get_db ),
     }
     )
 
-    if not model_name .lower ().startswith ("gpt-5"):
+    if model_info .supports_temperature :
         openai_payload ["temperature"]=float (0.2 )
 
     try :
@@ -622,7 +578,7 @@ db :Session =Depends (get_db ),
     except RuntimeError as exc :
         raise HTTPException (status_code =status .HTTP_502_BAD_GATEWAY ,detail =str (exc ))
 
-    structured_payload =_extract_structured_output (data )or {}
+    structured_payload =extract_structured_output (data )or {}
 
     try :
         result :schemas.StructuredMindMap =schemas.StructuredMindMap .model_validate (structured_payload )
@@ -678,36 +634,25 @@ user :models .User =Depends (get_current_user ),
     {"role":"system","content":[{"type":"input_text","text":system_prompt }]},
     {"role":"user","content":[{"type":"input_text","text":content }]},
     ]
+    model_info =resolve_model_key (payload .model_key ,default_key =settings .AI_MODEL_DEFAULTS .get ("title"))
+    model_name =model_info .model
 
     try :
+        payload ={
+        "model":model_name ,
+        "input":messages ,
+        "max_output_tokens":80 ,
+        }
+        if model_info .supports_temperature :
+            payload ["temperature"]=0.3 
         data =await openai_client .responses_complete (
-        model ="gpt-4.1-nano",
-        input =messages ,
-        max_output_tokens =80 ,
-        temperature =0.3 ,
         timeout =20.0 ,
+        **payload ,
         )
     except Exception as exc :# pragma: no cover - fallback when network errors occur
         raise HTTPException (status_code =status .HTTP_502_BAD_GATEWAY ,detail =f"请求标题生成失败：{exc}")
 
-    def _extract_text (payload :dict )->str :
-        """Try to pull the first text reply from a Responses API payload."""
-        if not isinstance (payload ,dict ):
-            return ""
-
-        output =payload .get ("output")or []
-        if isinstance (output ,list )and output :
-            first =output [0 ]
-            if isinstance (first ,dict ):
-                content_list =first .get ("content")or []
-                for item in content_list :
-                    if isinstance (item ,dict ):
-                        text_val =item .get ("text")
-                        if isinstance (text_val ,str ):
-                            return text_val 
-        return ""
-
-    raw_title =_extract_text (data )
+    raw_title =extract_text_from_response (data )
 
     title =(raw_title or "").strip ()
     if not title :
@@ -783,7 +728,8 @@ db :Session =Depends (get_db ),
 
     file_blocks =[{"type":"input_file","file_id":att .openai_file_id }for att in selected if att .openai_file_id ]
 
-    model_name =payload .model or getattr (settings ,"QUIZ_MODEL",None )or "gpt-4o-2024-08-06"
+    model_info =resolve_model_key (payload .model_key ,default_key =settings .AI_MODEL_DEFAULTS .get ("quiz"))
+    model_name =model_info .model
     desired_count =payload .count or 10 
     focus_text =(payload .focus or "").strip ()
 
@@ -835,7 +781,7 @@ db :Session =Depends (get_db ),
     }
     )
 
-    if not model_name .lower ().startswith ("gpt-5"):
+    if model_info .supports_temperature :
         openai_payload ["temperature"]=float (0.3 )
 
     try :
@@ -843,7 +789,7 @@ db :Session =Depends (get_db ),
     except RuntimeError as exc :
         raise HTTPException (status_code =status .HTTP_502_BAD_GATEWAY ,detail =str (exc ))
 
-    structured_payload =_extract_structured_output (data )
+    structured_payload =extract_structured_output (data )
 
     if not isinstance (structured_payload ,dict ):
         structured_payload ={}

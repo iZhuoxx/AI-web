@@ -1,6 +1,5 @@
-import csv
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,5 +37,54 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET: Optional[str] = None
     AWS_S3_REGION: Optional[str] = None
     AWS_S3_ENDPOINT_URL: Optional[str] = None
+
+    # --- AI model/tool registry (centralized configuration) ---
+    AI_MODELS: Dict[str, Dict[str, Any]] = {
+        "gpt-4.1": {"id": "gpt-4.1", "label": "gpt-4.1", "supports_temperature": True},
+        "gpt-5": {"id": "gpt-5", "label": "gpt-5", "supports_temperature": False},
+        "gpt-5.1": {"id": "gpt-5.1", "label": "gpt-5.1", "supports_temperature": False},
+        "gpt-5-mini-2025-08-07": {
+            "id": "gpt-5-mini-2025-08-07",
+            "label": "gpt-5-mini-2025-08-07",
+            "supports_temperature": False,
+        },
+        "gpt-4.1-nano": {"id": "gpt-4.1-nano", "label": "gpt-4.1-nano", "supports_temperature": True},
+        "gpt-4o-transcribe": {
+            "id": "gpt-4o-transcribe",
+            "label": "gpt-4o-transcribe",
+            "supports_temperature": True,
+        },
+    }
+    AI_MODEL_DEFAULTS: Dict[str, str] = {
+        "chat": "gpt-5-mini-2025-08-07",
+        "noteChat": "gpt-5-mini-2025-08-07",
+        "flashcard": "gpt-5-mini-2025-08-07",
+        "quiz": "gpt-5-mini-2025-08-07",
+        "quizSummary": "gpt-5-mini-2025-08-07",
+        "mindmap": "gpt-5-mini-2025-08-07",
+        "title": "gpt-4.1-nano",
+        "audioTranscribe": "gpt-4o-transcribe",
+        "audioRealtime": "gpt-4o-transcribe",
+    }
+    AI_MODEL_OPTIONS: List[str] = [
+        "gpt-4.1",
+        "gpt-5",
+        "gpt-5.1",
+        "gpt-5-mini-2025-08-07",
+    ]
+
+    AI_TOOLS: Dict[str, Dict[str, Any]] = {
+        "image_generation": {"type": "image_generation", "label": "Image generation"},
+        "file_search": {
+            "type": "file_search",
+            "label": "File search",
+            "include": ["file_search_call.results"],
+            "allow_overrides": ["vector_store_ids"],
+        },
+    }
+    AI_TOOL_DEFAULTS: Dict[str, List[str]] = {
+        "chat": ["image_generation"],
+        "noteChat": ["file_search"],
+    }
 
 settings = Settings()

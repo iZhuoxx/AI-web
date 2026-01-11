@@ -1,4 +1,4 @@
-"""Shared FastAPI dependencies for authentication and CSRF protection."""
+"""FastAPI dependencies for session authentication and CSRF checks."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from api.settings import settings
 
 
 def get_optional_user(request: Request, db: Session = Depends(get_db)) -> models.User | None:
+    """Resolve the current user from the session cookie, or return None."""
     token = request.cookies.get(settings.SESSION_COOKIE_NAME)
     if not token:
         return None
@@ -25,6 +26,7 @@ def get_optional_user(request: Request, db: Session = Depends(get_db)) -> models
     if not user_id:
         return None
     try:
+        # Session subjects are UUIDs in this app.
         uid = uuid.UUID(user_id)
     except (ValueError, TypeError):
         return None
@@ -45,6 +47,7 @@ def require_csrf(request: Request) -> None:
     header_token = request.headers.get(settings.CSRF_HEADER_NAME)
     if not cookie_token or not header_token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing CSRF token")
+    # Double-submit cookie: header must match cookie value.
     if cookie_token != header_token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
     if not verify_csrf_token(cookie_token):

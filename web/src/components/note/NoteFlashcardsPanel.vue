@@ -690,12 +690,12 @@ const handleGenerate = async () => {
     generating.value = true
   }
   try {
-    const model = getModelFor('flashcard')
+    const modelKey = getModelFor('flashcard')
     await generateFlashcardsForNotebook(activeNotebookId.value, {
       attachmentIds: generateModal.attachments,
       count,
       focus: generateModal.focus.trim() || undefined,
-      model,
+      modelKey,
       folderId: targetFolderId ?? undefined,
     })
     generateModal.open = false

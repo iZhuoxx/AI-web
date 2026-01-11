@@ -140,6 +140,7 @@ import { useChat } from '@/composables/useChat'
 import { useUploads } from '@/composables/useUploads'
 import { useRealtimeTranscription } from '@/composables/useRealtimeTranscription'
 import { useNotebookStore } from '@/composables/useNotes'
+import { useAiConfig } from '@/composables/aiConfig'
 
 export type NoteChatPanelExposed = {
   startNewConversation: () => void
@@ -161,15 +162,19 @@ const emit = defineEmits<{
 // 当前笔记本的向量库 ID，用于 file_search
 const notebookStore = useNotebookStore()
 const vectorStoreId = computed(() => notebookStore.notebooksState.activeNotebook?.openaiVectorStoreId || null)
-const chatTools = computed(() => {
-  const tools = []
-  if (vectorStoreId.value) {
-    tools.push({
-      type: 'file_search',
-      vector_store_ids: [vectorStoreId.value],
-    })
+const aiConfig = useAiConfig()
+const chatToolKeys = computed(() => {
+  const defaults = aiConfig.value.toolDefaults?.noteChat ?? []
+  if (!vectorStoreId.value) return []
+  return defaults
+})
+const chatToolOverrides = computed(() => {
+  if (!vectorStoreId.value) return null
+  const overrides: Record<string, any> = {}
+  for (const key of chatToolKeys.value) {
+    overrides[key] = { vector_store_ids: [vectorStoreId.value] }
   }
-  return tools
+  return overrides
 })
 
 // chat 相关：按 notebook id 生成独立的存储 key
@@ -187,21 +192,21 @@ const createChatInstance = (id: string | number | null) => {
   chatInstance.value?.stop?.()
   const instance = useChat({
     storageKey: 'notes-chat-messages' + id,
-    tools: () => chatTools.value,
-    includes: () => (vectorStoreId.value ? ['file_search_call.results'] : []),
+    toolKeys: () => chatToolKeys.value,
+    toolOverrides: () => chatToolOverrides.value,
     modelKey: 'noteChat',
   })
-  instance.messagesStore.setPreferredTools?.(chatTools.value ?? null)
+  instance.messagesStore.setPreferredToolKeys?.(chatToolKeys.value ?? null)
   chatInstance.value = instance
 }
 
 watch(activeNotebookId, id => createChatInstance(id), { immediate: true })
 
-// 同步 tools 变化（例如 notebook 切换后 vector store id 变化）
+// 同步工具 key 变化（例如 notebook 切换后 vector store id 变化）
 watch(
-  [chatTools, chatInstance],
+  [chatToolKeys, chatInstance],
   ([value, instance]) => {
-    instance?.messagesStore.setPreferredTools?.(value ?? null)
+    instance?.messagesStore.setPreferredToolKeys?.(value ?? null)
   },
   { immediate: true },
 )

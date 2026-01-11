@@ -544,6 +544,13 @@ class QuizFolder(Base, TimestampMixin):
         back_populates="folders",
         order_by="QuizFolderItem.seq",
     )
+    # One-to-one: latest attempt for this folder.
+    latest_attempt: Mapped[Optional["QuizAttempt"]] = relationship(
+        "QuizAttempt",
+        back_populates="folder",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -619,6 +626,38 @@ class QuizFolderItem(Base):
     )
 
 
+class QuizAttempt(Base, TimestampMixin):
+    """Stores the latest quiz attempt result for a folder."""
+
+    __tablename__ = "quiz_attempts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    folder_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("quiz_folders.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+
+    # Results: list of { question_id, selected_answer, is_correct }
+    results: Mapped[List[dict]] = mapped_column(JSONB, nullable=False)
+
+    # Stats
+    total_questions: Mapped[int] = mapped_column(Integer, nullable=False)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # AI-generated summary feedback
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    user: Mapped["User"] = relationship("User")
+    folder: Mapped["QuizFolder"] = relationship("QuizFolder", back_populates="latest_attempt")
+
+    __table_args__ = (
+        Index("idx_quiz_attempts_user", "user_id"),
+        Index("idx_quiz_attempts_folder", "folder_id"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mind maps (store the full diagram JSON)
 # ---------------------------------------------------------------------------
@@ -666,5 +705,6 @@ __all__ = [
     "QuizFolder",
     "QuizQuestion",
     "QuizFolderItem",
+    "QuizAttempt",
     "MindMap",
 ]

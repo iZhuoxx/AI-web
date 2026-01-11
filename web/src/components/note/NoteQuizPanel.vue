@@ -21,7 +21,95 @@
               </div>
             </div>
 
-            <div v-if="currentQuestion" class="quiz-content">
+            <!-- Summary Page -->
+            <div v-if="showSummary" class="summary-content">
+              <!-- Stats Card -->
+              <div class="summary-stats-card">
+                <div class="summary-header">
+                  <TrophyIcon class="summary-icon" :class="{ excellent: summaryStats.accuracy >= 80 }" />
+                  <div class="summary-title">测验完成!</div>
+                </div>
+
+                <div class="summary-stats">
+                  <div class="stat-item">
+                    <div class="stat-value">{{ summaryStats.correct }}/{{ summaryStats.total }}</div>
+                    <div class="stat-label">正确题数</div>
+                  </div>
+                  <div class="stat-item stat-item--highlight">
+                    <div class="stat-value">{{ summaryStats.accuracy }}%</div>
+                    <div class="stat-label">正确率</div>
+                  </div>
+                </div>
+
+                <div class="summary-actions">
+                  <button class="pill-btn" type="button" @click="restartQuiz">
+                    <RotateCcwIcon class="btn-icon" />
+                    重新测验
+                  </button>
+                  <button class="pill-btn pill-btn--primary" type="button" @click="goBackToList">
+                    返回列表
+                  </button>
+                </div>
+              </div>
+
+              <!-- AI Feedback -->
+              <div class="ai-feedback-section">
+                <div class="section-title">AI 学习建议</div>
+                <div v-if="summaryLoading" class="ai-feedback-loading">
+                  <a-spin size="small" />
+                  <span>正在生成个性化反馈...</span>
+                </div>
+                <div v-else-if="attemptResult?.summary" class="ai-feedback-content">
+                  <MarkdownRenderer :source="attemptResult.summary" />
+                </div>
+                <div v-else class="ai-feedback-empty">
+                  暂无反馈
+                </div>
+              </div>
+
+              <!-- Question Review -->
+              <div class="question-review-section">
+                <div class="section-title">题目回顾</div>
+                <div class="review-list">
+                  <div
+                    v-for="(question, idx) in quizQueue"
+                    :key="question.id"
+                    class="review-item"
+                    :class="{ 'is-correct': getQuestionResult(question.id)?.isCorrect, 'is-wrong': getQuestionResult(question.id) && !getQuestionResult(question.id)?.isCorrect }"
+                  >
+                    <div class="review-header">
+                      <span class="review-number">Q{{ idx + 1 }}</span>
+                      <span class="review-status">
+                        <CheckCircleIcon v-if="getQuestionResult(question.id)?.isCorrect" class="status-icon correct" />
+                        <XCircleIcon v-else-if="getQuestionResult(question.id)" class="status-icon wrong" />
+                        <span v-else class="status-icon skipped">-</span>
+                      </span>
+                    </div>
+                    <div class="review-question">{{ question.question }}</div>
+                    <div class="review-answer">
+                      <template v-if="getQuestionResult(question.id)">
+                        <span class="answer-label">你的答案:</span>
+                        <span class="answer-text" :class="{ wrong: !getQuestionResult(question.id)?.isCorrect }">
+                          {{ optionLetters[getQuestionResult(question.id)!.selectedAnswer] }}. {{ question.options[getQuestionResult(question.id)!.selectedAnswer] }}
+                        </span>
+                      </template>
+                      <template v-if="!getQuestionResult(question.id)?.isCorrect">
+                        <span class="answer-label correct-label">正确答案:</span>
+                        <span class="answer-text correct">
+                          {{ optionLetters[question.correctIndex] }}. {{ question.options[question.correctIndex] }}
+                        </span>
+                      </template>
+                    </div>
+                    <div v-if="question.explaination && !getQuestionResult(question.id)?.isCorrect" class="review-explanation">
+                      {{ question.explaination }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quiz Questions -->
+            <div v-else-if="currentQuestion" class="quiz-content">
               <div class="progress-bar">
                 <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
               </div>
@@ -267,11 +355,14 @@ import {
   MoreVerticalIcon,
   SparklesIcon,
   StarIcon,
+  TrophyIcon,
   XIcon,
   XCircleIcon,
+  RotateCcwIcon,
 } from 'lucide-vue-next'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import RenameModal from '@/components/common/RenameModal.vue'
+import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import type { QuizQuestion, QuizFolder } from '@/types/quizzes'
 import type { NoteAttachment } from '@/types/notes'
 import {
@@ -281,6 +372,9 @@ import {
   updateQuizQuestion,
   updateQuizFolder,
   deleteQuizFolder,
+  submitQuizAttempt,
+  type QuizAttempt,
+  type QuizAttemptResultItem,
 } from '@/services/api'
 import { useNotebookStore } from '@/composables/useNotes'
 import { getModelFor } from '@/composables/setting'
@@ -300,6 +394,12 @@ const answered = ref(false)
 const correctCount = ref(0)
 const answeredCount = ref(0)
 const showHint = ref(false)
+
+// Summary page state
+const showSummary = ref(false)
+const summaryLoading = ref(false)
+const attemptResult = ref<QuizAttempt | null>(null)
+const questionResults = ref<Map<string, QuizAttemptResultItem>>(new Map())
 
 const optionLetters = ['A', 'B', 'C', 'D']
 
@@ -355,6 +455,19 @@ const isCorrect = computed(() =>
   selectedAnswer.value !== null && currentQuestion.value && selectedAnswer.value === currentQuestion.value.correctIndex
 )
 
+// Summary computed values
+const summaryStats = computed(() => {
+  const total = attemptResult.value?.totalQuestions ?? questionResults.value.size
+  const correct = attemptResult.value?.correctCount ?? correctCount.value
+  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0
+  return { total, correct, accuracy }
+})
+
+// Get result for a specific question
+const getQuestionResult = (questionId: string): QuizAttemptResultItem | undefined => {
+  return questionResults.value.get(questionId)
+}
+
 const getErrorMessage = (err: unknown) => (err instanceof Error ? err.message : '请求失败')
 
 const shuffleArray = <T,>(input: T[]): T[] => {
@@ -374,6 +487,9 @@ const buildQuizQueue = () => {
   answered.value = false
   correctCount.value = 0
   answeredCount.value = 0
+  showSummary.value = false
+  attemptResult.value = null
+  questionResults.value = new Map()
 }
 
 const loadData = async () => {
@@ -424,6 +540,9 @@ const goBackToList = () => {
   selectedAnswer.value = null
   answered.value = false
   showHint.value = false
+  showSummary.value = false
+  attemptResult.value = null
+  questionResults.value = new Map()
 }
 
 const selectAnswer = (idx: number) => {
@@ -434,23 +553,60 @@ const selectAnswer = (idx: number) => {
 }
 
 const confirmAnswer = () => {
-  if (selectedAnswer.value === null) return
+  if (selectedAnswer.value === null || !currentQuestion.value) return
   answered.value = true
   answeredCount.value += 1
-  if (isCorrect.value) {
+
+  const correct = selectedAnswer.value === currentQuestion.value.correctIndex
+  if (correct) {
     correctCount.value += 1
   }
+
+  // Record this question's result
+  questionResults.value.set(currentQuestion.value.id, {
+    questionId: currentQuestion.value.id,
+    selectedAnswer: selectedAnswer.value,
+    isCorrect: correct,
+  })
 }
 
-const nextQuestion = () => {
+const nextQuestion = async () => {
   if (currentIndex.value >= quizQueue.value.length - 1) {
-    goBackToList()
+    // Quiz finished, show summary
+    await finishQuiz()
     return
   }
   currentIndex.value += 1
   selectedAnswer.value = null
   answered.value = false
   showHint.value = false
+}
+
+const finishQuiz = async () => {
+  if (!selectedFolderId.value) return
+
+  showSummary.value = true
+  summaryLoading.value = true
+
+  try {
+    // Collect all results from answered questions
+    const results = Array.from(questionResults.value.values())
+    const modelKey = getModelFor("quizSummary")
+
+    if (results.length > 0) {
+      const attempt = await submitQuizAttempt(selectedFolderId.value, results, modelKey)
+      attemptResult.value = attempt
+    }
+  } catch (err) {
+    console.error('Failed to submit quiz attempt:', err)
+    message.error(getErrorMessage(err))
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
+const restartQuiz = () => {
+  buildQuizQueue()
 }
 
 const prevQuestion = () => {
@@ -533,12 +689,12 @@ const handleGenerate = async () => {
   generateModal.loading = true
   generating.value = true
   try {
-    const model = getModelFor('quiz')
+    const modelKey = getModelFor('quiz')
     const result = await generateQuizForNotebook(activeNotebookId.value, {
       attachmentIds: generateModal.attachments,
       count,
       focus: generateModal.focus.trim() || undefined,
-      model
+      modelKey,
     })
     generateModal.open = false
     folders.value = [result.folder, ...folders.value]
@@ -1268,6 +1424,247 @@ const handleDeleteFolder = async () => {
   border-color: transparent;
 }
 
+.btn-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+}
+
+/* Summary Page Styles */
+.summary-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 0 24px;
+}
+
+.summary-stats-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.summary-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.summary-icon {
+  width: 48px;
+  height: 48px;
+  color: #94a3b8;
+}
+
+.summary-icon.excellent {
+  color: #f59e0b;
+}
+
+.summary-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.summary-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-bottom: 24px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #334155;
+  line-height: 1.2;
+}
+
+.stat-item--highlight .stat-value {
+  color: #f59e0b;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.summary-actions .pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* AI Feedback Section */
+.ai-feedback-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 16px;
+}
+
+.ai-feedback-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748b;
+  font-size: 14px;
+  padding: 12px 0;
+}
+
+.ai-feedback-content {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1f2937;
+}
+
+.ai-feedback-content :deep(.markdown-body) {
+  font-size: 15px;
+}
+
+.ai-feedback-empty {
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+/* Question Review Section */
+.question-review-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 24px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.review-item {
+  padding: 16px;
+  border-radius: 12px;
+  background: #fafafa;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.review-item.is-correct {
+  background: rgba(22, 163, 74, 0.04);
+  border-color: rgba(22, 163, 74, 0.1);
+}
+
+.review-item.is-wrong {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.1);
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.review-number {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.review-status .status-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.review-status .status-icon.correct {
+  color: #16a34a;
+}
+
+.review-status .status-icon.wrong {
+  color: #ef4444;
+}
+
+.review-status .status-icon.skipped {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.review-question {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2937;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.review-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.answer-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.answer-label.correct-label {
+  margin-top: 4px;
+}
+
+.answer-text {
+  color: #334155;
+  line-height: 1.4;
+}
+
+.answer-text.wrong {
+  color: #ef4444;
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.answer-text.correct {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.review-explanation {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e40af;
+  line-height: 1.5;
+}
 
 .panel-overlay {
   position: absolute;

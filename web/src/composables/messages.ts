@@ -9,7 +9,7 @@ const createInitialUiState = (): ResponseUIState => ({
   hasTextStarted: false,
 })
 
-type ToolConfig = Record<string, any>
+type ToolKey = string
 
 function normalizeMessage(payload: Partial<TMessage>): TMessage {
   return {
@@ -29,18 +29,17 @@ function createMessagesStore(storageKey: string) {
     `${storageKey}::last-response-id`,
     null,
   )
-  const preferredTools = useStorage<ToolConfig[] | null>(
-    `${storageKey}::preferred-tools`,
+  const preferredToolKeys = useStorage<ToolKey[] | null>(
+    `${storageKey}::preferred-tool-keys`,
     null,
   )
 
-  const cloneTools = (tools: ToolConfig[] | null | undefined) => {
-    if (!Array.isArray(tools)) return null
-    try {
-      return JSON.parse(JSON.stringify(tools)) as ToolConfig[]
-    } catch {
-      return tools.slice()
-    }
+  const cloneToolKeys = (keys: ToolKey[] | null | undefined) => {
+    if (!Array.isArray(keys)) return null
+    const sanitized = keys
+      .map(key => (typeof key === 'string' ? key.trim() : ''))
+      .filter(Boolean)
+    return sanitized.length ? sanitized : null
   }
 
   const addMessage = (message: TMessage) => {
@@ -148,19 +147,19 @@ function createMessagesStore(storageKey: string) {
     lastCompletedResponseId.value = null
   }
 
-  const setPreferredTools = (tools: ToolConfig[] | null | undefined) => {
-    if (tools === undefined) return
-    preferredTools.value = tools === null ? null : cloneTools(tools)
+  const setPreferredToolKeys = (keys: ToolKey[] | null | undefined) => {
+    if (keys === undefined) return
+    preferredToolKeys.value = keys === null ? null : cloneToolKeys(keys)
   }
 
-  const clearPreferredTools = () => {
-    preferredTools.value = null
+  const clearPreferredToolKeys = () => {
+    preferredToolKeys.value = null
   }
 
   return {
     messages,
     lastCompletedResponseId,
-    preferredTools,
+    preferredToolKeys,
     addMessage,
     clearMessages,
     getLastMessages,
@@ -172,8 +171,8 @@ function createMessagesStore(storageKey: string) {
     setLastAssistantText,
     setLastCompletedResponseId,
     resetLastCompletedResponseId,
-    setPreferredTools,
-    clearPreferredTools,
+    setPreferredToolKeys,
+    clearPreferredToolKeys,
   }
 }
 

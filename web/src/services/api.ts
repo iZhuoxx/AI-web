@@ -3,7 +3,7 @@ import type { Flashcard, FlashcardFolder } from '@/types/flashcards'
 import type { MindMap } from '@/types/mindmaps'
 import type { QuizQuestion, QuizFolder } from '@/types/quizzes'
 import type { MindElixirData } from 'mind-elixir'
-import { DEFAULT_AUDIO_MODEL, TRANSCRIBE_ENDPOINT } from '@/constants/audio'
+import { TRANSCRIBE_ENDPOINT } from '@/constants/audio'
 import { getModelFor } from '@/composables/setting'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || '/api'
@@ -311,6 +311,23 @@ export const clearCsrfToken = () => {
   csrfToken = null
 }
 
+export interface AiConfigOption {
+  key: string
+  label: string
+  type?: string
+}
+
+export interface AiConfigResponse {
+  model_options: AiConfigOption[]
+  model_defaults: Record<string, string>
+  tool_options: AiConfigOption[]
+  tool_defaults: Record<string, string[]>
+}
+
+export const fetchAiConfig = async (): Promise<AiConfigResponse> => {
+  return apiFetch<AiConfigResponse>('/ai/config', { method: 'GET', skipCsrf: true })
+}
+
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const method = options.method ?? 'GET'
   const headers: Record<string, string> = {
@@ -403,9 +420,9 @@ export const getNotebook = async (id: string): Promise<NotebookDetail> => {
   return mapNotebookDetail(data)
 }
 
-export const generateNoteTitle = async (content: string, options?: { model?: string }): Promise<string> => {
+export const generateNoteTitle = async (content: string, options?: { modelKey?: string }): Promise<string> => {
   const body: Record<string, unknown> = { content }
-  if (options?.model) body.model = options.model
+  if (options?.modelKey) body.model_key = options.modelKey
 
   const data = await apiFetch<{ title?: string }>(`/notebooks/title`, {
     method: 'POST',
@@ -563,7 +580,7 @@ export const generateFlashcardsForNotebook = async (
     count?: number
     focus?: string
     folderName?: string
-    model?: string
+    modelKey?: string
     folderId?: string
   },
 ): Promise<{ folder: FlashcardFolder; flashcards: Flashcard[] }> => {
@@ -573,7 +590,7 @@ export const generateFlashcardsForNotebook = async (
   if (payload?.focus) body.focus = payload.focus
   if (payload?.folderName) body.folder_name = payload.folderName
   if (payload?.folderId) body.folder_id = payload.folderId
-  if (payload?.model) body.model = payload.model
+  if (payload?.modelKey) body.model_key = payload.modelKey
 
   const data = await apiFetch<{ folder: ApiFlashcardFolder; flashcards: ApiFlashcard[] }>(
     `/notebooks/${notebookId}/flashcards/generate`,
@@ -625,13 +642,13 @@ export const deleteMindMap = async (mindmapId: string): Promise<void> => {
 
 export const generateMindMapForNotebook = async (
   notebookId: string,
-  payload?: { attachmentIds?: string[]; focus?: string; title?: string; model?: string },
+  payload?: { attachmentIds?: string[]; focus?: string; title?: string; modelKey?: string },
 ): Promise<MindMap> => {
   const body: Record<string, unknown> = {}
   if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
   if (payload?.focus) body.focus = payload.focus
   if (payload?.title) body.title = payload.title
-  if (payload?.model) body.model = payload.model
+  if (payload?.modelKey) body.model_key = payload.modelKey
 
   const data = await apiFetch<ApiMindMap>(`/notebooks/${notebookId}/mindmaps/generate`, { method: 'POST', body })
   return mapMindMap(data)
@@ -684,13 +701,14 @@ export interface AudioTranscriptionResponse {
   duration?: number
   language?: string
   model?: string
+  model_key?: string
   response_format?: string
 }
 
 export const transcribeAudio = async (
   file: File,
   options?: {
-    model?: string
+    modelKey?: string
     responseFormat?: string
     language?: string
     temperature?: number
@@ -700,7 +718,7 @@ export const transcribeAudio = async (
 ): Promise<AudioTranscriptionResponse> => {
   const formData = new FormData()
   formData.append('file', file)
-  formData.append('model', options?.model ?? getModelFor('audioTranscribe') ?? DEFAULT_AUDIO_MODEL)
+  formData.append('model_key', options?.modelKey ?? getModelFor('audioTranscribe'))
   formData.append('response_format', options?.responseFormat ?? 'json')
   if (options?.language) formData.append('language', options.language)
   if (typeof options?.temperature === 'number') {
@@ -827,7 +845,7 @@ export const generateQuizForNotebook = async (
     attachmentIds?: string[]
     count?: number
     focus?: string
-    model?: string
+    modelKey?: string
     folderName?: string
   },
 ): Promise<{ folder: QuizFolder; questions: QuizQuestion[] }> => {
@@ -835,7 +853,7 @@ export const generateQuizForNotebook = async (
   if (payload?.attachmentIds) body.attachment_ids = payload.attachmentIds
   if (payload?.count) body.count = payload.count
   if (payload?.focus) body.focus = payload.focus
-  if (payload?.model) body.model = payload.model
+  if (payload?.modelKey) body.model_key = payload.modelKey
   if (payload?.folderName) body.folder_name = payload.folderName
 
   const data = await apiFetch<ApiQuizGenerateResponse>(`/notebooks/${notebookId}/quizzes/generate`, { method: 'POST', body })
@@ -843,4 +861,91 @@ export const generateQuizForNotebook = async (
     folder: mapQuizFolder(data.folder),
     questions: (data.questions ?? []).map(mapQuizQuestion),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Quiz Attempts
+// ---------------------------------------------------------------------------
+
+export interface QuizAttemptResultItem {
+  questionId: string
+  selectedAnswer: number
+  isCorrect: boolean
+}
+
+export interface QuizAttempt {
+  id: string
+  folderId: string
+  results: Array<{
+    question_id: string
+    selected_answer: number
+    is_correct: boolean
+  }>
+  totalQuestions: number
+  correctCount: number
+  summary: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface ApiQuizAttempt {
+  id: string
+  folder_id: string
+  results: Array<{
+    question_id: string
+    selected_answer: number
+    is_correct: boolean
+  }>
+  total_questions: number
+  correct_count: number
+  summary: string | null
+  created_at: string
+  updated_at: string
+}
+
+const mapQuizAttempt = (item: ApiQuizAttempt): QuizAttempt => ({
+  id: item.id,
+  folderId: item.folder_id,
+  results: item.results,
+  totalQuestions: item.total_questions,
+  correctCount: item.correct_count,
+  summary: item.summary,
+  createdAt: item.created_at,
+  updatedAt: item.updated_at,
+})
+
+export const getQuizAttempt = async (folderId: string): Promise<QuizAttempt | null> => {
+  try {
+    const data = await apiFetch<ApiQuizAttempt>(`/quizzes/folders/${folderId}/attempt`, {
+      method: 'GET',
+      skipCsrf: true,
+    })
+    return mapQuizAttempt(data)
+  } catch (err) {
+    // 404 means no attempt exists yet
+    if (err instanceof Error && err.message.includes('No attempt found')) {
+      return null
+    }
+    throw err
+  }
+}
+
+export const submitQuizAttempt = async (
+  folderId: string,
+  results: QuizAttemptResultItem[],
+  modelKey: string,
+): Promise<QuizAttempt> => {
+  const body = {
+    results: results.map(r => ({
+      question_id: r.questionId,
+      selected_answer: r.selectedAnswer,
+      is_correct: r.isCorrect,
+    })),
+    model_key: modelKey,
+  }
+  const data = await apiFetch<ApiQuizAttempt>(`/quizzes/folders/${folderId}/attempt`, {
+    method: 'POST',
+    body,
+  })
+  return mapQuizAttempt(data)
 }

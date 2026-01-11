@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import HTTPException as StarletteHTTPException
 from .routes import responses as responses_router
+from .routes import ai_config as ai_config_router
 from .routes import files as files_router
 from .routes import audio as audio_router
 from .routes import auth as auth_router
@@ -59,6 +60,7 @@ app.add_middleware(
 
 # Important: include router objects, not the modules.
 app.include_router(responses_router.router, prefix="/api")
+app.include_router(ai_config_router.router, prefix="/api")
 app.include_router(files_router.router, prefix="/api")
 app.include_router(audio_router.router, prefix="/api")
 app.include_router(auth_router.router, prefix="/api")

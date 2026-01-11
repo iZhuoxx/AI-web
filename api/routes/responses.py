@@ -62,7 +62,7 @@ async def responses_stream_route(request: Request):
     async def event_gen():
         try:
             async for chunk in openai_client.responses_stream(normalized):
-                yield chunk + "\n"  # newline delimited
+                yield chunk + "\n\n"  # newline delimited
         except Exception as exc:
             raise
 

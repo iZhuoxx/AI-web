@@ -7,12 +7,13 @@ import type { TFileInMessage, ResponseUIState } from '@/types/chat'
 
 // ==================== 类型定义（保持原有导出） ====================
 
-type ToolConfig = Record<string, any>
+type ToolKey = string
 
 export interface UseChatOptions {
   messagesStore?: MessagesStore
   storageKey?: string
-  tools?: ToolConfig[] | null | (() => ToolConfig[] | null | undefined)
+  toolKeys?: ToolKey[] | null | (() => ToolKey[] | null | undefined)
+  toolOverrides?: Record<string, any> | null | (() => Record<string, any> | null | undefined)
   includes?: string | string[] | (() => string[] | null | undefined)
   modelKey?: ModelKey
 }
@@ -435,12 +436,12 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
 
   // ========== 初始化 ==========
 
-  const initializePreferredTools = () => {
+  const initializePreferredToolKeys = () => {
     if (!options || 'addMessage' in (options as MessagesStore)) return
-    const candidate = (options as UseChatOptions).tools
+    const candidate = (options as UseChatOptions).toolKeys
     if (candidate === undefined) return
     const resolved = typeof candidate === 'function' ? candidate() : candidate ?? null
-    messagesStore.setPreferredTools?.(resolved ?? null)
+    messagesStore.setPreferredToolKeys?.(resolved ?? null)
   }
 
   const pruneStoredFileSearchMeta = () => {
@@ -468,7 +469,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     }
   }
 
-  initializePreferredTools()
+  initializePreferredToolKeys()
   pruneStoredFileSearchMeta()
 
   // ========== 辅助函数 ==========
@@ -481,23 +482,21 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     }
   }
 
-  const resolveEffectiveTools = (tools?: ToolConfig[] | null) => {
-    const s = setting.value as any
-    const providedTools = Array.isArray(tools) ? tools : null
+  const resolveEffectiveToolKeys = (toolKeys?: ToolKey[] | null) => {
+    const providedKeys = Array.isArray(toolKeys) ? toolKeys : null
 
-    if (providedTools) {
-      messagesStore.setPreferredTools?.(providedTools)
+    if (providedKeys) {
+      messagesStore.setPreferredToolKeys?.(providedKeys)
     }
 
     const candidates = [
-      providedTools,
-      messagesStore.preferredTools?.value,
-      s.tools,
+      providedKeys,
+      messagesStore.preferredToolKeys?.value,
     ]
 
     for (const candidate of candidates) {
       if (Array.isArray(candidate) && candidate.length) {
-        return JSON.parse(JSON.stringify(candidate))
+        return candidate.map(key => key)
       }
     }
 
@@ -519,11 +518,19 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     return list.map(item => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
   }
 
+  const resolveToolOverrides = () => {
+    if (!options || 'addMessage' in (options as MessagesStore)) return null
+    const candidate = (options as UseChatOptions).toolOverrides
+    const resolved = typeof candidate === 'function' ? candidate() : candidate
+    if (!resolved || typeof resolved !== 'object') return null
+    return resolved
+  }
+
   const buildRequestBody = (
     content: string,
     imagesDataUrls: string[],
     files: TFileInMessage[],
-    tools?: ToolConfig[] | null,
+    toolKeys?: ToolKey[] | null,
     reasoning?: Record<string, any>
   ): Record<string, any> => {
     const s = setting.value as any
@@ -531,36 +538,31 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     const systemPrompt = s.systemPrompt || ''
     const temperature = typeof s.temperature === 'number' ? s.temperature : 0.7
     const maxOutputTokens = typeof s.maxTokens === 'number' ? s.maxTokens : undefined
-    const effectiveTools = resolveEffectiveTools(tools)
+    const effectiveToolKeys = resolveEffectiveToolKeys(toolKeys)
+    const toolOverrides = resolveToolOverrides()
     const includeSet = new Set<string>(resolveIncludes())
-
-    if (effectiveTools) {
-      const hasFileSearch = Array.isArray(effectiveTools)
-        ? effectiveTools.some((t: any) => t?.type === 'file_search')
-        : effectiveTools?.type === 'file_search'
-
-      if (hasFileSearch) {
-        includeSet.add('file_search_call.results')
-      }
-    }
 
     const lastCompletedResponseId = messagesStore.lastCompletedResponseId?.value ?? null
 
+    const toolKeyPayload =
+      Array.isArray(effectiveToolKeys) && effectiveToolKeys.length
+        ? effectiveToolKeys
+        : undefined
+
     const body: Record<string, any> = {
-      model: selectedModel,
+      model_key: selectedModel,
       text: content,
       images: imagesDataUrls.slice(),
       files,
       system_prompt: systemPrompt || undefined,
-      tools: effectiveTools ?? undefined,
+      tool_keys: toolKeyPayload,
+      tool_overrides: toolKeyPayload && toolOverrides ? toolOverrides : undefined,
       includes: includeSet.size ? Array.from(includeSet) : undefined,
       previous_response_id: lastCompletedResponseId || undefined,
       reasoning: reasoning ?? undefined,
     }
 
-    if (!selectedModel.includes('gpt-5')) {
-      body.temperature = Number(temperature)
-    }
+    body.temperature = Number(temperature)
 
     if (typeof maxOutputTokens === 'number') {
       body.max_output_tokens = maxOutputTokens
@@ -576,14 +578,14 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     imagesDataUrls,
     files,
     onDelta,
-    tools,
+    toolKeys,
     reasoning,
   }: {
     text: string
     imagesDataUrls: string[]
     files: TFileInMessage[]
     onDelta?: (delta: string) => void
-    tools?: ToolConfig[] | null
+    toolKeys?: ToolKey[] | null
     reasoning?: Record<string, any>
   }) {
     const content = text.trim()
@@ -689,7 +691,7 @@ export function useChat(options?: MessagesStore | UseChatOptions) {
     })
 
     // 构建请求
-    const body = buildRequestBody(content, imagesDataUrls, files, tools, reasoning)
+    const body = buildRequestBody(content, imagesDataUrls, files, toolKeys, reasoning)
 
     // 占位 assistant
     messagesStore.addAssistantPlaceholder()

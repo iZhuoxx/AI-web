@@ -171,7 +171,9 @@ class FlashcardGenerateRequest(BaseModel):
     focus: Optional[str] = Field(default=None, max_length=600)
     folder_name: Optional[str] = Field(default=None, max_length=255)
     folder_id: Optional[UUID] = None
-    model: Optional[str] = Field(default=None, max_length=100)
+    model_key: Optional[str] = Field(default=None, max_length=100)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class FlashcardGenerateResponse(BaseModel):
@@ -183,19 +185,26 @@ class MindMapGenerateRequest(BaseModel):
     attachment_ids: List[UUID] = Field(default_factory=list)
     focus: Optional[str] = Field(default=None, max_length=600)
     title: Optional[str] = Field(default=None, max_length=255)
-    model: Optional[str] = Field(default=None, max_length=100)
+    model_key: Optional[str] = Field(default=None, max_length=100)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class QuizGenerateRequest(BaseModel):
     attachment_ids: List[UUID] = Field(default_factory=list)
     count: Optional[int] = Field(default=None, ge=1, le=30)
     focus: Optional[str] = Field(default=None, max_length=600)
-    model: Optional[str] = Field(default=None, max_length=100)
+    model_key: Optional[str] = Field(default=None, max_length=100)
     folder_name: Optional[str] = Field(default=None, max_length=255)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class TitleGenerateRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=12000)
+    model_key: Optional[str] = Field(default=None, max_length=100)
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class TitleGenerateResponse(BaseModel):
@@ -306,6 +315,35 @@ class QuizFolderOut(QuizFolderBase):
 class QuizGenerateResponse(BaseModel):
     folder: QuizFolderOut
     questions: List[QuizQuestionOut]
+
+
+class QuizAttemptResultItem(BaseModel):
+    """Single question result in an attempt."""
+    question_id: UUID
+    selected_answer: int = Field(ge=0)
+    is_correct: bool
+
+
+class QuizAttemptCreate(BaseModel):
+    """Payload for submitting a quiz attempt."""
+    results: List[QuizAttemptResultItem] = Field(min_length=1)
+    model_key: Optional[str] = Field(default=None, max_length=100)
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+class QuizAttemptOut(BaseModel):
+    """Output schema for quiz attempt."""
+    id: UUID
+    folder_id: UUID
+    results: List[dict]
+    total_questions: int
+    correct_count: int
+    summary: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MindMapBase(BaseModel):

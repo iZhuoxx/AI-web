@@ -1,9 +1,6 @@
 import { computed, getCurrentInstance, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useStorage } from '@vueuse/core'
-import {
-  DEFAULT_AUDIO_MODEL,
-  TRANSCRIBE_REALTIME_WS_ENDPOINT,
-} from '@/constants/audio'
+import { TRANSCRIBE_REALTIME_WS_ENDPOINT } from '@/constants/audio'
 import type { TranscriptSegment } from '@/types/notes'
 import { getModelFor } from '@/composables/setting'
 
@@ -11,7 +8,7 @@ export type NoiseReductionMode = 'none' | 'auto' | 'near_field' | 'far_field'
 
 export interface RealtimeTranscriptionOptions {
   endpoint?: string
-  model?: string
+  modelKey?: string
   language?: string
   includeLogprobs?: boolean
   minConfidence?: number
@@ -146,7 +143,7 @@ const formatTimestamp = (seconds: number) => {
 export function useRealtimeTranscription(options?: RealtimeTranscriptionOptions) {
   const endpoint = options?.endpoint?.trim() || TRANSCRIBE_REALTIME_WS_ENDPOINT
   const targetSampleRate = options?.sampleRate ?? DEFAULT_SAMPLE_RATE
-  const preferredModel = options?.model?.trim() || getModelFor('audioRealtime') || DEFAULT_AUDIO_MODEL
+  const preferredModel = options?.modelKey?.trim() || getModelFor('audioRealtime')
   const noiseReduction = options?.noiseReduction ?? 'near_field'
   const vadThreshold = options?.vadThreshold ?? 0.5
   const silenceDurationMs = options?.silenceDurationMs ?? 500
@@ -618,7 +615,7 @@ export function useRealtimeTranscription(options?: RealtimeTranscriptionOptions)
   const connectWebSocket = async () => {
     if (!hasWindow) throw new Error('实时转写仅支持浏览器环境')
     const url = new URL(toWebSocketUrl(endpoint))
-    url.searchParams.set('model', preferredModel)
+    url.searchParams.set('model_key', preferredModel)
     url.searchParams.set('sample_rate', String(targetSampleRate))
     url.searchParams.set('vad_threshold', String(vadThreshold))
     url.searchParams.set('silence_duration_ms', String(Math.max(MIN_SILENCE_MS, silenceDurationMs)))

@@ -1,8 +1,3 @@
-export const DEFAULT_AUDIO_MODEL = 'gpt-4o-transcribe'
-export const AUDIO_MODEL_OPTIONS = Object.freeze([
-  DEFAULT_AUDIO_MODEL,
-]) as readonly string[]
-
 export const AUDIO_EXTENSIONS = Object.freeze([
   'mp3',
   'wav',

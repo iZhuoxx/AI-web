@@ -7,13 +7,13 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, W
 from fastapi.responses import JSONResponse, StreamingResponse
 from api.settings import settings
 from api.services import openai_client
+from api.services.ai_registry import resolve_model_key
 import websockets
 from starlette.websockets import WebSocketState
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
 # --- Default Settings ---
-DEFAULT_AUDIO_MODEL = "gpt-4o-transcribe"
 DEFAULT_RESPONSE_FORMAT = "json"
 MAX_AUDIO_MB = 250
 
@@ -168,7 +168,7 @@ async def _prepare_audio_upload(file: UploadFile) -> tuple[str, bytes, str]:
 async def create_transcription(
     request: Request,
     file: UploadFile = File(...),
-    model: str = Form(DEFAULT_AUDIO_MODEL),
+    model_key: Optional[str] = Form(None),
     response_format: str = Form(DEFAULT_RESPONSE_FORMAT),
     language: Optional[str] = Form(None),
     temperature: Optional[float] = Form(None),
@@ -179,7 +179,8 @@ async def create_transcription(
     _check_auth(request)
     filename, contents, content_type = await _prepare_audio_upload(file)
 
-    clean_model = (model or "").strip() or DEFAULT_AUDIO_MODEL
+    model_info = resolve_model_key(model_key, default_key=settings.AI_MODEL_DEFAULTS.get("audioTranscribe"))
+    clean_model = model_info.model
     clean_response_format = _sanitize_response_format(clean_model, response_format)
 
     try:
@@ -211,6 +212,7 @@ async def create_transcription(
     payload = {
         "text": result.get("text", ""),
         "model": result.get("model", clean_model),
+        "model_key": model_info.key,
         "response_format": result.get("response_format", clean_response_format),
     }
 
@@ -245,7 +247,7 @@ async def create_transcription(
 async def stream_transcriptions(
     request: Request,
     file: UploadFile = File(...),
-    model: str = Form(DEFAULT_AUDIO_MODEL),
+    model_key: Optional[str] = Form(None),
     response_format: str = Form(DEFAULT_RESPONSE_FORMAT),
     language: Optional[str] = Form(None),
     temperature: Optional[float] = Form(None),
@@ -255,7 +257,8 @@ async def stream_transcriptions(
     _check_auth(request)
     filename, contents, content_type = await _prepare_audio_upload(file)
 
-    clean_model = (model or "").strip() or DEFAULT_AUDIO_MODEL
+    model_info = resolve_model_key(model_key, default_key=settings.AI_MODEL_DEFAULTS.get("audioTranscribe"))
+    clean_model = model_info.model
     clean_response_format = _sanitize_response_format(clean_model, response_format)
 
     async def event_gen() -> AsyncIterator[str]:
@@ -351,7 +354,9 @@ async def realtime_transcriptions(websocket: WebSocket):
         return
 
     query = websocket.query_params
-    model = (query.get("model") or DEFAULT_AUDIO_MODEL).strip()
+    model_key = (query.get("model_key") or query.get("modelKey") or "").strip() or None
+    model_info = resolve_model_key(model_key, default_key=settings.AI_MODEL_DEFAULTS.get("audioRealtime"))
+    model = model_info.model
     language = (query.get("language") or "").strip()
     include_logprobs = (query.get("include_logprobs") or "").lower() in {"1", "true", "yes"}
     vad_threshold = _maybe_float(query.get("vad_threshold")) or 0.5

@@ -1,4 +1,4 @@
-"""Authentication, password hashing, JWT, and CSRF helpers."""
+"""Security helpers for password hashing, JWT sessions, and CSRF signing."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from api.settings import settings
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Shared signer for time-bound CSRF tokens (double-submit cookie pattern).
 csrf_serializer = URLSafeTimedSerializer(settings.CSRF_SECRET, salt="csrf-token")
 
 
@@ -27,6 +28,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    # Standard JWT claims: subject, expiration, issued-at.
     to_encode: Dict[str, Any] = {"sub": subject, "exp": expire, "iat": datetime.now(timezone.utc)}
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
@@ -35,7 +37,7 @@ def decode_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return payload
-    except JWTError as exc:  # pragma: no cover - defensive guard
+    except JWTError as exc:  # pragma: no cover - normalize jose errors for callers
         raise ValueError("Invalid token") from exc
 
 

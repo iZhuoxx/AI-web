@@ -381,7 +381,7 @@ const createNoteFromReply = async () => {
   isCreatingNote.value = true
   const pendingId = notebookStore.addPendingNotePlaceholder('AI 笔记生成中…')
   try {
-    const title = (await generateNoteTitle(text, { model: getModelFor('title') })) || 'AI 生成笔记'
+    const title = (await generateNoteTitle(text, { modelKey: getModelFor('title') })) || 'AI 生成笔记'
     if (pendingId) notebookStore.updatePendingNotePlaceholder(pendingId, title)
     const created = await notebookStore.addNoteToActiveNotebook(
       { title, content: text },
